@@ -147,7 +147,7 @@ class SeeProfileState extends State<SeeMyProfile> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.white70,
       appBar: AppBar(
         title: const Text("My Profile"),
         centerTitle: true,
@@ -197,7 +197,7 @@ class SeeProfileState extends State<SeeMyProfile> {
               width: double.infinity,
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1C),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
@@ -269,18 +269,18 @@ class SeeProfileState extends State<SeeMyProfile> {
   Widget _profileRow(IconData icon, String label, String? value) {
     return Row(
       children: [
-        Icon(icon, color: Colors.deepOrange, size: 22),
+        Icon(icon, color: Colors.black, size: 22),
         const SizedBox(width: 12),
         Text(
           "$label:",
-          style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+          style: TextStyle(color: Colors.black, fontSize: 14),
         ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             value ?? "Not available",
             style: const TextStyle(
-              color: Colors.red,
+              color: Colors.black,
               fontSize: 15,
               fontWeight: FontWeight.w500,
             ),
@@ -294,7 +294,7 @@ class SeeProfileState extends State<SeeMyProfile> {
   Widget _divider() {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Divider(color: Colors.grey.shade800, thickness: 1),
+      child: Divider(color: Colors.black, thickness: 1),
     );
   }
 }

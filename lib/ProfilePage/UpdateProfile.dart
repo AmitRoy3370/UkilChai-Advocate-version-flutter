@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:advocatechaiadvocate/Utils/BaseURL.dart' as baseURL;
 import 'package:advocatechaiadvocate/Auth/AuthService.dart';
 import 'package:http_parser/http_parser.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:html' as html;
+import '../Utils/AdvocateSpeciality.dart';
 
 class UpdateProfile extends StatefulWidget {
   const UpdateProfile({super.key});
@@ -44,6 +48,22 @@ class _UpdateProfileState extends State<UpdateProfile> {
   double latitude = 0.0;
   double longitude = 0.0;
 
+  File? cvFile;
+  Uint8List? webCvBytes;
+  String? cvFileName;
+
+  String? advocateId;
+
+  final TextEditingController experienceController = TextEditingController();
+  final TextEditingController licenseKeyController = TextEditingController();
+
+  List<String> degrees = [];
+  List<String> workingExperiences = [];
+  Set<String> selectedSpecialities = {};
+  List<AdvocateSpeciality> selectedDistricts = [];
+  final List<String> bangladeshDistricts = AdvocateSpeciality.values
+      .map((e) => e.name)
+      .toList();
   bool loading = true;
 
   final MapController mapController = MapController();
@@ -53,9 +73,9 @@ class _UpdateProfileState extends State<UpdateProfile> {
   get userIdValue => null;
 
   Future<File?> convertBytesToFile(
-      Uint8List bytes, {
-        required String extension,
-      }) async {
+    Uint8List bytes, {
+    required String extension,
+  }) async {
     if (kIsWeb) {
       print('Conversion to File not supported on web. Use bytes directly.');
       return null;
@@ -120,14 +140,14 @@ class _UpdateProfileState extends State<UpdateProfile> {
           final bytes = profileImageResponse.bodyBytes;
           bool isJpeg =
               bytes.length > 4 &&
-                  bytes[0] == 0xFF &&
-                  bytes[1] == 0xD8; // JPEG check
+              bytes[0] == 0xFF &&
+              bytes[1] == 0xD8; // JPEG check
           bool isPng =
               bytes.length > 4 &&
-                  bytes[0] == 0x89 &&
-                  bytes[1] == 0x50 &&
-                  bytes[2] == 0x4E &&
-                  bytes[3] == 0x47; // PNG check
+              bytes[0] == 0x89 &&
+              bytes[1] == 0x50 &&
+              bytes[2] == 0x4E &&
+              bytes[3] == 0x47; // PNG check
           bool isLikelyImage = isJpeg || isPng;
           if (isLikelyImage) {
             print("Valid image bytes detected");
@@ -271,10 +291,202 @@ class _UpdateProfileState extends State<UpdateProfile> {
             ).showSnackBar(SnackBar(content: Text((response.body))));
           }
         }
+
+        // ---------------- LOAD ADVOCATE DATA ----------------
+        final advocateUrl =
+            "${baseURL.Urls().baseURL}advocate/findByUser/$userId";
+
+        final advocateResponse = await http.get(
+          Uri.parse(advocateUrl),
+          headers: {
+            "Authorization": "Bearer $token",
+            "Content-Type": "application/json",
+          },
+        );
+
+        if (advocateResponse.statusCode == 200) {
+          final advocateData = jsonDecode(advocateResponse.body);
+
+          String? userId = advocateData["userId"];
+
+          // -------- CHECK IF CV EXISTS --------
+          final cvCheckUrl = "${baseURL.Urls().baseURL}advocate/cv/$userId";
+
+          final cvCheckResponse = await http.get(
+            Uri.parse(cvCheckUrl),
+            headers: {"Authorization": "Bearer $token"},
+          );
+
+          if (cvCheckResponse.statusCode == 200) {
+            setState(() {
+              webCvBytes = cvCheckResponse.bodyBytes;
+              cvFileName = "previous_cv.pdf";
+            });
+          }
+
+          setState(() {
+            advocateId = advocateData["id"];
+
+            experienceController.text =
+                advocateData["experience"]?.toString() ?? "";
+
+            licenseKeyController.text = advocateData["licenseKey"] ?? "";
+
+            degrees = List<String>.from(advocateData["degrees"] ?? []);
+            workingExperiences = List<String>.from(
+              advocateData["workingExperiences"] ?? [],
+            );
+
+            selectedSpecialities = Set<String>.from(
+              advocateData["advocateSpeciality"] ?? [],
+            );
+          });
+        }
       } else {
         print("Failed to load previous data: ${response.statusCode}");
       }
     }
+  }
+
+  void downloadPdfWeb(List<int> bytes) {
+    final blob = html.Blob([bytes], 'application/pdf');
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    html.AnchorElement(href: url)
+      ..setAttribute("download", "file.pdf")
+      ..click();
+    html.Url.revokeObjectUrl(url);
+  }
+
+  Future<void> downloadCv() async {
+    final token = await AuthService.getToken();
+
+    if (token == null) return;
+
+    final userId = await AuthService.getUserId();
+
+    final url = Uri.parse("${baseURL.Urls().baseURL}advocate/cv/$advocateId");
+
+    final response = await http.get(
+      Uri.parse("${baseURL.Urls().baseURL}advocate/cv/$userId"),
+      headers: {"Authorization": "Bearer $token"},
+    );
+
+    if (response.statusCode != 200) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("No CV available")));
+      return;
+    }
+
+    final bytes = response.bodyBytes;
+
+    // 🌐 WEB
+    if (kIsWeb) {
+      final blob = html.Blob([bytes], 'application/pdf');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+
+      html.AnchorElement(href: url)
+        ..setAttribute("download", "advocate_cv.pdf")
+        ..click();
+
+      html.Url.revokeObjectUrl(url);
+      return;
+    }
+
+    // 📱 MOBILE
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/advocate_cv.pdf');
+
+    await file.writeAsBytes(bytes, flush: true);
+    await OpenFilex.open(file.path);
+  }
+
+  void showDistrictDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, dialogSetState) {
+            return AlertDialog(
+              title: const Text("Select Specialist"),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView(
+                  children: bangladeshDistricts.map((district) {
+                    return CheckboxListTile(
+                      title: Text(district),
+                      value: selectedDistricts.contains(district),
+                      onChanged: (value) {
+                        dialogSetState(() {
+                          if (value == true) {
+                            selectedDistricts.add(
+                              AdvocateSpecialityExt.fromApi(district),
+                            );
+                          } else {
+                            selectedDistricts.remove(district);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Done"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Show speciality selection dialog
+  void showSpecialityDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text("Select Specialities"),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: AdvocateSpeciality.values.map((e) {
+                    return CheckboxListTile(
+                      title: Text(e.label),
+                      value: selectedSpecialities.contains(e),
+                      onChanged: (val) {
+                        setStateDialog(() {
+                          if (val!) {
+                            selectedSpecialities.add(e.apiValue);
+                          } else {
+                            selectedSpecialities.remove(e.apiValue);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    setState(() {});
+                  },
+                  child: const Text("Done"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -438,7 +650,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
           _selectedPosition = pos;
           _selectedPlaceName = name;
           locationTextController.text = /*"Place: $name, Lat: $lat, Lng: $lng"*/
-          _selectedPlaceName!;
+              _selectedPlaceName!;
           _updateMarkers();
           // });
           mapController.move(pos, 15.0);
@@ -464,6 +676,24 @@ class _UpdateProfileState extends State<UpdateProfile> {
         pickedImage = File(file.path);
       } else {
         pickedImage = File(file.path);
+      }
+      setState(() {});
+    }
+  }
+
+  // Pick CV PDF
+  Future<void> pickCv() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
+    if (result != null && result.files.isNotEmpty) {
+      if (kIsWeb) {
+        webCvBytes = result.files.first.bytes;
+        cvFileName = result.files.first.name;
+      } else {
+        cvFile = File(result.files.first.path!);
+        cvFileName = result.files.first.name;
       }
       setState(() {});
     }
@@ -498,7 +728,6 @@ class _UpdateProfileState extends State<UpdateProfile> {
       String? userId = decoded["userId"];
 
       print("Updating userId :- $userId");
-
 
       final uri = Uri.parse("${baseURL.Urls().baseURL}user/update/$userId");
 
@@ -552,7 +781,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
         },
       );
 
-      if(imageFindingResponse.statusCode == 200) {
+      if (imageFindingResponse.statusCode == 200) {
         final imageFindingResponseData = jsonDecode(imageFindingResponse.body);
 
         if (kDebugMode) {
@@ -568,8 +797,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
 
         if (kDebugMode) {
           print(
-            "profileImageId in update profile section :- ${request
-                .fields["profileImageId"]}",
+            "profileImageId in update profile section :- ${request.fields["profileImageId"]}",
           );
         }
       }
@@ -678,7 +906,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
           headers: {
             "Authorization": "Bearer $_token", // Key: Use 'Bearer ' prefix
             "Content-Type":
-            "application/json", // If JSON body; adjust as needed
+                "application/json", // If JSON body; adjust as needed
           },
         );
 
@@ -727,7 +955,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
             headers: {
               "Authorization": "Bearer $_token", // Key: Use 'Bearer ' prefix
               "Content-Type":
-              "application/json", // If JSON body; adjust as needed
+                  "application/json", // If JSON body; adjust as needed
             },
             body: jsonEncode({
               "userId": userId,
@@ -772,7 +1000,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
           headers: {
             "Authorization": "Bearer $_token", // Key: Use 'Bearer ' prefix
             "Content-Type":
-            "application/json", // If JSON body; adjust as needed
+                "application/json", // If JSON body; adjust as needed
           },
         );
 
@@ -797,7 +1025,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
             headers: {
               "Authorization": "Bearer $token1", // Key: Use 'Bearer ' prefix
               "Content-Type":
-              "application/json", // If JSON body; adjust as needed
+                  "application/json", // If JSON body; adjust as needed
             },
             body: jsonEncode({
               "userId": userId,
@@ -866,7 +1094,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
             headers: {
               "Authorization": "Bearer $token1", // Key: Use 'Bearer ' prefix
               "Content-Type":
-              "application/json", // If JSON body; adjust as needed
+                  "application/json", // If JSON body; adjust as needed
             },
             body: jsonEncode({
               "userId": userId,
@@ -897,6 +1125,63 @@ class _UpdateProfileState extends State<UpdateProfile> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text("Failed to add location...")),
             );
+          }
+        }
+
+        // ---------------- UPDATE ADVOCATE ----------------
+
+        if (advocateId != null) {
+          final updateAdvocateUrl = Uri.parse(
+            "${baseURL.Urls().baseURL}advocate/update/$advocateId/$userId",
+          );
+
+          var advocateRequest = http.MultipartRequest("PUT", updateAdvocateUrl);
+
+          advocateRequest.headers["Authorization"] = "Bearer $_token";
+
+          advocateRequest.fields["userId"] = userId!;
+          advocateRequest.fields["experience"] = experienceController.text
+              .trim();
+          advocateRequest.fields["licenseKey"] = licenseKeyController.text
+              .trim();
+
+          advocateRequest.fields["degrees"] = jsonEncode(degrees);
+
+          advocateRequest.fields["workingExperiences"] = jsonEncode(
+            workingExperiences,
+          );
+
+          advocateRequest.fields["advocateSpeciality"] = jsonEncode(
+            selectedSpecialities.toList(),
+          );
+
+          // ---------- CV Upload ----------
+          if (kIsWeb && webCvBytes != null) {
+            advocateRequest.files.add(
+              http.MultipartFile.fromBytes(
+                "file",
+                webCvBytes!,
+                filename: cvFileName ?? "cv.pdf",
+                contentType: http.MediaType("application", "pdf"),
+              ),
+            );
+          } else if (!kIsWeb && cvFile != null) {
+            advocateRequest.files.add(
+              await http.MultipartFile.fromPath(
+                "file",
+                cvFile!.path,
+                contentType: http.MediaType("application", "pdf"),
+              ),
+            );
+          }
+
+          final advocateResponse = await advocateRequest.send();
+
+          if (advocateResponse.statusCode == 200 ||
+              advocateResponse.statusCode == 201) {
+            print("Advocate updated successfully");
+          } else {
+            print("Advocate update failed");
           }
         }
 
@@ -943,7 +1228,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
             children: [
               TileLayer(
                 urlTemplate:
-                'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
                 subdomains: const ['a', 'b', 'c'],
               ),
               MarkerLayer(markers: _markers),
@@ -1002,6 +1287,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
               bottom: 0,
               left: 0,
               right: 0,
+              height: MediaQuery.of(context).size.height * 0.75,
               child: Card(
                 margin: const EdgeInsets.all(10),
                 elevation: 6,
@@ -1099,18 +1385,126 @@ class _UpdateProfileState extends State<UpdateProfile> {
                                 width: 120,
                                 decoration: BoxDecoration(border: Border.all()),
                                 child:
-                                pickedImage == null && webImageBytes == null
+                                    pickedImage == null && webImageBytes == null
                                     ? const Icon(Icons.camera_alt, size: 50)
                                     : kIsWeb
                                     ? Image.memory(
-                                  webImageBytes!,
-                                  fit: BoxFit.cover,
-                                )
+                                        webImageBytes!,
+                                        fit: BoxFit.cover,
+                                      )
                                     : Image.file(
-                                  pickedImage!,
-                                  fit: BoxFit.cover,
-                                ),
+                                        pickedImage!,
+                                        fit: BoxFit.cover,
+                                      ),
                               ),
+                            ),
+                            const SizedBox(height: 20),
+                            TextField(
+                              controller: experienceController,
+                              decoration: const InputDecoration(
+                                labelText: "Experience (Years)",
+                              ),
+                            ),
+
+                            TextField(
+                              controller: licenseKeyController,
+                              decoration: const InputDecoration(
+                                labelText: "License Key",
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            const SizedBox(height: 10),
+                            const Text("Degrees"),
+
+                            Wrap(
+                              spacing: 8,
+                              children: degrees.map((degree) {
+                                return Chip(
+                                  label: Text(degree),
+                                  onDeleted: () {
+                                    setState(() {
+                                      degrees.remove(degree);
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 10),
+                            const Text("Working Experiences"),
+
+                            Wrap(
+                              spacing: 8,
+                              children: workingExperiences.map((work) {
+                                return Chip(
+                                  label: Text(work),
+                                  onDeleted: () {
+                                    setState(() {
+                                      workingExperiences.remove(work);
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 20),
+                            ElevatedButton(
+                              onPressed: showSpecialityDialog,
+                              child: const Text("Select Specialist"),
+                            ),
+
+                            Wrap(
+                              children: selectedSpecialities
+                                  .map(
+                                    (d) => Chip(
+                                      label: Text(d),
+                                      onDeleted: () {
+                                        setState(() {
+                                          selectedSpecialities.remove(d);
+                                        });
+                                      },
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                            const SizedBox(height: 20),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ElevatedButton.icon(
+                                  onPressed: pickCv,
+                                  icon: const Icon(Icons.upload_file),
+                                  label: const Text("Upload New CV (PDF)"),
+                                ),
+
+                                const SizedBox(height: 10),
+
+                                if (cvFileName != null)
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: Colors.grey),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.picture_as_pdf,
+                                          color: Colors.red,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            cvFileName!,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.download),
+                                          onPressed: downloadCv,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             ),
                             const SizedBox(height: 20),
                             ElevatedButton(

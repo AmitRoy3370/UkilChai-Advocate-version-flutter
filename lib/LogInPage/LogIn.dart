@@ -140,6 +140,12 @@ class LogInState extends State<LogIn> {
           await prefs.setString("jwt_token", token);
           await prefs.setString("userId", userId);
 
+          final advocateResponseBody = jsonDecode(advocateResponse.body);
+          final advocateId = advocateResponseBody["id"];
+
+          await prefs.setString("advocateId", advocateId);
+
+
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Logged in successfully...")),
           );

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -11,6 +11,8 @@ import 'package:latlong2/latlong.dart' as lat_lng;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:advocatechaiadvocate/Utils/BaseURL.dart' as baseURL;
+import 'package:file_picker/file_picker.dart';
+import '../Utils/AdvocateSpeciality.dart';
 
 class RegistrationPage extends StatefulWidget {
   const RegistrationPage({super.key});
@@ -26,6 +28,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController locationTextController = TextEditingController();
+  final TextEditingController experienceController = TextEditingController();
+  final TextEditingController licenseKeyController = TextEditingController();
+  final TextEditingController degreeController = TextEditingController();
+  final TextEditingController workingExperienceController =
+      TextEditingController();
 
   bool _showPassword = false;
 
@@ -38,10 +45,23 @@ class _RegistrationPageState extends State<RegistrationPage> {
   Uint8List? webImageBytes;
   double lattitude = 0.0;
   double longititude = 0.0;
+  File? cvFile;
+  Uint8List? webCvBytes;
+  String? cvFileName;
 
   final MapController mapController = MapController();
 
   Stream<Position>? _positionStream;
+
+  List<String> degrees = [];
+  List<String> workingExperiences = [];
+  Set<AdvocateSpeciality> selectedSpecialities = {};
+
+  List<AdvocateSpeciality> selectedDistricts = [];
+
+  final List<String> bangladeshDistricts = AdvocateSpeciality.values
+      .map((e) => e.name)
+      .toList();
 
   @override
   void initState() {
@@ -227,6 +247,142 @@ class _RegistrationPageState extends State<RegistrationPage> {
       }
       setState(() {});
     }
+  }
+
+  void showDistrictDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, dialogSetState) {
+            return AlertDialog(
+              title: const Text("Select Specialist"),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView(
+                  children: bangladeshDistricts.map((district) {
+                    return CheckboxListTile(
+                      title: Text(district),
+                      value: selectedDistricts.contains(district),
+                      onChanged: (value) {
+                        dialogSetState(() {
+                          if (value == true) {
+                            selectedDistricts.add(
+                              AdvocateSpecialityExt.fromApi(district),
+                            );
+                          } else {
+                            selectedDistricts.remove(district);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Done"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Pick CV PDF
+  Future<void> pickCv() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
+    if (result != null && result.files.isNotEmpty) {
+      if (kIsWeb) {
+        webCvBytes = result.files.first.bytes;
+        cvFileName = result.files.first.name;
+      } else {
+        cvFile = File(result.files.first.path!);
+        cvFileName = result.files.first.name;
+      }
+      setState(() {});
+    }
+  }
+
+  // Show speciality selection dialog
+  void showSpecialityDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text("Select Specialities"),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: AdvocateSpeciality.values.map((e) {
+                    return CheckboxListTile(
+                      title: Text(e.label),
+                      value: selectedSpecialities.contains(e),
+                      onChanged: (val) {
+                        setStateDialog(() {
+                          if (val!) {
+                            selectedSpecialities.add(e);
+                          } else {
+                            selectedSpecialities.remove(e);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    setState(() {});
+                  },
+                  child: const Text("Done"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Add degree
+  void addDegree() {
+    if (degreeController.text.trim().isNotEmpty) {
+      degrees.add(degreeController.text.trim());
+      degreeController.clear();
+      setState(() {});
+    }
+  }
+
+  // Add working experience
+  void addWorkingExperience() {
+    if (workingExperienceController.text.trim().isNotEmpty) {
+      workingExperiences.add(workingExperienceController.text.trim());
+      workingExperienceController.clear();
+      setState(() {});
+    }
+  }
+
+  // Remove degree
+  void removeDegree(String degree) {
+    degrees.remove(degree);
+    setState(() {});
+  }
+
+  // Remove working experience
+  void removeWorkingExperience(String exp) {
+    workingExperiences.remove(exp);
+    setState(() {});
   }
 
   Future<void> _submitForm() async {
@@ -427,9 +583,72 @@ class _RegistrationPageState extends State<RegistrationPage> {
           ).showSnackBar(SnackBar(content: Text("Failed to add location...")));
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Registration Successful")),
+        // ---------------- ADVOCATE JOIN REQUEST ----------------
+
+        final joinUri = Uri.parse(
+          "${baseURL.Urls().baseURL}advocateJoinRequest",
         );
+
+        var joinRequest = http.MultipartRequest("POST", joinUri);
+
+        // 🔐 Authorization header
+        joinRequest.headers["Authorization"] = "Bearer $token1";
+
+        // -------- Required Fields --------
+        joinRequest.fields["userId"] = userId;
+        joinRequest.fields["experience"] =
+            experienceController.text.trim().isEmpty
+            ? "0"
+            : experienceController.text.trim();
+        joinRequest.fields["licenseKey"] = licenseKeyController.text.trim();
+
+        // Convert Enum list to String list
+        List<String> specialityList = selectedDistricts
+            .map((e) => e.name)
+            .toList();
+
+        // Send JSON string
+        joinRequest.fields["advocateSpeciality"] = jsonEncode(specialityList);
+
+        joinRequest.fields["degrees"] = jsonEncode(degrees);
+        joinRequest.fields["workingExperiences"] = jsonEncode(
+          workingExperiences,
+        );
+
+        // -------- CV File Upload --------
+        if (kIsWeb && webCvBytes != null) {
+          joinRequest.files.add(
+            http.MultipartFile.fromBytes(
+              "file",
+              webCvBytes!,
+              filename: cvFileName ?? "cv.pdf",
+              contentType: http.MediaType("application", "pdf"),
+            ),
+          );
+        } else if (!kIsWeb && cvFile != null) {
+          joinRequest.files.add(
+            await http.MultipartFile.fromPath("file", cvFile!.path),
+          );
+        }
+
+        // -------- Send Join Request --------
+        final joinResponse = await joinRequest.send();
+        final joinResponseBody = await joinResponse.stream.bytesToString();
+
+        print("Join Status: ${joinResponse.statusCode}");
+        print("Join Body: $joinResponseBody");
+
+        if (joinResponse.statusCode == 200 || joinResponse.statusCode == 201) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Advocate Join Request Sent Successfully"),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Join Request Failed: $joinResponseBody")),
+          );
+        }
 
         if (kDebugMode) {
           print("JWT TOKEN => $token");
@@ -529,6 +748,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
               bottom: 0,
               left: 0,
               right: 0,
+              height: MediaQuery.of(context).size.height * 0.75,
               child: Card(
                 margin: const EdgeInsets.all(10),
                 elevation: 6,
@@ -540,9 +760,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     Padding(
                       padding: const EdgeInsets.all(15),
                       child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
+
                           children: [
                             const SizedBox(
                               height: 20,
@@ -592,7 +814,149 @@ class _RegistrationPageState extends State<RegistrationPage> {
                                 labelText: "Location Info",
                               ),
                             ),
+
+                            TextField(
+                              controller: experienceController,
+                              decoration: const InputDecoration(
+                                labelText: "Experience(year)",
+                              ),
+                              keyboardType: TextInputType.number,
+                              inputFormatters: <TextInputFormatter>[
+                                FilteringTextInputFormatter
+                                    .digitsOnly, // Only allows 0-9
+                              ],
+                            ),
+                            TextField(
+                              controller: licenseKeyController,
+                              decoration: const InputDecoration(
+                                labelText: "License Key",
+                              ),
+                            ),
+                            // -------- Degree Input Section --------
+                            const SizedBox(height: 10),
+
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: degreeController,
+                                    decoration: const InputDecoration(
+                                      labelText: "Add Degree",
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton(
+                                  onPressed: addDegree,
+                                  child: const Text("Add"),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 10),
+
+                            // Show added degrees as chips
+                            if (degrees.isNotEmpty)
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: degrees.map((degree) {
+                                  return Chip(
+                                    label: Text(degree),
+                                    deleteIcon: const Icon(Icons.close),
+                                    onDeleted: () => removeDegree(degree),
+                                  );
+                                }).toList(),
+                              ),
+
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: workingExperienceController,
+                                    decoration: const InputDecoration(
+                                      labelText: "Add Working Experience",
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton(
+                                  onPressed: addWorkingExperience,
+                                  child: const Text("Add"),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+
+                            // Show added working experiences as chips
+                            if (workingExperiences.isNotEmpty)
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: workingExperiences.map((
+                                  workingExperience,
+                                ) {
+                                  return Chip(
+                                    label: Text(workingExperience),
+                                    deleteIcon: const Icon(Icons.close),
+                                    onDeleted: () => removeWorkingExperience(
+                                      workingExperience,
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ElevatedButton(
+                              onPressed: showDistrictDialog,
+                              child: const Text("Select Specialist"),
+                            ),
+
+                            Wrap(
+                              children: selectedDistricts
+                                  .map(
+                                    (d) => Chip(
+                                      label: Text(d.apiValue),
+                                      onDeleted: () {
+                                        setState(() {
+                                          selectedSpecialities.remove(d);
+                                        });
+                                      },
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
                             const SizedBox(height: 20),
+                            ElevatedButton.icon(
+                              onPressed: pickCv,
+                              icon: const Icon(Icons.upload_file),
+                              label: const Text("Upload CV (PDF)"),
+                            ),
+                            const SizedBox(height: 10),
+
+                            if (cvFileName != null && cvFileName!.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.picture_as_pdf,
+                                      color: Colors.red,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        cvFileName!,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            const SizedBox(height: 20),
+
                             GestureDetector(
                               onTap: pickImage,
                               child: Container(
@@ -616,7 +980,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                             const SizedBox(height: 20),
                             ElevatedButton(
                               onPressed: _submitForm,
-                              child: const Text("Submit Registration"),
+                              child: const Text("Submit request"),
                             ),
                           ],
                         ),
