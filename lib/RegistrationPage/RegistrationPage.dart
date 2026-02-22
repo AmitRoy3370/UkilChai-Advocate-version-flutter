@@ -57,7 +57,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
   List<String> workingExperiences = [];
   Set<AdvocateSpeciality> selectedSpecialities = {};
 
-  List<AdvocateSpeciality> selectedDistricts = [];
+  Set<AdvocateSpeciality> selectedDistricts = {};
 
   final List<String> bangladeshDistricts = AdvocateSpeciality.values
       .map((e) => e.name)
@@ -263,7 +263,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   children: bangladeshDistricts.map((district) {
                     return CheckboxListTile(
                       title: Text(district),
-                      value: selectedDistricts.contains(district),
+                      value: selectedDistricts.contains(
+                        AdvocateSpecialityExt.fromApi(district),
+                      ),
                       onChanged: (value) {
                         dialogSetState(() {
                           if (value == true) {
@@ -291,6 +293,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
       },
     );
   }
+
 
   // Pick CV PDF
   Future<void> pickCv() async {
@@ -917,7 +920,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                                       label: Text(d.apiValue),
                                       onDeleted: () {
                                         setState(() {
-                                          selectedSpecialities.remove(d);
+                                          selectedDistricts.remove(d);
                                         });
                                       },
                                     ),

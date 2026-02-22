@@ -459,7 +459,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
                   children: AdvocateSpeciality.values.map((e) {
                     return CheckboxListTile(
                       title: Text(e.label),
-                      value: selectedSpecialities.contains(e),
+                      value: selectedSpecialities.contains(e.apiValue),
                       onChanged: (val) {
                         setStateDialog(() {
                           if (val!) {
