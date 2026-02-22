@@ -71,6 +71,12 @@ class CaseRequestDetailsPage extends StatelessWidget {
     return "";
   }
 
+  Future<String?> advocateId() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? advocateId = prefs.getString('advocateId');
+    return advocateId;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -162,17 +168,37 @@ class CaseRequestDetailsPage extends StatelessWidget {
                     }).toList(),
                   ),
 
-            /*const SizedBox(height: 20),
+            const SizedBox(height: 20),
 
-            ElevatedButton.icon(
-              icon: const Icon(Icons.check),
-              label: const Text("Accept Case"),
-              onPressed: () async {
-                // pass logged-in advocate userId
-                await service.acceptCase(caseRequest.id, "ADVOCATE_USER_ID");
-                Navigator.pop(context);
+            FutureBuilder<String?>(
+              future: advocateId(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Text("Loading...");
+                }
+
+                if (caseRequest.requestedAdvocateId == null ||
+                    caseRequest.requestedAdvocateId == snapshot.data) {
+                  return ElevatedButton.icon(
+                    icon: const Icon(Icons.check),
+                    label: const Text("Accept Case"),
+                    onPressed: () async {
+                      // pass logged-in advocate userId
+
+                      SharedPreferences prefs =
+                          await SharedPreferences.getInstance();
+
+                      String? userId = prefs.getString('userId');
+
+                      await service.acceptCase(caseRequest.id, userId!);
+                      Navigator.pop(context);
+                    },
+                  );
+                } else {
+                  return SizedBox.shrink();
+                }
               },
-            ),*/
+            ),
           ],
         ),
       ),

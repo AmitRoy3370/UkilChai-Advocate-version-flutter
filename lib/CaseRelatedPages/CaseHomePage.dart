@@ -1,4 +1,5 @@
 import 'package:advocatechaiadvocate/Auth/AuthService.dart';
+import 'package:advocatechaiadvocate/CaseRelatedPages/see_my_requested_Case_to_fight.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../CaseRelatedPages/AddCaseRequestPage.dart';
@@ -97,7 +98,24 @@ class CaseHomePage extends StatelessWidget {
             ),
 
             const SizedBox(height: 16),
-            /*_caseButton(
+
+            const SizedBox(height: 16),
+            _caseButton(
+              context,
+              title: "See My Case Requests for fight",
+              icon: Icons.list_alt,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SeeMyRequestedCaseToFightListPage(),
+                  ),
+                );
+              },
+            ),
+
+            const SizedBox(height: 16),
+            _caseButton(
               context,
               title: "See All Cases",
               icon: Icons.list_alt,
@@ -108,9 +126,7 @@ class CaseHomePage extends StatelessWidget {
 
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => SeeAllCasesPage(),
-                    ),
+                    MaterialPageRoute(builder: (_) => SeeAllCasesPage()),
                   );
                 });
 
@@ -121,8 +137,7 @@ class CaseHomePage extends StatelessWidget {
                   ),
                 );*/
               },
-            ),*/
-
+            ),
           ],
         ),
       ),

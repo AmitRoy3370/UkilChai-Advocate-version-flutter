@@ -319,7 +319,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                       if (caseJudgment != null)
                         _caseJudgmentTile(caseJudgment!),
                       const SizedBox(height: 16),
-                      _advocateRatingCard(),
+                      if (widget.userId != null) _advocateRatingCard(),
                     ],
                   ),
                 ),
@@ -348,37 +348,37 @@ class _CaseTrackingState extends State<CaseTracking> {
                       const SizedBox(height: 16),
                       _hearingCard(),
                       const SizedBox(height: 16),
-                      _caseCloseButton(),
+                      if (widget.userId != null) _caseCloseButton(),
                       const SizedBox(height: 16),
+                      if (widget.userId != null)
+                        ElevatedButton(
+                          onPressed: () {
+                            print(
+                              "in case tracking other user :- ${widget.advocateUserId} and name :- ${widget.caseLawyer} and my name :- ${widget.userName} and my id :- ${widget.userId}",
+                            );
 
-                      ElevatedButton(
-                        onPressed: () {
-                          print(
-                            "in case tracking other user :- ${widget.advocateUserId} and name :- ${widget.caseLawyer} and my name :- ${widget.userName} and my id :- ${widget.userId}",
-                          );
-
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ChatScreen(
-                                otherUser: widget.advocateUserId,
-                                othersName: widget.caseLawyer,
-                                myName: widget.userName,
-                                currentUser: widget.userId,
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ChatScreen(
+                                  otherUser: widget.advocateUserId,
+                                  othersName: widget.caseLawyer,
+                                  myName: widget.userName,
+                                  currentUser: widget.userId,
+                                ),
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
 
-                        child: Text(
-                          "Chat with ${widget.caseLawyer}",
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+                          child: Text(
+                            "Chat with ${widget.caseLawyer}",
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),

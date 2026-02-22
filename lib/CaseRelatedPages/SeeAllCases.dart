@@ -86,9 +86,13 @@ class _SeeAllCasesPageState extends State<SeeAllCasesPage> {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     //String userId = prefs.getString('userId') ?? '';
     String token = prefs.getString('jwt_token') ?? '';
+    String advocateId = prefs.getString('advocateId') ?? '';
+
+    print("token from fetchMyCases :- $token");
+    print("advocateId from fetchMyCases :- $advocateId");
 
     final response = await http.get(
-      Uri.parse("$baseUrl/all"),
+      Uri.parse("$baseUrl/advocate/$advocateId"),
       headers: {
         "content-type": "application/json",
         "Authorization": "Bearer $token",

@@ -44,6 +44,23 @@ class CaseRequestService {
     return [];
   }
 
+  Future<List<CaseRequest>> byRequestedAdvocate(String advocateId) async {
+    final response = await http.get(
+      Uri.parse(
+        "${BASE_URL.Urls().baseURL}case-request/findByAdvocate/$advocateId",
+      ),
+      headers: {"Authorization": "Bearer ${await _token()}"},
+    );
+
+    if (response.statusCode == 200) {
+      return (jsonDecode(response.body) as List)
+          .map((e) => CaseRequest.fromJson(e))
+          .toList();
+    } else {
+      return [];
+    }
+  }
+
   // -------------------- GET BY TYPE --------------------
   Future<List<CaseRequest>> byType(String type) async {
     final res = await http.get(
