@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:advocatechaiadvocate/Auth/AuthService.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,7 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:advocatechaiadvocate/Utils/BaseURL.dart' as BASEURL;
-
+import '../AdvocatePages/AdvocateDetailsModel.dart';
+import 'dart:html' as html;
 import 'Profile.dart';
 import 'ProfileImageWidget.dart';
 import 'UpdateProfile.dart';
@@ -42,6 +44,12 @@ class SeeProfileState extends State<SeeMyProfile> {
   }
 
   Profile profile = Profile.defaultConstructor();
+
+  AdvocateDetailsModel advocate = AdvocateDetailsModel.defaultConstructor();
+
+  File? cvFile;
+  Uint8List? webCvBytes;
+  String? cvFileName;
 
   Future<void> collectProfileInfo() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -131,11 +139,109 @@ class SeeProfileState extends State<SeeMyProfile> {
         });
       }
 
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+
+      String? advocateId = prefs.getString("advocateId");
+
+      if (advocateId != null) {
+        final advocateResponse = await http.get(
+          Uri.parse("${BASEURL.Urls().baseURL}advocate/$advocateId"),
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer $token",
+          },
+        );
+
+        final cvCheckUrl = "${BASEURL.Urls().baseURL}advocate/cv/$userId";
+
+        final cvCheckResponse = await http.get(
+          Uri.parse(cvCheckUrl),
+          headers: {"Authorization": "Bearer $token"},
+        );
+
+        if (cvCheckResponse.statusCode == 200) {
+          setState(() {
+            webCvBytes = cvCheckResponse.bodyBytes;
+            cvFileName = "your_cv.pdf";
+          });
+        }
+
+        if (advocateResponse.statusCode == 200) {
+          var advocateData = jsonDecode(advocateResponse.body);
+
+          setState(() {
+            advocate.id = advocateData["id"];
+            advocate.name = advocateData["name"];
+            advocate.email = advocateData["email"];
+            advocate.phone = advocateData["phone"];
+            advocate.lattitude = advocateData["lattitude"];
+            advocate.longitude = advocateData["longitude"];
+            advocate.locationName = advocateData["locationName"];
+            advocate.profileImageId = advocateData["profileImageId"];
+            advocate.userId = advocateData["userId"];
+            advocate.experience = advocateData["experience"];
+            advocate.licenseKey = advocateData["licenseKey"];
+            advocate.degrees = advocateData["degrees"];
+            advocate.workingExperiences = advocateData["workingExperiences"];
+            advocate.advocateSpeciality = advocateData["advocateSpeciality"];
+            advocate.profileImageId = advocateData["profileImageId"];
+            advocate.userId = advocateData["userId"];
+          });
+        } else {
+          return;
+        }
+      }
+
       if (kDebugMode) {
         print("finding profile info :- ${profile.toString()}");
       }
     }
   }
+
+  Future<void> downloadCv() async {
+    final token = await AuthService.getToken();
+
+    if (token == null) return;
+
+    final userId = await AuthService.getUserId();
+
+    final url = Uri.parse("${BASEURL.Urls().baseURL}advocate/cv/$userId");
+
+    final response = await http.get(
+      Uri.parse("${BASEURL.Urls().baseURL}advocate/cv/$userId"),
+      headers: {"Authorization": "Bearer $token"},
+    );
+
+    if (response.statusCode != 200) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("No CV available")));
+      return;
+    }
+
+    final bytes = response.bodyBytes;
+
+    // 🌐 WEB
+    if (kIsWeb) {
+      final blob = html.Blob([bytes], 'application/pdf');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+
+      html.AnchorElement(href: url)
+        ..setAttribute("download", "advocate_cv.pdf")
+        ..click();
+
+      html.Url.revokeObjectUrl(url);
+      return;
+    }
+
+    // 📱 MOBILE
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/advocate_cv.pdf');
+
+    await file.writeAsBytes(bytes, flush: true);
+    await OpenFilex.open(file.path);
+  }
+
 
   @override
   void initState() {
@@ -230,6 +336,55 @@ class SeeProfileState extends State<SeeMyProfile> {
                     "Longitude",
                     profile.longitude?.toStringAsFixed(5),
                   ),
+                  _divider(),
+                  if (advocate.licenseKey != null)
+                    _profileRow(Icons.badge, "License", advocate.licenseKey),
+                  _divider(),
+                  if(advocate.experience != null)
+                    _profileRow(Icons.badge, "Experience", "${advocate.experience.toString()} years"),
+                  _divider(),
+                  if (advocate.degrees.isNotEmpty)
+                    _profileRow(
+                      Icons.school,
+                      "Degrees",
+                      advocate.degrees.join(", "),
+                    ),
+                  _divider(),
+                  if (advocate.workingExperiences.isNotEmpty)
+                    _profileRow(
+                      Icons.work,
+                      "Working Experiences",
+                      advocate.workingExperiences.join(", "),
+                    ),
+                  _divider(),
+                  if (cvFileName != null)
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.picture_as_pdf,
+                            color: Colors.red,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              cvFileName!,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.download),
+                            onPressed: downloadCv,
+                          ),
+                        ],
+                      ),
+                    ),
+
                 ],
               ),
             ),
@@ -241,9 +396,7 @@ class SeeProfileState extends State<SeeMyProfile> {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const UpdateProfile(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const UpdateProfile()),
                 );
               },
               icon: const Icon(Icons.edit),
@@ -271,10 +424,7 @@ class SeeProfileState extends State<SeeMyProfile> {
       children: [
         Icon(icon, color: Colors.black, size: 22),
         const SizedBox(width: 12),
-        Text(
-          "$label:",
-          style: TextStyle(color: Colors.black, fontSize: 14),
-        ),
+        Text("$label:", style: TextStyle(color: Colors.black, fontSize: 14)),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
