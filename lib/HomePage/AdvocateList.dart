@@ -160,17 +160,16 @@ class AdvocateList extends StatelessWidget {
     );
   }
 
-
   Widget _listSection(String title, List<String> items) {
     return _section(
       title,
       items.isEmpty
           ? [
-        const Text(
-          "No data available",
-          style: TextStyle(color: Colors.black),
-        ),
-      ]
+              const Text(
+                "No data available",
+                style: TextStyle(color: Colors.black),
+              ),
+            ]
           : items.map((e) => _row(Icons.check_circle, e)).toList(),
     );
   }
@@ -192,7 +191,6 @@ class AdvocateList extends StatelessWidget {
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -276,53 +274,56 @@ class AdvocateList extends StatelessWidget {
                     child: Center(
                       child: Padding(
                         padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          children: [
-                            FutureBuilder<Uint8List?>(
-                              future: fetchProfileImage(
-                                advocate.profileImageId,
-                              ),
-                              builder: (context, snapshot) {
-                                if (!snapshot.hasData) {
-                                  return const CircleAvatar(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            children: [
+                              FutureBuilder<Uint8List?>(
+                                future: fetchProfileImage(
+                                  advocate.profileImageId,
+                                ),
+                                builder: (context, snapshot) {
+                                  if (!snapshot.hasData) {
+                                    return const CircleAvatar(
+                                      radius: 55,
+                                      child: Icon(Icons.person, size: 55),
+                                    );
+                                  }
+
+                                  return CircleAvatar(
                                     radius: 55,
-                                    child: Icon(Icons.person, size: 55),
+                                    backgroundImage: MemoryImage(
+                                      snapshot.data!,
+                                    ),
                                   );
-                                }
-
-                                return CircleAvatar(
-                                  radius: 55,
-                                  backgroundImage: MemoryImage(snapshot.data!),
-                                );
-                              },
-                            ),
-
-                            Text(
-                              advocate.name ?? "Unknown",
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 25,
-                                color: Colors.black,
+                                },
                               ),
-                            ),
-                            Text(
-                              "${advocate.experience ?? 0} years experience",
-                              style: TextStyle(color: Colors.black),
-                            ),
-                            _section("Professional Info", [
-                              _row(
-                                Icons.badge,
-                                "License: ${advocate.licenseKey}",
+
+                              Text(
+                                advocate.name ?? "Unknown",
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 25,
+                                  color: Colors.black,
+                                ),
                               ),
-                            ]),
+                              Text(
+                                "${advocate.experience ?? 0} years experience",
+                                style: TextStyle(color: Colors.black),
+                              ),
+                              _section("Professional Info", [
+                                _row(
+                                  Icons.badge,
+                                  "License: ${advocate.licenseKey}",
+                                ),
+                              ]),
 
-                            _listSection(
-                              "Specialities",
-                              (advocate.advocateSpeciality).cast<String>(),
-                            ),
-
-                          ],
+                              _listSection(
+                                "Specialities",
+                                (advocate.advocateSpeciality).cast<String>(),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

@@ -47,4 +47,19 @@ class PostService {
     final List data = jsonDecode(res.body);
     return data.map((e) => AdvocatePost.fromJson(e)).toList();
   }
+
+  static Future<int> deletePost(
+    String? postId,
+    String? userId,
+    String? token,
+  ) async {
+    final response = await http.delete(
+      Uri.parse(
+        "${BASE_URL.Urls().baseURL}advocate/posts/delete/$postId/$userId",
+      ),
+      headers: {"Authorization": "Bearer $token"},
+    );
+
+    return response.statusCode;
+  }
 }

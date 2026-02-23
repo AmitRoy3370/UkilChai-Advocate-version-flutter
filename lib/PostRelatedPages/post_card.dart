@@ -10,8 +10,10 @@ import 'reaction_bar.dart';
 
 class PostCard extends StatelessWidget {
   final AdvocatePost post;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
-  const PostCard({super.key, required this.post});
+  const PostCard({super.key, required this.post, this.onEdit, this.onDelete});
 
   // ---------------- GET USER NAME ----------------
   Future<String> getNameFromUser(String userId) async {
@@ -74,18 +76,40 @@ class PostCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            FutureBuilder<String>(
-              future: getNameFromAdvocate(post.advocateId),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Text("Loading...");
-                }
-                if (!snapshot.hasData || snapshot.hasError) {
-                  return const SizedBox.shrink();
-                }
-                return Text(snapshot.data!);
-              },
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: FutureBuilder<String>(
+                    future: getNameFromAdvocate(post.advocateId),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Text("Loading...");
+                      }
+                      if (!snapshot.hasData || snapshot.hasError) {
+                        return const SizedBox.shrink();
+                      }
+                      return Text(snapshot.data!);
+                    },
+                  ),
+                ),
+                Row(
+                  children: [
+                    if (onEdit != null)
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: onEdit,
+                      ),
+                    if (onDelete != null)
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: onDelete,
+                      ),
+                  ],
+                ),
+              ],
             ),
+
             const SizedBox(height: 6),
             Text(
               post.postType,

@@ -118,7 +118,7 @@ class _PostAttachmentViewState extends State<PostAttachmentView> {
     if (kIsWeb && contentType != null && contentType!.contains('pdf')) {
       ui_web.platformViewRegistry.registerViewFactory(
         'case-pdf-${widget.attachmentId}',
-            (int viewId) => html.IFrameElement()
+        (int viewId) => html.IFrameElement()
           ..src = webUrl
           ..style.border = 'none'
           ..style.width = '100%'
@@ -190,26 +190,30 @@ class _PostAttachmentViewState extends State<PostAttachmentView> {
 
     // VIDEO
     if (contentType != null && contentType!.startsWith('video/')) {
-      return Column(
-        children: [
-          AspectRatio(
-            aspectRatio: videoController!.value.aspectRatio,
-            child: VideoPlayer(videoController!),
-          ),
-          VideoProgressIndicator(videoController!, allowScrubbing: true),
-          IconButton(
-            icon: Icon(
-              videoController!.value.isPlaying ? Icons.pause : Icons.play_arrow,
+      return SingleChildScrollView(
+        child: Column(
+          children: [
+            AspectRatio(
+              aspectRatio: videoController!.value.aspectRatio,
+              child: VideoPlayer(videoController!),
             ),
-            onPressed: () {
-              setState(() {
+            VideoProgressIndicator(videoController!, allowScrubbing: true),
+            IconButton(
+              icon: Icon(
                 videoController!.value.isPlaying
-                    ? videoController!.pause()
-                    : videoController!.play();
-              });
-            },
-          ),
-        ],
+                    ? Icons.pause
+                    : Icons.play_arrow,
+              ),
+              onPressed: () {
+                setState(() {
+                  videoController!.value.isPlaying
+                      ? videoController!.pause()
+                      : videoController!.play();
+                });
+              },
+            ),
+          ],
+        ),
       );
     }
 

@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import './AdvocatePost.dart';
 import './PostService.dart';
 import './post_card.dart';
+import 'CreateOrUpdatePostPage.dart';
 
 class PostFeedPage extends StatefulWidget {
   const PostFeedPage({super.key});
@@ -14,6 +15,7 @@ class PostFeedPage extends StatefulWidget {
 class _PostFeedPageState extends State<PostFeedPage> {
   bool loading = true;
   List<AdvocatePost> posts = [];
+  String? advocateId;
 
   @override
   void initState() {
@@ -24,6 +26,8 @@ class _PostFeedPageState extends State<PostFeedPage> {
   Future<void> loadPosts() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('jwt_token') ?? '';
+    advocateId = prefs.getString('advocateId') ?? '';
+    final userId = prefs.getString('userId') ?? '';
 
     final data = await PostService.fetchAllPosts(token);
     setState(() {
@@ -39,8 +43,64 @@ class _PostFeedPageState extends State<PostFeedPage> {
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : ListView.builder(
-        itemCount: posts.length,
-        itemBuilder: (_, i) => PostCard(post: posts[i]),
+              itemCount: posts.length,
+              itemBuilder: (_, i) {
+                if (posts[i].advocateId == advocateId) {
+                  return PostCard(
+                    post: posts[i],
+                    onEdit: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              CreateOrUpdatePostPage(post: posts[i]),
+                        ),
+                      );
+                    },
+                    onDelete: () async {
+                      SharedPreferences prefs =
+                          await SharedPreferences.getInstance();
+                      final token = prefs.getString('jwt_token') ?? '';
+                      final userId = prefs.getString('userId') ?? '';
+
+                      int response = await PostService.deletePost(
+                        posts[i].id,
+                        userId,
+                        token,
+                      );
+
+                      if (response == 200) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Post deleted successfully"),
+                          ),
+                        );
+
+                        setState(() {
+                          posts.removeAt(i);
+                        });
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Failed to delete post"),
+                          ),
+                        );
+                      }
+                    },
+                  );
+                }
+
+                return PostCard(post: posts[i]);
+              },
+            ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CreateOrUpdatePostPage()),
+          );
+        },
+        child: const Icon(Icons.add),
       ),
     );
   }
