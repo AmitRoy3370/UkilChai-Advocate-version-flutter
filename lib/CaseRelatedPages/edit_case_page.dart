@@ -11,18 +11,22 @@ import '../Utils/BaseURL.dart' as BASE_URL;
 import './case_request.dart';
 import './case_request_service.dart';
 import '../Utils/AdvocateSpeciality.dart';
+import 'AttachmentViewer.dart';
 import 'CaseRequestAttachmentViewer.dart';
+import 'case_model.dart';
+import 'case_service.dart';
 
-class EditCaseRequestPage extends StatefulWidget {
-  final CaseRequest caseRequest;
+class EditCasePage extends StatefulWidget {
+  final CaseModel acceptedCase;
+  final String? token;
 
-  const EditCaseRequestPage({super.key, required this.caseRequest});
+  const EditCasePage({super.key, required this.acceptedCase, required this.token});
 
   @override
-  State<EditCaseRequestPage> createState() => _EditCaseRequestPageState();
+  State<EditCasePage> createState() => _EditCasePageState();
 }
 
-class _EditCaseRequestPageState extends State<EditCaseRequestPage> {
+class _EditCasePageState extends State<EditCasePage> {
   final _formKey = GlobalKey<FormState>();
   final nameCtrl = TextEditingController();
   final List<PlatformFile> files = [];
@@ -35,18 +39,18 @@ class _EditCaseRequestPageState extends State<EditCaseRequestPage> {
   final List<PlatformFile> newFiles = [];
   var requestedAdvocateId;
 
-  final service = CaseRequestService();
+  late final service = CaseService(widget.token!);
 
   @override
   void initState() {
     super.initState();
-    nameCtrl.text = widget.caseRequest.caseName;
-    selectedType = widget.caseRequest.caseType;
-    existingAttachments = List.from(widget.caseRequest.attachmentId);
+    nameCtrl.text = widget.acceptedCase.caseName;
+    selectedType = AdvocateSpecialityExt.fromApi(widget.acceptedCase.caseType);
+    existingAttachments = List.from(widget.acceptedCase.attachmentsId);
 
-    if (widget.caseRequest.requestedAdvocateId != null) {
+    if (widget.acceptedCase.advocateId.isNotEmpty) {
       setState(() {
-        requestedAdvocateId = widget.caseRequest.requestedAdvocateId;
+        requestedAdvocateId = widget.acceptedCase.advocateId;
       });
     }
 
@@ -190,14 +194,20 @@ class _EditCaseRequestPageState extends State<EditCaseRequestPage> {
 
     setState(() => loading = true);
 
-    final ok = await service.updateCaseRequest(
-      caseRequestId: widget.caseRequest.id,
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+
+    String userId = prefs.getString('userId') ?? '';
+
+    final ok = await service.updateCase(
+      caseId: widget.acceptedCase.id,
       caseName: nameCtrl.text.trim(),
       caseType: selectedType.apiValue,
-      userId: widget.caseRequest.userId,
+      usersId: userId,
       existingFiles: existingAttachments, // ✅ String list
-      files: newFiles, // ✅ PlatformFile list
-      requestedAdvocateId: requestedAdvocateId,
+      newFiles: newFiles, // ✅ PlatformFile list
+      advocateId: requestedAdvocateId,
+      userId: widget.acceptedCase.userId,
+
     );
 
     setState(() => loading = false);
@@ -213,7 +223,7 @@ class _EditCaseRequestPageState extends State<EditCaseRequestPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Edit Case Request")),
+      appBar: AppBar(title: const Text("Edit Case")),
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : Padding(
@@ -252,28 +262,37 @@ class _EditCaseRequestPageState extends State<EditCaseRequestPage> {
 
                     const SizedBox(height: 20),
 
-                    if (requestedAdvocateId != null)
-                      FutureBuilder<String>(
-                        future: getAdvocateName(requestedAdvocateId),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return const Text("Loading advocate...");
-                          }
-                          if (!snapshot.hasData || snapshot.hasError) {
-                            return const SizedBox.shrink();
-                          }
-
-                          if (snapshot.data == null) {
-                            return Text("Requested Advocate :- no advocate");
-                          }
-
-                          return Text("Requested Advocate: ${snapshot.data}");
-                        },
-                      ),
+                    FutureBuilder<String>(
+                      future: getAdvocateName(requestedAdvocateId),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Text("Loading advocate...");
+                        }
+                        if (!snapshot.hasData || snapshot.hasError) {
+                          return const SizedBox.shrink();
+                        }
+                        return Text("Requested Advocate: ${snapshot.data}");
+                      },
+                    ),
                     const Divider(),
 
-
+                    DropdownButtonFormField<String>(
+                      decoration: const InputDecoration(
+                        labelText: "Select Advocate",
+                      ),
+                      items: advocates.asMap().entries.map((e) {
+                        return DropdownMenuItem(
+                          value: e.value.id,
+                          child: Text(nameOfAdvocates[e.key]),
+                        );
+                      }).toList(),
+                      onChanged: (v) {
+                        setState(() {
+                          requestedAdvocateId = v;
+                        });
+                      },
+                    ),
 
                     /// -------- EXISTING FILES --------
                     const Text(
@@ -296,7 +315,7 @@ class _EditCaseRequestPageState extends State<EditCaseRequestPage> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => CaseRequestAttachmentViewer(
+                              builder: (_) => CaseAttachmentView(
                                 attachmentId: id,
                                 jwtToken: jwtToken,
                               ),
@@ -305,7 +324,16 @@ class _EditCaseRequestPageState extends State<EditCaseRequestPage> {
                         },
                         trailing: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => deleteExistingAttachment(id),
+                          onPressed: () {
+                            deleteExistingAttachment(id);
+
+                            setState(() {
+
+                              existingAttachments.remove(id);
+
+                            });
+
+                          },
                         ),
                       ),
                     ),
@@ -344,7 +372,7 @@ class _EditCaseRequestPageState extends State<EditCaseRequestPage> {
 
                     ElevatedButton(
                       onPressed: update,
-                      child: const Text("Update Case Request"),
+                      child: const Text("Update Case"),
                     ),
                   ],
                 ),

@@ -17,6 +17,7 @@ import 'package:advocatechaiadvocate/Auth/AuthService.dart';
 
 import 'AttachmentViewer.dart';
 import 'case_tracking.dart';
+import 'edit_case_page.dart';
 
 class CaseDetailsPage extends StatelessWidget {
   final CaseModel caseModel;
@@ -87,6 +88,18 @@ class CaseDetailsPage extends StatelessWidget {
     return "";
   }
 
+  Future<bool> isMyFightingCase() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token') ?? '';
+    final advocateId = prefs.getString("advocateId");
+
+    if (advocateId == null) {
+      return false;
+    }
+
+    return advocateId == caseModel.advocateId;
+  }
+
   // ---------------- GET ADVOCATE NAME ----------------
   Future<String> getNameFromAdvocate(String advocateId) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -121,8 +134,17 @@ class CaseDetailsPage extends StatelessWidget {
   Future<void> deleteCase(BuildContext context) async {
     final url = "$baseUrl/${caseModel.id}/${caseModel.userId}";
 
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token') ?? '';
+
     try {
-      final response = await http.delete(Uri.parse(url));
+      final response = await http.delete(
+        Uri.parse(url),
+        headers: {
+          "content-type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      );
       final body = jsonDecode(response.body);
 
       if (response.statusCode == 200 && body["success"] == true) {
@@ -269,20 +291,22 @@ class CaseDetailsPage extends StatelessWidget {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.visibility),
-                          onPressed: () =>  SharedPreferences.getInstance().then((prefs) {
-                            final token = prefs.getString('jwt_token') ?? '';
-                            final userId = prefs.getString('userId') ?? '';
+                          onPressed: () => SharedPreferences.getInstance().then(
+                            (prefs) {
+                              final token = prefs.getString('jwt_token') ?? '';
+                              final userId = prefs.getString('userId') ?? '';
 
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => CaseAttachmentView(
-                                  attachmentId: id,
-                                  jwtToken: token,
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => CaseAttachmentView(
+                                    attachmentId: id,
+                                    jwtToken: token,
+                                  ),
                                 ),
-                              ),
-                            );
-                          }),
+                              );
+                            },
+                          ),
                         ),
                         IconButton(
                           icon: const Icon(Icons.download),
@@ -350,7 +374,8 @@ class CaseDetailsPage extends StatelessWidget {
 
                     final nameResponse = await http.get(
                       Uri.parse(
-                        '${BASE_URL.Urls().baseURL}user/search?userId=$userId'),
+                        '${BASE_URL.Urls().baseURL}user/search?userId=$userId',
+                      ),
                       headers: {
                         "content-type": "application/json",
                         "Authorization": "Bearer $token",
@@ -371,14 +396,16 @@ class CaseDetailsPage extends StatelessWidget {
                     String? advocateUserId;
 
                     final response = await http.get(
-                      Uri.parse("${BASE_URL.Urls().baseURL}advocate/${caseModel.advocateId}"),
+                      Uri.parse(
+                        "${BASE_URL.Urls().baseURL}advocate/${caseModel.advocateId}",
+                      ),
                       headers: {
                         "content-type": "application/json",
                         "Authorization": "Bearer $token",
                       },
                     );
 
-                    if(response.statusCode == 200) {
+                    if (response.statusCode == 200) {
                       final body = jsonDecode(response.body);
                       advocateUserId = body["userId"];
                     }
@@ -472,6 +499,50 @@ class CaseDetailsPage extends StatelessWidget {
                   },
                 ),
 
+                const SizedBox(height: 16),
+
+                FutureBuilder<bool>(
+                  future: isMyFightingCase(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const SizedBox(); // no UI jump
+                    }
+                    if (snapshot.hasData && snapshot.data == true) {
+                      return SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            foregroundColor: Colors.white,
+                            textStyle: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          onPressed: () async {
+                            SharedPreferences prefs =
+                                await SharedPreferences.getInstance();
+                            final token = prefs.getString('jwt_token') ?? '';
+
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => EditCasePage(
+                                  token: token,
+                                  acceptedCase: caseModel,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Text("Update Case"),
+                        ),
+                      );
+                    } else {
+                      return const SizedBox(); // hide button if not owner
+                    }
+                  },
+                ),
                 const SizedBox(height: 16),
               ],
             ),
