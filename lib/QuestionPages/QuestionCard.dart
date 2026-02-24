@@ -11,16 +11,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:html' as html;
 import '../Auth/AuthService.dart';
 import '../Utils/BaseURL.dart' as baseURL;
+import '../QuestionPages/answer_question_page.dart';
 import '../Utils/BaseURL.dart' as BASE_URL;
 import 'AnswerModel.dart';
 import 'AnswerService.dart';
 import 'AnswerTile.dart';
 import 'QuestionModel.dart';
 
-class QuestionCard extends StatelessWidget {
+class QuestionCard extends StatefulWidget {
   final QuestionModel question;
+
   const QuestionCard({required this.question, super.key});
 
+  @override
+  State<StatefulWidget> createState() {
+    return _QuestionCardState();
+  }
+}
+
+class _QuestionCardState extends State<QuestionCard> {
   String _getExtensionFromContentType(String? contentType) {
     if (contentType == null) return ".bin";
 
@@ -33,6 +42,13 @@ class QuestionCard extends StatelessWidget {
     if (contentType.contains("text")) return ".txt";
 
     return ".bin";
+  }
+
+
+  Future<void> _refreshAnswers() async {
+
+    setState(() {});
+
   }
 
   Future<void> openAttachment(BuildContext context, String attachmentId) async {
@@ -48,8 +64,9 @@ class QuestionCard extends StatelessWidget {
       );
 
       if (response.statusCode != 200) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text("Download failed")));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Download failed")));
         return;
       }
 
@@ -64,7 +81,8 @@ class QuestionCard extends StatelessWidget {
       }
 
       // 🔹 Get content type
-      final contentType = response.headers['content-type'] ?? "application/octet-stream";
+      final contentType =
+          response.headers['content-type'] ?? "application/octet-stream";
 
       // 🔹 Add extension if missing
       if (!fileName.contains(".")) {
@@ -96,12 +114,14 @@ class QuestionCard extends StatelessWidget {
       await file.writeAsBytes(response.bodyBytes);
 
       await OpenFilex.open(filePath);
-
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Attachment error: $e")));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Attachment error: $e")));
     }
   }
+
+
 
   Future<String> getNameFromUser(String userId) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -136,12 +156,12 @@ class QuestionCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              question.questionType,
+              widget.question.questionType,
               style: const TextStyle(color: Colors.green),
             ),
             const SizedBox(height: 6),
             FutureBuilder<String>(
-              future: getNameFromUser(question.userId),
+              future: getNameFromUser(widget.question.userId),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Text("Loading...");
@@ -151,19 +171,18 @@ class QuestionCard extends StatelessWidget {
                   "Asked by ${snapshot.data}",
                   style: const TextStyle(color: Colors.black),
                 );
-
-              }
+              },
             ),
             const SizedBox(height: 6),
             Text(
-              question.message,
+              widget.question.message,
               style: const TextStyle(color: Colors.black),
             ),
 
-            if (question.attachmentId != null)
+            if (widget.question.attachmentId != null)
               InkWell(
                 onTap: () =>
-                    openAttachment(context, question.attachmentId!),
+                    openAttachment(context, widget.question.attachmentId!),
                 child: const Padding(
                   padding: EdgeInsets.only(top: 8),
                   child: Text(
@@ -180,7 +199,7 @@ class QuestionCard extends StatelessWidget {
 
             /// ================= ANSWERS =================
             FutureBuilder<List<AnswerModel>>(
-              future: AnswerService.getByQuestion(question.id!),
+              future: AnswerService.getByQuestion(widget.question.id!),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Text(
@@ -198,12 +217,16 @@ class QuestionCard extends StatelessWidget {
                 }
 
                 return Column(
-                  children: answers
-                      .map((a) => AnswerTile(answer: a))
-                      .toList(),
+                  children: answers.map((a) => AnswerTile(answer: a, onRefresh: _refreshAnswers,)).toList(),
                 );
               },
             ),
+            const SizedBox(height: 6),
+            AnswerQuestionPage(
+              questionId: widget.question.id,
+              onAnswerSubmitted: _refreshAnswers,
+            ),
+            const SizedBox(height: 6),
           ],
         ),
       ),

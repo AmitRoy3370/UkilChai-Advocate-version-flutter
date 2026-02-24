@@ -25,6 +25,37 @@ class QuestionListPage extends StatefulWidget {
 class _QuestionListPageState extends State<QuestionListPage> {
   String searchText = "";
 
+  String? getMimeType(String? extension) {
+    if (extension == null) return null;
+    extension = extension.toLowerCase();
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'pdf':
+        return 'application/pdf';
+      case 'mp4':
+        return 'video/mp4';
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'wav':
+        return 'audio/wav';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'txt':
+        return 'text/plain';
+      case 'json':
+        return 'application/json';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

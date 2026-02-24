@@ -1,12 +1,16 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:file_picker/file_picker.dart';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart'; // Add this for MediaType
+import 'package:shared_preferences/shared_preferences.dart'; // For token
+import 'package:file_picker/file_picker.dart';
 
 import '../Utils/AdvocateSpeciality.dart';
+import '../Utils/BaseURL.dart' as baseURL;
 import 'QuestionListPage.dart';
-import 'QuestionService.dart';
+// import 'QuestionService.dart'; // No longer needed
 
 class AskQuestionPage extends StatefulWidget {
   final String userId;
@@ -20,9 +24,39 @@ class _AskQuestionPageState extends State<AskQuestionPage> {
   final TextEditingController messageCtrl = TextEditingController();
 
   AdvocateSpeciality? selectedSpeciality;
-  File? attachment, mobileFile;
+  PlatformFile? selectedFile; // Unified for web/mobile
   String? fileName;
-  Uint8List? webFileBytes;
+  String? fileExtension;
+
+  String? getMimeType(String? extension) {
+    if (extension == null) return null;
+    extension = extension.toLowerCase();
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'pdf':
+        return 'application/pdf';
+      case 'mp4':
+        return 'video/mp4';
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'wav':
+        return 'audio/wav';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'txt':
+        return 'text/plain';
+      case 'json':
+        return 'application/json';
+      default:
+        return 'application/octet-stream';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -163,7 +197,8 @@ class _AskQuestionPageState extends State<AskQuestionPage> {
   Future<void> pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: false,
-      withData: kIsWeb, // IMPORTANT
+      withData: true, // Crucial for web
+      type: FileType.any,
     );
 
     if (result == null) return;
@@ -171,13 +206,9 @@ class _AskQuestionPageState extends State<AskQuestionPage> {
     final file = result.files.first;
 
     setState(() {
+      selectedFile = file;
       fileName = file.name;
-
-      if (kIsWeb) {
-        webFileBytes = file.bytes; // WEB
-      } else {
-        mobileFile = File(file.path!); // MOBILE
-      }
+      fileExtension = file.extension;
     });
   }
 
@@ -190,17 +221,79 @@ class _AskQuestionPageState extends State<AskQuestionPage> {
       return;
     }
 
-    await QuestionService.askQuestion(
-      userId: widget.userId,
-      message: messageCtrl.text,
-      questionType: selectedSpeciality!.apiValue,
-      file: mobileFile,
-      webFileBytes: webFileBytes,
-      fileName: fileName,
-    );
+    if (messageCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter a message")),
+      );
+      return;
+    }
 
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token') ?? '';
 
-    Navigator.pop(context);
+    final uri = Uri.parse("${baseURL.Urls().baseURL}questions/ask"); // From your backend endpoint
+
+    var request = http.MultipartRequest("POST", uri);
+    request.headers["Authorization"] = "Bearer $token";
+
+    request.fields["userId"] = widget.userId; // Assuming usersId is a typo or same as userId; adjust if needed
+    request.fields["usersId"] = widget.userId; // If backend requires both, set accordingly
+    request.fields["message"] = messageCtrl.text.trim();
+    request.fields["questionType"] = selectedSpeciality!.apiValue;
+
+    if (selectedFile != null) {
+      final mimeTypeStr = getMimeType(fileExtension);
+      MediaType? contentType = mimeTypeStr != null ? MediaType.parse(mimeTypeStr) : null;
+
+      if (kIsWeb) {
+        // Web: use bytes
+        if (selectedFile!.bytes != null) {
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              "file",
+              selectedFile!.bytes!,
+              filename: selectedFile!.name, // Critical: sets originalFilename in backend
+              contentType: contentType, // Sets proper MIME
+            ),
+          );
+        }
+      } else {
+        // Mobile: prefer path, fallback to bytes
+        if (selectedFile!.path != null) {
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              "file",
+              selectedFile!.path!,
+              filename: selectedFile!.name, // Critical
+              contentType: contentType,
+            ),
+          );
+        } else if (selectedFile!.bytes != null) {
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              "file",
+              selectedFile!.bytes!,
+              filename: selectedFile!.name,
+              contentType: contentType,
+            ),
+          );
+        }
+      }
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Question submitted successfully")),
+      );
+      Navigator.pop(context);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed: ${response.body}")),
+      );
+    }
   }
 
   Future<void> seeAllQuestion() async {

@@ -279,25 +279,24 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
                               ),
                               IconButton(
                                 icon: const Icon(Icons.download),
-                                onPressed: () async{
-
-                                  SharedPreferences prefs = await SharedPreferences.getInstance();
-                                  final token = prefs.getString('jwt_token') ?? '';
-
+                                onPressed: () async {
+                                  SharedPreferences prefs =
+                                      await SharedPreferences.getInstance();
+                                  final token =
+                                      prefs.getString('jwt_token') ?? '';
 
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
                                       builder: (context) => PostAttachmentView(
-                                        attachmentId: widget.post!.attachmentId!,
+                                        attachmentId:
+                                            widget.post!.attachmentId!,
                                         jwtToken: token,
-                                      )
-                                    )
+                                      ),
+                                    ),
                                   );
-
-                                }
-                              )
-
+                                },
+                              ),
                             ],
                           ),
                         ),
