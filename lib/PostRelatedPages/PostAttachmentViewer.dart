@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:open_filex/open_filex.dart';
 import 'package:video_player/video_player.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
@@ -14,6 +15,7 @@ import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
 
 import 'package:open_file/open_file.dart';
+import '../Auth/AuthService.dart';
 import '../Utils/BaseURL.dart' as BASE_URL;
 
 class PostAttachmentView extends StatefulWidget {
@@ -72,6 +74,47 @@ class _PostAttachmentViewState extends State<PostAttachmentView> {
     return '';
   }
 
+  String? detectContentType(Uint8List bytes) {
+    if (bytes.length >= 4 &&
+        bytes[0] == 0x25 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x44 &&
+        bytes[3] == 0x46) {
+      return 'application/pdf';
+    }
+    if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8) {
+      return 'image/jpeg';
+    }
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xFF &&
+        bytes[1] == 0xD8 &&
+        bytes[2] == 0xFF) {
+      return 'image/jpeg';
+    }
+    if (bytes.length >= 8 &&
+        String.fromCharCodes(bytes.sublist(4, 8)) == 'ftyp') {
+      return 'video/mp4';
+    }
+    if (bytes.length >= 3 &&
+        bytes[0] == 0x49 &&
+        bytes[1] == 0x44 &&
+        bytes[2] == 0x33) {
+      return 'audio/mpeg';
+    }
+    if (bytes.length >= 2 && bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0) {
+      return 'audio/mpeg';
+    }
+    if (bytes.length >= 4 &&
+        String.fromCharCodes(bytes.sublist(0, 4)) == 'RIFF') {
+      return 'audio/wav';
+    }
+    if (bytes.length >= 4 &&
+        String.fromCharCodes(bytes.sublist(0, 4)) == 'OggS') {
+      return 'audio/ogg';
+    }
+    return null;
+  }
+
   // ---------- LOAD ATTACHMENT ----------
   Future<void> loadAttachment() async {
     final url = Uri.parse(
@@ -92,6 +135,15 @@ class _PostAttachmentViewState extends State<PostAttachmentView> {
 
     fileBytes = response.bodyBytes;
     contentType = response.headers['content-type'];
+
+    if (contentType == null ||
+        contentType == 'application/octet-stream' ||
+        contentType == 'application/x-www-form-urlencoded') {
+      final detected = detectContentType(fileBytes!);
+      if (detected != null) {
+        contentType = detected;
+      }
+    }
 
     // WEB: Create blob URL
     if (kIsWeb) {
@@ -147,14 +199,89 @@ class _PostAttachmentViewState extends State<PostAttachmentView> {
     setState(() {});
   }
 
+  String _getExtensionFromContentType(String? contentType) {
+    if (contentType == null) return ".bin";
+
+    if (contentType.contains("pdf")) return ".pdf";
+    if (contentType.contains("jpeg")) return ".jpeg";
+    if (contentType.contains("jpg")) return ".jpg";
+    if (contentType.contains("png")) return ".png";
+    if (contentType.contains("word")) return ".docx";
+    if (contentType.contains("excel")) return ".xlsx";
+    if (contentType.contains("text")) return ".txt";
+
+    return ".bin";
+  }
+
+  // ---------- DOWNLOAD / OPEN ----------
   // ---------- DOWNLOAD / OPEN ----------
   Future<void> _openOrDownload() async {
-    if (kIsWeb) {
-      final anchor = html.AnchorElement(href: webUrl!)
-        ..setAttribute('download', 'file${getFileExtension(contentType)}')
-        ..click();
-    } else {
-      await OpenFile.open(tempFilePath!);
+    try {
+      final url =
+          "${BASE_URL.Urls().baseURL}advocate/posts/download/postContent?attachmentId=${widget.attachmentId}";
+
+      final token = await AuthService.getToken();
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {"Authorization": "Bearer $token"},
+      );
+
+      if (response.statusCode != 200) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Download failed")));
+        return;
+      }
+
+      // 🔹 Extract filename from header
+      String fileName = "attachment";
+      final disposition = response.headers['content-disposition'];
+      if (disposition != null) {
+        final match = RegExp(r'filename="([^"]+)"').firstMatch(disposition);
+        if (match != null) {
+          fileName = match.group(1)!;
+        }
+      }
+
+      // 🔹 Get content type
+      final contentType =
+          response.headers['content-type'] ?? "application/octet-stream";
+
+      // 🔹 Add extension if missing
+      if (!fileName.contains(".")) {
+        fileName += _getExtensionFromContentType(contentType);
+      }
+
+      // ==========================================
+      // 🌐 WEB
+      // ==========================================
+      if (kIsWeb) {
+        final blob = html.Blob([response.bodyBytes], contentType);
+        final url = html.Url.createObjectUrlFromBlob(blob);
+
+        final anchor = html.AnchorElement(href: url)
+          ..setAttribute("download", fileName)
+          ..click();
+
+        html.Url.revokeObjectUrl(url);
+        return;
+      }
+
+      // ==========================================
+      // 📱 MOBILE
+      // ==========================================
+      final dir = await getApplicationDocumentsDirectory();
+      final filePath = "${dir.path}/$fileName";
+
+      final file = File(filePath);
+      await file.writeAsBytes(response.bodyBytes);
+
+      await OpenFilex.open(filePath);
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Attachment error: $e")));
     }
   }
 
