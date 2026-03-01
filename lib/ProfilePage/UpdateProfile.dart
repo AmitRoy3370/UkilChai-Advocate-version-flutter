@@ -717,7 +717,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
 
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text("Invalid credential....")));
+        ).showSnackBar(const SnackBar(content: Text("Invalid credential for old name or password....")));
 
         return;
       }
@@ -780,6 +780,8 @@ class _UpdateProfileState extends State<UpdateProfile> {
           "Authorization": "Bearer $token",
         },
       );
+
+      print("image finding response in update profile :- ${imageFindingResponse.statusCode}");
 
       if (imageFindingResponse.statusCode == 200) {
         final imageFindingResponseData = jsonDecode(imageFindingResponse.body);
@@ -871,25 +873,27 @@ class _UpdateProfileState extends State<UpdateProfile> {
         // final String userId = decoded["userId"];
 
         final sharedPreferences = await SharedPreferences.getInstance();
-        final token = sharedPreferences.getString("jwt_token");
-        final userId = sharedPreferences.getString("userId");
+        final String? token = sharedPreferences.getString("jwt_token");
+        final String? userId = sharedPreferences.getString("userId");
 
         if (kDebugMode) {
-          print("token :- $token and userId :- $userId");
+          print("token in update profile :- $token and userId update profile :- $userId");
         }
 
-        print("received token :- $token");
+        print("received token in update profile :- $token");
 
         // -------- Save token (App + Web) ----------
-        final prefs = await SharedPreferences.getInstance();
+        /*final prefs = await SharedPreferences.getInstance();
         await prefs.setString("jwt_token", token!);
-        await prefs.setString("userId", userId!);
+        await prefs.setString("userId", userId!);*/
 
-        AuthService.saveToken(token);
-        AuthService.saveUserId(userId);
+        AuthService.saveToken(token!);
+        AuthService.saveUserId(userId!);
 
         final sharedPreferences1 = await SharedPreferences.getInstance();
         final _token = sharedPreferences1.getString("jwt_token");
+
+        print("received token in update profile second layer :- $_token");
 
         if (_token == null || token.isEmpty) {
           print("No token found. User not logged in.");
@@ -909,6 +913,8 @@ class _UpdateProfileState extends State<UpdateProfile> {
                 "application/json", // If JSON body; adjust as needed
           },
         );
+
+        print("contact info finding response :- ${responseForContactInfoFinding.statusCode}");
 
         if (responseForContactInfoFinding.statusCode != 200) {
           final contactInfoUri = Uri.parse(
@@ -1035,6 +1041,8 @@ class _UpdateProfileState extends State<UpdateProfile> {
             }),
           );
 
+          print("contact info response in update profile :- ${responseForContactInfo1.statusCode}");
+
           if (responseForContactInfo1.statusCode == 200 ||
               responseForContactInfo1.statusCode == 201) {
             //print("Contact info added successfully");
@@ -1056,7 +1064,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
             );
           }
         } else {
-          print("location update :- ${responseForLocationFinding.body}");
+          print("location update in update profile :- ${responseForLocationFinding.body}");
 
           var contactInfoResponseBody1 = jsonDecode(
             responseForLocationFinding.body,

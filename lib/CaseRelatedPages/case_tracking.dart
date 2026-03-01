@@ -18,6 +18,7 @@ import 'package:advocatechaiadvocate/CaseRelatedPages/_TimelineStep.dart';
 import 'CaseJudgmentModel.dart';
 import 'ScheduleAppealHearingPage.dart';
 import 'case_judgment_service.dart';
+import 'package:file_picker/file_picker.dart';
 
 import 'AppealHearingModel.dart';
 import 'DocumentDraftAttachmentViewer.dart';
@@ -67,6 +68,28 @@ class _CaseTrackingState extends State<CaseTracking> {
   int selectedStars = 0;
   String? ratingId;
   bool ratingLoaded = false;
+  String? presentUsersAdvocateId;
+
+  // Add near other state variables
+  bool _isUploadingDraft = false;
+  List<PlatformFile> _selectedDocumentsDraftsNewFiles = [];
+  List<String> _documentDraftsExistingAttachments = []; // for update mode
+  Set<String> _documentDraftsAttachmentsToDelete =
+      {}; // user wants to remove these
+
+  // ====================== HEARING STATES ======================
+  bool _isUploadingHearing = false;
+  List<PlatformFile> _selectedHearingNewFiles = [];
+  List<String> _hearingExistingAttachments = [];
+  Set<String> _hearingAttachmentsToDelete = {};
+
+  // ====================== PRICE STATES ======================
+  bool _isSavingPrice = false;
+
+  TextEditingController _priceController = TextEditingController();
+
+  // ====================== HEARING PRICE RULE STATE ======================
+  int _hearingPriceCount = 0;
 
   @override
   void initState() {
@@ -82,6 +105,11 @@ class _CaseTrackingState extends State<CaseTracking> {
 
   Future<void> _loadAllData() async {
     final draftService = DocumentDraftService(widget.token!);
+
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    presentUsersAdvocateId = prefs.getString("advocateId");
+
+    print("present users advocate id :- $presentUsersAdvocateId");
 
     try {
       await _loadMyRating();
@@ -101,9 +129,30 @@ class _CaseTrackingState extends State<CaseTracking> {
     }
 
     try {
-      // ---------- HEARINGS ----------
-      hearings = await HearingService.getByCase(widget.token!, widget.caseId!);
-    } catch (e) {}
+
+      print("collecting all hearings....");
+
+      try {
+        // ---------- HEARINGS ----------
+        hearings =
+        await HearingService.getByCase(widget.token!, widget.caseId!);
+      } catch(e) {
+
+      }
+
+      print("collecting all hearing price count....");
+
+      _hearingPriceCount = await PaymentService.getHearingPaymentCount(
+        widget.token!,
+        widget.caseId!,
+      );
+
+      print("collected total price set for hearing is :- $_hearingPriceCount and total hearing has :- ${hearings.length}");
+
+    } catch (e) {
+      _hearingPriceCount = 0;
+      print("find some $e for collecting total hearing count and setted hearing price count");
+    }
 
     try {
       caseClose = await CaseCloseService.findByCaseId(
@@ -225,6 +274,695 @@ class _CaseTrackingState extends State<CaseTracking> {
     return DateFormat('dd MMM yyyy').format(date);
   }
 
+  Future<void> _pickDocumentDraftsFiles() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.any,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          _selectedDocumentsDraftsNewFiles.addAll(
+            result.files.where((f) => f.bytes != null),
+          );
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error picking files: $e")));
+    }
+  }
+
+  void _showDocumentDraftBottomSheet() {
+    final draftService = DocumentDraftService(widget.token!);
+    final isUpdate = documentDrafts != null;
+
+    // For update mode — initialize existing files
+    if (isUpdate && _documentDraftsExistingAttachments.isEmpty) {
+      _documentDraftsExistingAttachments = List.from(
+        documentDrafts!.attachmentsId,
+      );
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return DraggableScrollableSheet(
+              initialChildSize: 0.85,
+              minChildSize: 0.5,
+              maxChildSize: 0.95,
+              expand: false,
+              builder: (context, scrollController) {
+                return Container(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isUpdate
+                            ? "Update Document Draft"
+                            : "Add Document Draft",
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Selected / Existing files list
+                      if (_documentDraftsExistingAttachments.isNotEmpty ||
+                          _selectedDocumentsDraftsNewFiles.isNotEmpty)
+                        Expanded(
+                          child: ListView(
+                            controller: scrollController,
+                            children: [
+                              // Existing files (only in update mode)
+                              ..._documentDraftsExistingAttachments.map((
+                                attId,
+                              ) {
+                                final willDelete =
+                                    _documentDraftsAttachmentsToDelete.contains(
+                                      attId,
+                                    );
+                                return ListTile(
+                                  leading: Icon(
+                                    willDelete
+                                        ? Icons.delete_forever
+                                        : Icons.attach_file,
+                                    color: willDelete
+                                        ? Colors.red
+                                        : Colors.blue,
+                                  ),
+                                  title: Text(
+                                    "File $attId",
+                                    style: TextStyle(
+                                      decoration: willDelete
+                                          ? TextDecoration.lineThrough
+                                          : null,
+                                      color: willDelete ? Colors.red : null,
+                                    ),
+                                  ),
+                                  trailing: IconButton(
+                                    icon: Icon(
+                                      willDelete
+                                          ? Icons.restore
+                                          : Icons.delete_outline,
+                                      color: willDelete
+                                          ? Colors.green
+                                          : Colors.red,
+                                    ),
+                                    onPressed: () {
+                                      setModalState(() {
+                                        if (willDelete) {
+                                          _documentDraftsExistingAttachments
+                                              .remove(attId);
+                                        } else {
+                                          //_documentDraftsExistingAttachments.remove(attId);
+                                        }
+                                      });
+                                    },
+                                  ),
+                                );
+                              }),
+
+                              // Newly selected files
+                              ..._selectedDocumentsDraftsNewFiles
+                                  .asMap()
+                                  .entries
+                                  .map((entry) {
+                                    int idx = entry.key;
+                                    PlatformFile file = entry.value;
+                                    return ListTile(
+                                      leading: const Icon(
+                                        Icons.add_circle,
+                                        color: Colors.green,
+                                      ),
+                                      title: Text(file.name),
+                                      trailing: IconButton(
+                                        icon: const Icon(
+                                          Icons.remove_circle,
+                                          color: Colors.red,
+                                        ),
+                                        onPressed: () {
+                                          setModalState(() {
+                                            _selectedDocumentsDraftsNewFiles
+                                                .removeAt(idx);
+                                          });
+                                        },
+                                      ),
+                                    );
+                                  }),
+                            ],
+                          ),
+                        ),
+
+                      const SizedBox(height: 16),
+
+                      // Action buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.attach_file),
+                              label: const Text("Add Files"),
+                              onPressed: () async {
+                                await _pickDocumentDraftsFiles();
+                                setModalState(() {});
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          if (_selectedDocumentsDraftsNewFiles.isNotEmpty ||
+                              _documentDraftsAttachmentsToDelete.isNotEmpty ||
+                              !isUpdate)
+                            ElevatedButton.icon(
+                              icon: _isUploadingDraft
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.save),
+                              label: Text(
+                                _isUploadingDraft
+                                    ? "Saving..."
+                                    : (isUpdate ? "Update" : "Save"),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                              ),
+                              onPressed: _isUploadingDraft
+                                  ? null
+                                  : () async {
+                                      setModalState(
+                                        () => _isUploadingDraft = true,
+                                      );
+                                      try {
+                                        bool success;
+
+                                        print("isUpdate :- $isUpdate");
+
+                                        if (isUpdate) {
+                                          success = await draftService.updateDraft(
+                                            draftId: documentDrafts!.id,
+                                            advocateId:
+                                                documentDrafts!.advocateId,
+                                            caseId: documentDrafts!.caseId,
+                                            userId: widget.advocateUserId!,
+                                            existingFiles:
+                                                _documentDraftsExistingAttachments,
+                                            newFiles:
+                                                _selectedDocumentsDraftsNewFiles,
+                                          );
+                                        } else {
+                                          print(
+                                            "total files selected :- ${_selectedDocumentsDraftsNewFiles.length}",
+                                          );
+
+                                          success = await draftService.addDraft(
+                                            advocateId: widget.advocateId ?? "",
+                                            caseId: widget.caseId!,
+                                            userId: widget.advocateUserId!,
+                                            files:
+                                                _selectedDocumentsDraftsNewFiles,
+                                          );
+                                        }
+
+                                        if (success) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                isUpdate
+                                                    ? "Document draft updated"
+                                                    : "Document draft created",
+                                              ),
+                                            ),
+                                          );
+                                          Navigator.pop(context);
+                                          setState(() {
+                                            _loadFuture = _loadAllData();
+                                            _selectedDocumentsDraftsNewFiles
+                                                .clear();
+                                            _documentDraftsAttachmentsToDelete
+                                                .clear();
+                                            _documentDraftsExistingAttachments
+                                                .clear();
+                                          });
+                                        } else {
+                                          throw Exception("Operation failed");
+                                        }
+                                      } catch (e) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(content: Text("Error: $e")),
+                                        );
+                                      } finally {
+                                        setModalState(
+                                          () => _isUploadingDraft = false,
+                                        );
+                                      }
+                                    },
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String? _paymentTypeForTitle(String title) {
+    switch (title) {
+      case "Document Drafting":
+        return "CASE_DOCUMENT_DRAFT_PAYMENT";
+      case "Hearing Date Issued":
+        return "CASE_HEARING_PAYMENT";
+      case "Case Filing / Registration":
+        return "CASE_FILING_PAYMENT";
+      case "Paper Finalize":
+        return "PAPER_FINALIZE_PAYMENT";
+      case "Case Close":
+        return "CASE_CLOSING_PAYMENT";
+      default:
+        return null;
+    }
+  }
+
+  Future<void> _savePaymentPrice(String paymentType, double newPrice) async {
+    setState(() => _isSavingPrice = true);
+    try {
+      final success = await PaymentService.saveOrUpdatePrice(
+        token: widget.token!,
+        userId: widget.advocateUserId!,
+        caseId: widget.caseId!,
+        paymentType: paymentType,
+        price: newPrice,
+      );
+
+      if (success) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Price updated to ৳$newPrice")));
+        setState(() {
+          _loadFuture = _loadAllData(); // refresh prices in timeline
+        });
+      } else {
+        throw Exception("Failed to save price");
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+    } finally {
+      setState(() => _isSavingPrice = false);
+    }
+  }
+
+  void _showPriceEditDialog(String title, String? paymentType, bool add) async {
+    if (paymentType == null) return;
+
+    final controller = TextEditingController();
+
+    // Prefill current price
+    final current = await PaymentService.getCasePaymentPrice(
+      widget.token!,
+      widget.caseId!,
+      paymentType,
+    );
+    if (current != null) controller.text = current.toStringAsFixed(0);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("Edit $title Price"),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: "New Price",
+            prefixText: "৳ ",
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
+              final price = double.tryParse(controller.text);
+              if (price != null && price > 0) {
+
+                if(add ) {
+
+                  SharedPreferences prefs = await SharedPreferences.getInstance();
+                  final token = prefs.getString('jwt_token');
+                  final userId = prefs.getString('userId');
+
+
+                  final response = await http.post(
+                    Uri.parse(
+                      "${BASE_URL.Urls().baseURL}payment/add/$userId",
+                    ),
+                    headers: {
+                      'Authorization': 'Bearer $token',
+                      'content-type': 'application/json',
+                    },
+                    body: jsonEncode({
+                      "caseId": widget.caseId,
+                      "paymentFor": paymentType,
+                      "price": price,
+                      "userId":userId
+                    })
+                  );
+
+                  if(response.statusCode == 200 || response.statusCode == 201) {
+                    ScaffoldMessenger.of(
+                      context,
+                      ).showSnackBar(
+                      SnackBar(
+                        content: Text("Price updated to ৳$price"),
+                      ),
+                    );
+
+                    Navigator.pop(ctx);
+
+                  } else {
+
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(
+                      SnackBar(
+                        content: Text("Failed to Update price"),
+                      ),
+                    );
+
+                  }
+
+                  Navigator.pop(ctx);
+
+                }
+
+                Navigator.pop(ctx);
+                await _savePaymentPrice(paymentType, price);
+              }
+            },
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickHearingFiles() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          _selectedHearingNewFiles.addAll(
+            result.files.where((f) => f.bytes != null),
+          );
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error picking files: $e")));
+    }
+  }
+
+  void _showHearingBottomSheet(Hearing? hearing) {
+    final isUpdate = hearing != null;
+    final nextNumber = hearings.isEmpty
+        ? 1
+        : hearings.map((h) => h.hearingNumber).reduce((a, b) => a > b ? a : b) +
+              1;
+
+    final hearingNumber = isUpdate ? hearing.hearingNumber : nextNumber;
+
+    // Reset lists
+    setState(() {
+      _selectedHearingNewFiles.clear();
+      _hearingAttachmentsToDelete.clear();
+      if (isUpdate) {
+        _hearingExistingAttachments = List.from(hearing.attachmentsId);
+      } else {
+        _hearingExistingAttachments.clear();
+      }
+    });
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return DraggableScrollableSheet(
+            initialChildSize: 0.85,
+            minChildSize: 0.5,
+            maxChildSize: 0.95,
+            expand: false,
+            builder: (context, scrollController) {
+              return Container(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isUpdate
+                          ? "Update Hearing #$hearingNumber"
+                          : "Add New Hearing #$hearingNumber",
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    if (_hearingExistingAttachments.isNotEmpty ||
+                        _selectedHearingNewFiles.isNotEmpty)
+                      Expanded(
+                        child: ListView(
+                          controller: scrollController,
+                          children: [
+                            // Existing files
+                            ..._hearingExistingAttachments.map((attId) {
+                              final willDelete = _hearingAttachmentsToDelete
+                                  .contains(attId);
+                              return ListTile(
+                                leading: Icon(
+                                  willDelete
+                                      ? Icons.delete_forever
+                                      : Icons.attach_file,
+                                  color: willDelete ? Colors.red : Colors.blue,
+                                ),
+                                title: Text(
+                                  "File $attId",
+                                  style: TextStyle(
+                                    decoration: willDelete
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                    color: willDelete ? Colors.red : null,
+                                  ),
+                                ),
+                                trailing: IconButton(
+                                  icon: Icon(
+                                    willDelete
+                                        ? Icons.restore
+                                        : Icons.delete_outline,
+                                    color: willDelete
+                                        ? Colors.green
+                                        : Colors.red,
+                                  ),
+                                  onPressed: () => setModalState(() {
+                                    if (willDelete) {
+                                      _hearingAttachmentsToDelete.remove(attId);
+                                    } else {
+                                      _hearingAttachmentsToDelete.add(attId);
+                                    }
+                                  }),
+                                ),
+                              );
+                            }),
+
+                            // New files
+                            ..._selectedHearingNewFiles.asMap().entries.map((
+                              entry,
+                            ) {
+                              final idx = entry.key;
+                              final file = entry.value;
+                              return ListTile(
+                                leading: const Icon(
+                                  Icons.add_circle,
+                                  color: Colors.green,
+                                ),
+                                title: Text(file.name),
+                                trailing: IconButton(
+                                  icon: const Icon(
+                                    Icons.remove_circle,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: () => setModalState(() {
+                                    _selectedHearingNewFiles.removeAt(idx);
+                                  }),
+                                ),
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+
+                    const SizedBox(height: 16),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.attach_file),
+                            label: const Text("Add Files"),
+                            onPressed: () async {
+                              await _pickHearingFiles();
+                              setModalState(() {});
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            icon: _isUploadingHearing
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.save),
+                            label: Text(
+                              _isUploadingHearing
+                                  ? "Saving..."
+                                  : (isUpdate ? "Update" : "Save"),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                            ),
+                            onPressed: _isUploadingHearing
+                                ? null
+                                : () async {
+                                    setModalState(
+                                      () => _isUploadingHearing = true,
+                                    );
+
+                                    try {
+                                      final filteredExisting =
+                                          _hearingExistingAttachments
+                                              .where(
+                                                (id) =>
+                                                    !_hearingAttachmentsToDelete
+                                                        .contains(id),
+                                              )
+                                              .toList();
+
+                                      bool success;
+
+                                      var response;
+
+                                      if (isUpdate) {
+                                        response =
+                                            await HearingService.updateHearing(
+                                              token: widget.token!,
+                                              hearingId: hearing!.id,
+                                              userId: widget.advocateUserId!,
+                                              caseId: hearing.caseId,
+                                              hearingNumber:
+                                                  hearing.hearingNumber,
+                                              existingFiles: filteredExisting,
+                                              files: _selectedHearingNewFiles,
+                                            );
+                                      } else {
+                                        response =
+                                            await HearingService.addHearing(
+                                              token: widget.token!,
+                                              userId: widget.advocateUserId!,
+                                              caseId: widget.caseId!,
+                                              hearingNumber: hearingNumber,
+                                              files: _selectedHearingNewFiles,
+                                            );
+                                      }
+
+                                      success =
+                                          response.statusCode == 200 ||
+                                          response.statusCode == 201;
+
+                                      if (success) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              isUpdate
+                                                  ? "Hearing updated"
+                                                  : "New hearing added",
+                                            ),
+                                          ),
+                                        );
+                                        Navigator.pop(context);
+                                        setState(() {
+                                          _loadFuture = _loadAllData();
+                                          _selectedHearingNewFiles.clear();
+                                          _hearingAttachmentsToDelete.clear();
+                                          _hearingExistingAttachments.clear();
+                                        });
+                                      } else {
+                                        throw Exception("Operation failed");
+                                      }
+                                    } catch (e) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(content: Text("Error: $e")),
+                                      );
+                                    } finally {
+                                      setModalState(
+                                        () => _isUploadingHearing = false,
+                                      );
+                                    }
+                                  },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _submitRating() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('jwt_token');
@@ -344,6 +1082,36 @@ class _CaseTrackingState extends State<CaseTracking> {
                             subtitle: Text("Not created yet"),
                           ),
                         ),
+                      const SizedBox(height: 16),
+
+                      if (presentUsersAdvocateId != null &&
+                          widget.advocateId == presentUsersAdvocateId)
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: ElevatedButton.icon(
+                            icon: Icon(
+                              documentDrafts == null ? Icons.add : Icons.edit,
+                              size: 20,
+                            ),
+                            label: Text(
+                              documentDrafts == null
+                                  ? "Add Document Draft"
+                                  : "Update Document Draft",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: documentDrafts == null
+                                  ? Colors.green
+                                  : Colors.green,
+                              minimumSize: const Size(double.infinity, 48),
+                            ),
+                            onPressed: () {
+                              _showDocumentDraftBottomSheet();
+                            },
+                          ),
+                        ),
 
                       const SizedBox(height: 16),
                       _hearingCard(),
@@ -429,6 +1197,10 @@ class _CaseTrackingState extends State<CaseTracking> {
   }
 
   Widget _timelineTile(TimelineStep step) {
+
+    final canEdit = (presentUsersAdvocateId != null &&
+        widget.advocateId == presentUsersAdvocateId) && step.title != "Hearing Date Issued";
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -454,23 +1226,67 @@ class _CaseTrackingState extends State<CaseTracking> {
             ),
           ),
 
-          // PRICE ON RIGHT
           if (step.price != null)
-            Text(
-              "৳${step.price}",
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: Colors.green,
-              ),
+            Row(
+              children: [
+                if (step.price != null)
+                  Text(
+                    "৳${step.price}",
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.green,
+                    ),
+                  ),
+
+                if (presentUsersAdvocateId != null &&
+                    widget.advocateId == presentUsersAdvocateId)
+                  IconButton(
+                    icon: const Icon(
+                      Icons.edit,
+                      size: 18,
+                      color: Colors.green,
+                    ),
+                    onPressed: () {
+                      final type = _paymentTypeForTitle(step.title);
+                      _showPriceEditDialog(step.title, type, false);
+                    },
+                  ),
+              ],
+            ),
+          if (step.price == null)
+            Row(
+
+              children: [
+
+                if (presentUsersAdvocateId != null &&
+                    widget.advocateId == presentUsersAdvocateId && canEdit)
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text("Add"),
+                    onPressed: () {
+                      final type = _paymentTypeForTitle(step.title);
+                      _showPriceEditDialog(step.title, type, false);
+
+                    },
+                  ),
+              ],
             ),
         ],
       ),
     );
   }
 
-  // ================= HEARING CARD =================
+  // ================ Hearing Card ===============
   Widget _hearingCard() {
+    final isAdvocate = presentUsersAdvocateId != null &&
+        presentUsersAdvocateId == widget.advocateId;
+
+    // Correct logic: To add the NEXT hearing, price for it must be set first
+    final canAddNextHearing = _hearingPriceCount >= hearings.length + 1;
+
+    print("total set hearing for price :- $_hearingPriceCount and total hearing :- ${hearings.length}");
+
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -488,6 +1304,46 @@ class _CaseTrackingState extends State<CaseTracking> {
             if (hearings.isEmpty) const Text("No hearing scheduled"),
 
             ...hearings.map(_hearingTile),
+
+            const SizedBox(height: 16),
+
+            if (isAdvocate)
+              Column(
+                children: [
+
+                  // 1. Hearing Price button - only when next price is NOT set
+                  if (!canAddNextHearing)
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.add),
+                      label: Text("Set Price for Hearing #${hearings.length + 1}"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        minimumSize: const Size(double.infinity, 48),
+                      ),
+                      onPressed: () {
+                        _showPriceEditDialog(
+                          "Hearing #${hearings.length + 1}",
+                          "CASE_HEARING_PAYMENT",
+                          true
+                        );
+                      },
+                    ),
+
+                  // 2. Add Hearing button - only when price is already set
+                  if (canAddNextHearing)
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.add),
+                      label: const Text("Add New Hearing"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        minimumSize: const Size(double.infinity, 48),
+                      ),
+                      onPressed: () {
+                        _showHearingBottomSheet(null);
+                      },
+                    ),
+                ],
+              ),
           ],
         ),
       ),
@@ -495,6 +1351,13 @@ class _CaseTrackingState extends State<CaseTracking> {
   }
 
   Widget _hearingTile(Hearing hearing) {
+
+    final isAdvocate = presentUsersAdvocateId != null && presentUsersAdvocateId == widget.advocateId;
+
+    // Get price for this specific hearing (using hearing number)
+    final paymentType = "CASE_HEARING_PAYMENT"; // same type for all hearings
+    // We will show the price fetched for the case, but button allows update
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ExpansionTile(
@@ -502,12 +1365,25 @@ class _CaseTrackingState extends State<CaseTracking> {
         title: Text("Hearing #${hearing.hearingNumber}"),
         subtitle: Text("Date: ${_formatDate(hearing.issuedDate)}"),
         trailing: hearing.attachmentsId.isNotEmpty
-            ? Text(
-                "${hearing.attachmentsId.length} files",
-                style: const TextStyle(
-                  color: Colors.blue,
-                  fontWeight: FontWeight.bold,
-                ),
+            ? Column(
+                children: [
+                  Text(
+                    "${hearing.attachmentsId.length} files",
+                    style: const TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (presentUsersAdvocateId != null &&
+                      widget.advocateId == presentUsersAdvocateId)
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.edit),
+                      label: const Text("edit"),
+                      onPressed: () async {
+                        _showHearingBottomSheet(hearing);
+                      },
+                    ),
+                ],
               )
             : null,
         children: [
@@ -632,7 +1508,7 @@ class _CaseTrackingState extends State<CaseTracking> {
       child: Card(
         margin: const EdgeInsets.symmetric(vertical: 6),
         child: ListTile(
-          leading: const Icon(Icons.description, color: Colors.orange),
+          leading: const Icon(Icons.description, color: Colors.green),
           title: const Text("Document Draft"),
           subtitle: Text("Issued: ${_formatDate(draft.issuedDate)}"),
           trailing: draft.attachmentsId.isEmpty
@@ -751,7 +1627,7 @@ class _CaseTrackingState extends State<CaseTracking> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       color: Colors.white,
       child: ListTile(
-        leading: const Icon(Icons.description, color: Colors.orange),
+        leading: const Icon(Icons.description, color: Colors.green),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

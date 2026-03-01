@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../Utils/BaseURL.dart' as BASE_URL;
@@ -12,6 +13,36 @@ class DocumentDraftService {
 
   Map<String, String> get _headers => {"Authorization": "Bearer $token"};
 
+  String? getMimeType(String? extension) {
+    if (extension == null) return null;
+    extension = extension.toLowerCase();
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'pdf':
+        return 'application/pdf';
+      case 'mp4':
+        return 'video/mp4';
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'wav':
+        return 'audio/wav';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'txt':
+        return 'text/plain';
+      case 'json':
+        return 'application/json';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
   // ================= ADD DOCUMENT DRAFT =================
   Future<bool> addDraft({
     required String advocateId,
@@ -20,13 +51,14 @@ class DocumentDraftService {
     DateTime? issuedDate,
     List<PlatformFile>? files,
   }) async {
-    final uri = Uri.parse("${BASE_URL.Urls().baseURL}document-draft/add");
+    final uri = Uri.parse(
+      "${BASE_URL.Urls().baseURL}document-draft/add?userId=$userId",
+    );
 
     final request = http.MultipartRequest("POST", uri)
       ..headers.addAll(_headers)
       ..fields['advocateId'] = advocateId
-      ..fields['caseId'] = caseId
-      ..fields['userId'] = userId;
+      ..fields['caseId'] = caseId;
 
     if (issuedDate != null) {
       request.fields['issuedDate'] = issuedDate.toUtc().toIso8601String();
@@ -34,15 +66,42 @@ class DocumentDraftService {
 
     if (files != null) {
       for (final file in files) {
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'files',
-            file.bytes!,
-            filename: file.name,
-          ),
-        );
+        final mimeTypeStr = getMimeType(file.extension);
+        print("mimetype of the file in time of add document draft is :- $mimeTypeStr");
+
+        http.MediaType? contentType = mimeTypeStr != null
+            ? http.MediaType.parse(mimeTypeStr)
+            : null;
+
+        if (kIsWeb) {
+          print("File ${file.name} is adding now.....");
+
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'files',
+              file.bytes!,
+              filename: file.name,
+              contentType: contentType,
+            ),
+          );
+
+          //print("total added file in the request in time of add is :- ${request.files.length}");
+        } else {
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              'files',
+              file.path!,
+              filename: file.name,
+              contentType: contentType,
+            ),
+          );
+        }
       }
     }
+
+    print(
+      "total added file in the request in time of add document draft is :- ${request.files.length}",
+    );
 
     final response = await request.send();
     return response.statusCode == 200;
@@ -59,14 +118,13 @@ class DocumentDraftService {
     List<PlatformFile>? newFiles,
   }) async {
     final uri = Uri.parse(
-      "${BASE_URL.Urls().baseURL}document-draft/update/$draftId",
+      "${BASE_URL.Urls().baseURL}document-draft/update/$draftId?userId=$userId",
     );
 
     final request = http.MultipartRequest("PUT", uri)
       ..headers.addAll(_headers)
       ..fields['advocateId'] = advocateId
       ..fields['caseId'] = caseId
-      ..fields['userId'] = userId
       ..fields['existingFiles'] = jsonEncode(existingFiles);
 
     if (issuedDate != null) {
@@ -75,13 +133,32 @@ class DocumentDraftService {
 
     if (newFiles != null) {
       for (final file in newFiles) {
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'files',
-            file.bytes!,
-            filename: file.name,
-          ),
-        );
+        final mimeTypeStr = getMimeType(file.extension);
+        print("mimetype of the file is :- $mimeTypeStr");
+
+        http.MediaType? contentType = mimeTypeStr != null
+            ? http.MediaType.parse(mimeTypeStr)
+            : null;
+
+        if (kIsWeb) {
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'files',
+              file.bytes!,
+              filename: file.name,
+              contentType: contentType,
+            ),
+          );
+        } else {
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              'files',
+              file.path!,
+              filename: file.name,
+              contentType: contentType,
+            ),
+          );
+        }
       }
     }
 
@@ -115,7 +192,6 @@ class DocumentDraftService {
 
   // ================= FIND BY CASE =================
   Future<DocumentDraft?> findByCase(String caseId) async {
-
     print("findByCase :- $caseId and with $token is trying to decode....");
 
     final res = await http.get(
