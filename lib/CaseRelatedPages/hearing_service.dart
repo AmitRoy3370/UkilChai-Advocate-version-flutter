@@ -221,4 +221,22 @@ class HearingService {
 
     OpenFile.open(file.path);
   }
+
+  static Future<bool> removeHearing(String token, String hearingId, String userId) async {
+
+    final response = await http.delete(
+      Uri.parse("$baseUrl/$hearingId/$userId"),
+      headers: authHeader(token),
+    );
+
+    if(response.statusCode != 200) {
+
+      return false;
+
+    }
+
+    return true;
+
+  }
+
 }

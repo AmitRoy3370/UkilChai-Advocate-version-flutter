@@ -91,6 +91,10 @@ class _CaseTrackingState extends State<CaseTracking> {
   // ====================== HEARING PRICE RULE STATE ======================
   int _hearingPriceCount = 0;
 
+  // ====================== JUDGMENT STATES ======================
+  PlatformFile? _selectedJudgmentFile;
+  bool _isUploadingJudgment = false;
+
   @override
   void initState() {
     super.initState();
@@ -129,16 +133,15 @@ class _CaseTrackingState extends State<CaseTracking> {
     }
 
     try {
-
       print("collecting all hearings....");
 
       try {
         // ---------- HEARINGS ----------
-        hearings =
-        await HearingService.getByCase(widget.token!, widget.caseId!);
-      } catch(e) {
-
-      }
+        hearings = await HearingService.getByCase(
+          widget.token!,
+          widget.caseId!,
+        );
+      } catch (e) {}
 
       print("collecting all hearing price count....");
 
@@ -147,11 +150,14 @@ class _CaseTrackingState extends State<CaseTracking> {
         widget.caseId!,
       );
 
-      print("collected total price set for hearing is :- $_hearingPriceCount and total hearing has :- ${hearings.length}");
-
+      print(
+        "collected total price set for hearing is :- $_hearingPriceCount and total hearing has :- ${hearings.length}",
+      );
     } catch (e) {
       _hearingPriceCount = 0;
-      print("find some $e for collecting total hearing count and setted hearing price count");
+      print(
+        "find some $e for collecting total hearing count and setted hearing price count",
+      );
     }
 
     try {
@@ -550,6 +556,169 @@ class _CaseTrackingState extends State<CaseTracking> {
     );
   }
 
+  Future<void> _pickJudgmentFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(allowMultiple: false);
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          _selectedJudgmentFile = result.files.first;
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error picking file: $e")));
+    }
+  }
+
+  void _showCaseJudgmentDialog({CaseJudgment? existing}) {
+    final isUpdate = existing != null;
+    final resultController = TextEditingController(
+      text: existing?.result ?? "",
+    );
+    DateTime selectedDate = existing?.date ?? DateTime.now();
+    _selectedJudgmentFile = null; // reset file
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text(
+              isUpdate ? "Update Case Judgment" : "Add Case Judgment",
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: resultController,
+                    decoration: const InputDecoration(
+                      labelText: "Judgment Result",
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Text(
+                        "Date: ${DateFormat('dd MMM yyyy').format(selectedDate)}",
+                      ),
+                      const Spacer(),
+                      ElevatedButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDate,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime.now().add(
+                              const Duration(days: 365),
+                            ),
+                          );
+                          if (picked != null) {
+                            setDialogState(() => selectedDate = picked);
+                          }
+                        },
+                        child: const Text("Pick Date"),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.attach_file),
+                    label: Text(
+                      _selectedJudgmentFile?.name ??
+                          "Select Attachment (Optional)",
+                    ),
+                    onPressed: () async {
+                      await _pickJudgmentFile();
+                      setDialogState(() {});
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: _isUploadingJudgment
+                    ? null
+                    : () async {
+                        setDialogState(() => _isUploadingJudgment = true);
+
+                        SharedPreferences prefs =
+                            await SharedPreferences.getInstance();
+                        final token = prefs.getString('jwt_token');
+                        final userId = prefs.getString('userId');
+                        final advocateId = prefs.getString('advocateId');
+
+                        try {
+                          final success = isUpdate
+                              ? await CaseJudgmentService.updateJudgment(
+                                  judgmentId: existing!.id,
+                                  caseId: widget.caseId!,
+                                  result: resultController.text,
+                                  userId: userId!,
+                                  oldAttachmentId:
+                                      existing.judgmentAttachmentId,
+                                  file: _selectedJudgmentFile,
+                                  date: selectedDate,
+                                )
+                              : await CaseJudgmentService.addJudgment(
+                                  caseId: widget.caseId!,
+                                  result: resultController.text,
+                                  userId: userId!,
+                                  file: _selectedJudgmentFile,
+                                  date: selectedDate,
+                                );
+
+                          print(
+                            "Case judgment status code :- ${success.statusCode}",
+                          );
+
+                          if (success.statusCode == 200 ||
+                              success.statusCode == 201) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  isUpdate
+                                      ? "Judgment Updated"
+                                      : "Judgment Added",
+                                ),
+                              ),
+                            );
+                            Navigator.pop(ctx);
+                            setState(() {
+                              _loadFuture = _loadAllData();
+                            });
+                          } else {
+                            throw Exception("Failed");
+                          }
+                        } catch (e) {
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text("Error: $e")));
+                        } finally {
+                          setDialogState(() => _isUploadingJudgment = false);
+                        }
+                      },
+                child: _isUploadingJudgment
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(isUpdate ? "Update" : "Add"),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   String? _paymentTypeForTitle(String title) {
     switch (title) {
       case "Document Drafting":
@@ -631,18 +800,14 @@ class _CaseTrackingState extends State<CaseTracking> {
             onPressed: () async {
               final price = double.tryParse(controller.text);
               if (price != null && price > 0) {
-
-                if(add ) {
-
-                  SharedPreferences prefs = await SharedPreferences.getInstance();
+                if (add) {
+                  SharedPreferences prefs =
+                      await SharedPreferences.getInstance();
                   final token = prefs.getString('jwt_token');
                   final userId = prefs.getString('userId');
 
-
                   final response = await http.post(
-                    Uri.parse(
-                      "${BASE_URL.Urls().baseURL}payment/add/$userId",
-                    ),
+                    Uri.parse("${BASE_URL.Urls().baseURL}payment/add/$userId"),
                     headers: {
                       'Authorization': 'Bearer $token',
                       'content-type': 'application/json',
@@ -651,35 +816,24 @@ class _CaseTrackingState extends State<CaseTracking> {
                       "caseId": widget.caseId,
                       "paymentFor": paymentType,
                       "price": price,
-                      "userId":userId
-                    })
+                      "userId": userId,
+                    }),
                   );
 
-                  if(response.statusCode == 200 || response.statusCode == 201) {
-                    ScaffoldMessenger.of(
-                      context,
-                      ).showSnackBar(
-                      SnackBar(
-                        content: Text("Price updated to ৳$price"),
-                      ),
+                  if (response.statusCode == 200 ||
+                      response.statusCode == 201) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Price updated to ৳$price")),
                     );
 
                     Navigator.pop(ctx);
-
                   } else {
-
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(
-                      SnackBar(
-                        content: Text("Failed to Update price"),
-                      ),
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Failed to Update price")),
                     );
-
                   }
 
                   Navigator.pop(ctx);
-
                 }
 
                 Navigator.pop(ctx);
@@ -1056,6 +1210,17 @@ class _CaseTrackingState extends State<CaseTracking> {
                       const SizedBox(height: 16),
                       if (caseJudgment != null)
                         _caseJudgmentTile(caseJudgment!),
+                      if (caseJudgment == null)
+                        IconButton(
+                          onPressed: () async {
+                            _showCaseJudgmentDialog();
+
+                            setState(() {
+                              //_loadAllData();
+                            });
+                          },
+                          icon: Icon(Icons.add),
+                        ),
                       const SizedBox(height: 16),
                       if (widget.userId != null) _advocateRatingCard(),
                     ],
@@ -1197,9 +1362,10 @@ class _CaseTrackingState extends State<CaseTracking> {
   }
 
   Widget _timelineTile(TimelineStep step) {
-
-    final canEdit = (presentUsersAdvocateId != null &&
-        widget.advocateId == presentUsersAdvocateId) && step.title != "Hearing Date Issued";
+    final canEdit =
+        (presentUsersAdvocateId != null &&
+            widget.advocateId == presentUsersAdvocateId) &&
+        step.title != "Hearing Date Issued";
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1242,11 +1408,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                 if (presentUsersAdvocateId != null &&
                     widget.advocateId == presentUsersAdvocateId)
                   IconButton(
-                    icon: const Icon(
-                      Icons.edit,
-                      size: 18,
-                      color: Colors.green,
-                    ),
+                    icon: const Icon(Icons.edit, size: 18, color: Colors.green),
                     onPressed: () {
                       final type = _paymentTypeForTitle(step.title);
                       _showPriceEditDialog(step.title, type, false);
@@ -1256,18 +1418,16 @@ class _CaseTrackingState extends State<CaseTracking> {
             ),
           if (step.price == null)
             Row(
-
               children: [
-
                 if (presentUsersAdvocateId != null &&
-                    widget.advocateId == presentUsersAdvocateId && canEdit)
+                    widget.advocateId == presentUsersAdvocateId &&
+                    canEdit)
                   ElevatedButton.icon(
                     icon: const Icon(Icons.add),
                     label: const Text("Add"),
                     onPressed: () {
                       final type = _paymentTypeForTitle(step.title);
                       _showPriceEditDialog(step.title, type, false);
-
                     },
                   ),
               ],
@@ -1279,13 +1439,16 @@ class _CaseTrackingState extends State<CaseTracking> {
 
   // ================ Hearing Card ===============
   Widget _hearingCard() {
-    final isAdvocate = presentUsersAdvocateId != null &&
+    final isAdvocate =
+        presentUsersAdvocateId != null &&
         presentUsersAdvocateId == widget.advocateId;
 
     // Correct logic: To add the NEXT hearing, price for it must be set first
     final canAddNextHearing = _hearingPriceCount >= hearings.length + 1;
 
-    print("total set hearing for price :- $_hearingPriceCount and total hearing :- ${hearings.length}");
+    print(
+      "total set hearing for price :- $_hearingPriceCount and total hearing :- ${hearings.length}",
+    );
 
     return Card(
       elevation: 3,
@@ -1310,12 +1473,13 @@ class _CaseTrackingState extends State<CaseTracking> {
             if (isAdvocate)
               Column(
                 children: [
-
                   // 1. Hearing Price button - only when next price is NOT set
                   if (!canAddNextHearing)
                     ElevatedButton.icon(
                       icon: const Icon(Icons.add),
-                      label: Text("Set Price for Hearing #${hearings.length + 1}"),
+                      label: Text(
+                        "Set Price for Hearing #${hearings.length + 1}",
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
                         minimumSize: const Size(double.infinity, 48),
@@ -1324,7 +1488,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                         _showPriceEditDialog(
                           "Hearing #${hearings.length + 1}",
                           "CASE_HEARING_PAYMENT",
-                          true
+                          true,
                         );
                       },
                     ),
@@ -1351,8 +1515,9 @@ class _CaseTrackingState extends State<CaseTracking> {
   }
 
   Widget _hearingTile(Hearing hearing) {
-
-    final isAdvocate = presentUsersAdvocateId != null && presentUsersAdvocateId == widget.advocateId;
+    final isAdvocate =
+        presentUsersAdvocateId != null &&
+        presentUsersAdvocateId == widget.advocateId;
 
     // Get price for this specific hearing (using hearing number)
     final paymentType = "CASE_HEARING_PAYMENT"; // same type for all hearings
@@ -1360,9 +1525,61 @@ class _CaseTrackingState extends State<CaseTracking> {
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
+
       child: ExpansionTile(
         leading: const Icon(Icons.gavel),
-        title: Text("Hearing #${hearing.hearingNumber}"),
+        title: Row(
+          children: [
+            Text("Hearing #${hearing.hearingNumber}"),
+            const SizedBox(width: 8),
+            Row(
+              children: [
+                if (presentUsersAdvocateId != null &&
+                    widget.advocateId == presentUsersAdvocateId)
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.edit),
+                    label: const Text(""),
+
+                    onPressed: () async {
+                      _showHearingBottomSheet(hearing);
+                    },
+                  ),
+                if (presentUsersAdvocateId != null &&
+                    widget.advocateId == presentUsersAdvocateId)
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      SharedPreferences prefs =
+                          await SharedPreferences.getInstance();
+                      final token = prefs.getString('jwt_token');
+                      final userId = prefs.getString('userId');
+
+                      bool deleted = await HearingService.removeHearing(
+                        token!,
+                        userId!,
+                        hearing.id,
+                      );
+
+                      if (deleted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("Hearing deleted")),
+                        );
+
+                        setState(() {
+                          _loadFuture = _loadAllData();
+                        });
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("Failed to delete hearing")),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.delete),
+                    label: Text(""),
+                  ),
+              ],
+            ),
+          ],
+        ),
         subtitle: Text("Date: ${_formatDate(hearing.issuedDate)}"),
         trailing: hearing.attachmentsId.isNotEmpty
             ? Column(
@@ -1374,15 +1591,8 @@ class _CaseTrackingState extends State<CaseTracking> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  if (presentUsersAdvocateId != null &&
-                      widget.advocateId == presentUsersAdvocateId)
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.edit),
-                      label: const Text("edit"),
-                      onPressed: () async {
-                        _showHearingBottomSheet(hearing);
-                      },
-                    ),
+
+
                 ],
               )
             : null,
@@ -1513,11 +1723,61 @@ class _CaseTrackingState extends State<CaseTracking> {
           subtitle: Text("Issued: ${_formatDate(draft.issuedDate)}"),
           trailing: draft.attachmentsId.isEmpty
               ? null
-              : Text(
-                  "${draft.attachmentsId.length} files",
-                  style: const TextStyle(
-                    color: Colors.blue,
-                    fontWeight: FontWeight.bold,
+              : SizedBox(
+                  width: 110,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text(
+                        "${draft.attachmentsId.length} files",
+                        style: const TextStyle(
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (presentUsersAdvocateId != null &&
+                          widget.advocateId == presentUsersAdvocateId)
+                        IconButton(
+                          icon: const Icon(Icons.delete),
+                          onPressed: () async {
+                            // your existing delete code
+                            SharedPreferences prefs =
+                                await SharedPreferences.getInstance();
+                            final token = prefs.getString('jwt_token');
+                            final userId = prefs.getString('userId');
+
+                            final response = await http.delete(
+                              Uri.parse(
+                                "${BASE_URL.Urls().baseURL}document-draft/${draft.id}?userId=$userId",
+                              ),
+                              headers: {
+                                'Authorization': 'Bearer $token',
+                                'content-type': 'application/json',
+                              },
+                            );
+
+                            bool deleted = response.statusCode == 200;
+
+                            if (deleted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text("Document draft deleted"),
+                                ),
+                              );
+                              setState(() {
+                                _loadFuture = _loadAllData();
+                              });
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text("Failed to delete"),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                    ],
                   ),
                 ),
           onTap: () {
@@ -1622,11 +1882,16 @@ class _CaseTrackingState extends State<CaseTracking> {
   }
 
   Widget _caseJudgmentTile(CaseJudgment caseJudgment) {
+    final isAdvocate =
+        presentUsersAdvocateId != null &&
+        presentUsersAdvocateId == widget.advocateId;
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       color: Colors.white,
       child: ListTile(
+        dense: true,
         leading: const Icon(Icons.description, color: Colors.green),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1646,28 +1911,59 @@ class _CaseTrackingState extends State<CaseTracking> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-        onTap: () {
-          print(
-            "case judgment attachment id :- ${caseJudgment.judgmentAttachmentId}",
-          );
+        trailing: isAdvocate
+            ? SizedBox(
+                width: 96,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit),
+                      onPressed: () =>
+                          _showCaseJudgmentDialog(existing: caseJudgment),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete),
+                      onPressed: () async {
+                        final result = await CaseJudgmentService.remove(
+                          caseJudgment.id,
+                        );
+                        if (result.statusCode == 200) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Case judgment deleted"),
+                            ),
+                          );
 
-          if (caseJudgment.judgmentAttachmentId != null) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => CaseJudgmentAttachmentView(
-                  attachmentId: caseJudgment.judgmentAttachmentId!,
-                  jwtToken: widget.token!,
+                          Navigator.pop(context);
+
+                          setState(() {
+
+                            _loadFuture = _loadAllData();
+                          });
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("Failed to delete")),
+                          );
+                        }
+                      },
+                    ),
+                  ],
                 ),
-              ),
-            );
-
-            CaseJudgmentAttachmentView(
-              attachmentId: caseJudgment.judgmentAttachmentId!,
-              jwtToken: widget.token!,
-            );
-          }
-        },
+              )
+            : null,
+        onTap: caseJudgment.judgmentAttachmentId != null
+            ? () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CaseJudgmentAttachmentView(
+                    attachmentId: caseJudgment.judgmentAttachmentId!,
+                    jwtToken: widget.token!,
+                  ),
+                ),
+              )
+            : null,
       ),
     );
   }
