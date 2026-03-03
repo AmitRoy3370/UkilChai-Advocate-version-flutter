@@ -75,7 +75,7 @@ class _CaseTrackingState extends State<CaseTracking> {
   List<PlatformFile> _selectedDocumentsDraftsNewFiles = [];
   List<String> _documentDraftsExistingAttachments = []; // for update mode
   Set<String> _documentDraftsAttachmentsToDelete =
-      {}; // user wants to remove these
+  {}; // user wants to remove these
 
   // ====================== HEARING STATES ======================
   bool _isUploadingHearing = false;
@@ -276,6 +276,38 @@ class _CaseTrackingState extends State<CaseTracking> {
     }
   }
 
+  Future<T> _showLoadingDialog<T>({
+    required Future<T> Function() task,
+    String loadingMessage = "Processing...",
+  }) async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(loadingMessage),
+            ],
+          ),
+        );
+      },
+    );
+
+    try {
+      final result = await task();
+      if (context.mounted) Navigator.pop(context); // Close loading dialog
+      return result;
+    } catch (e) {
+      if (context.mounted) Navigator.pop(context); // Close loading dialog
+      rethrow;
+    }
+  }
+
   String _formatDate(DateTime date) {
     return DateFormat('dd MMM yyyy').format(date);
   }
@@ -352,12 +384,12 @@ class _CaseTrackingState extends State<CaseTracking> {
                             children: [
                               // Existing files (only in update mode)
                               ..._documentDraftsExistingAttachments.map((
-                                attId,
-                              ) {
+                                  attId,
+                                  ) {
                                 final willDelete =
-                                    _documentDraftsAttachmentsToDelete.contains(
-                                      attId,
-                                    );
+                                _documentDraftsAttachmentsToDelete.contains(
+                                  attId,
+                                );
                                 return ListTile(
                                   leading: Icon(
                                     willDelete
@@ -404,28 +436,28 @@ class _CaseTrackingState extends State<CaseTracking> {
                                   .asMap()
                                   .entries
                                   .map((entry) {
-                                    int idx = entry.key;
-                                    PlatformFile file = entry.value;
-                                    return ListTile(
-                                      leading: const Icon(
-                                        Icons.add_circle,
-                                        color: Colors.green,
-                                      ),
-                                      title: Text(file.name),
-                                      trailing: IconButton(
-                                        icon: const Icon(
-                                          Icons.remove_circle,
-                                          color: Colors.red,
-                                        ),
-                                        onPressed: () {
-                                          setModalState(() {
-                                            _selectedDocumentsDraftsNewFiles
-                                                .removeAt(idx);
-                                          });
-                                        },
-                                      ),
-                                    );
-                                  }),
+                                int idx = entry.key;
+                                PlatformFile file = entry.value;
+                                return ListTile(
+                                  leading: const Icon(
+                                    Icons.add_circle,
+                                    color: Colors.green,
+                                  ),
+                                  title: Text(file.name),
+                                  trailing: IconButton(
+                                    icon: const Icon(
+                                      Icons.remove_circle,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: () {
+                                      setModalState(() {
+                                        _selectedDocumentsDraftsNewFiles
+                                            .removeAt(idx);
+                                      });
+                                    },
+                                  ),
+                                );
+                              }),
                             ],
                           ),
                         ),
@@ -452,12 +484,10 @@ class _CaseTrackingState extends State<CaseTracking> {
                             ElevatedButton.icon(
                               icon: _isUploadingDraft
                                   ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
                                   : const Icon(Icons.save),
                               label: Text(
                                 _isUploadingDraft
@@ -470,77 +500,70 @@ class _CaseTrackingState extends State<CaseTracking> {
                               onPressed: _isUploadingDraft
                                   ? null
                                   : () async {
-                                      setModalState(
-                                        () => _isUploadingDraft = true,
+                                setModalState(() => _isUploadingDraft = true);
+
+                                // Disable the button by showing loading state
+                                try {
+                                  bool success;
+
+                                  if (isUpdate) {
+                                    success = await draftService.updateDraft(
+                                      draftId: documentDrafts!.id,
+                                      advocateId: documentDrafts!.advocateId,
+                                      caseId: documentDrafts!.caseId,
+                                      userId: widget.advocateUserId!,
+                                      existingFiles: _documentDraftsExistingAttachments,
+                                      newFiles: _selectedDocumentsDraftsNewFiles,
+                                    );
+                                  } else {
+                                    success = await draftService.addDraft(
+                                      advocateId: widget.advocateId ?? "",
+                                      caseId: widget.caseId!,
+                                      userId: widget.advocateUserId!,
+                                      files: _selectedDocumentsDraftsNewFiles,
+                                    );
+                                  }
+
+                                  if (success) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            isUpdate
+                                                ? "✓ Document draft updated successfully"
+                                                : "✓ Document draft created successfully",
+                                          ),
+                                          backgroundColor: Colors.green,
+                                          duration: const Duration(seconds: 2),
+                                        ),
                                       );
-                                      try {
-                                        bool success;
+                                      Navigator.pop(context); // Close bottom sheet
 
-                                        print("isUpdate :- $isUpdate");
-
-                                        if (isUpdate) {
-                                          success = await draftService.updateDraft(
-                                            draftId: documentDrafts!.id,
-                                            advocateId:
-                                                documentDrafts!.advocateId,
-                                            caseId: documentDrafts!.caseId,
-                                            userId: widget.advocateUserId!,
-                                            existingFiles:
-                                                _documentDraftsExistingAttachments,
-                                            newFiles:
-                                                _selectedDocumentsDraftsNewFiles,
-                                          );
-                                        } else {
-                                          print(
-                                            "total files selected :- ${_selectedDocumentsDraftsNewFiles.length}",
-                                          );
-
-                                          success = await draftService.addDraft(
-                                            advocateId: widget.advocateId ?? "",
-                                            caseId: widget.caseId!,
-                                            userId: widget.advocateUserId!,
-                                            files:
-                                                _selectedDocumentsDraftsNewFiles,
-                                          );
-                                        }
-
-                                        if (success) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                isUpdate
-                                                    ? "Document draft updated"
-                                                    : "Document draft created",
-                                              ),
-                                            ),
-                                          );
-                                          Navigator.pop(context);
-                                          setState(() {
-                                            _loadFuture = _loadAllData();
-                                            _selectedDocumentsDraftsNewFiles
-                                                .clear();
-                                            _documentDraftsAttachmentsToDelete
-                                                .clear();
-                                            _documentDraftsExistingAttachments
-                                                .clear();
-                                          });
-                                        } else {
-                                          throw Exception("Operation failed");
-                                        }
-                                      } catch (e) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(content: Text("Error: $e")),
-                                        );
-                                      } finally {
-                                        setModalState(
-                                          () => _isUploadingDraft = false,
-                                        );
-                                      }
-                                    },
+                                      // Update UI
+                                      setState(() {
+                                        _loadFuture = _loadAllData();
+                                        _selectedDocumentsDraftsNewFiles.clear();
+                                        _documentDraftsAttachmentsToDelete.clear();
+                                        _documentDraftsExistingAttachments.clear();
+                                      });
+                                    }
+                                  } else {
+                                    throw Exception("Operation failed");
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text("✗ Error: ${e.toString()}"),
+                                        backgroundColor: Colors.red,
+                                        duration: const Duration(seconds: 3),
+                                      ),
+                                    );
+                                  }
+                                } finally {
+                                  setModalState(() => _isUploadingDraft = false);
+                                }
+                              },
                             ),
                         ],
                       ),
@@ -646,70 +669,70 @@ class _CaseTrackingState extends State<CaseTracking> {
                 onPressed: _isUploadingJudgment
                     ? null
                     : () async {
-                        setDialogState(() => _isUploadingJudgment = true);
+                  setDialogState(() => _isUploadingJudgment = true);
 
-                        SharedPreferences prefs =
-                            await SharedPreferences.getInstance();
-                        final token = prefs.getString('jwt_token');
-                        final userId = prefs.getString('userId');
-                        final advocateId = prefs.getString('advocateId');
+                  try {
+                    SharedPreferences prefs = await SharedPreferences.getInstance();
+                    final userId = prefs.getString('userId');
 
-                        try {
-                          final success = isUpdate
-                              ? await CaseJudgmentService.updateJudgment(
-                                  judgmentId: existing!.id,
-                                  caseId: widget.caseId!,
-                                  result: resultController.text,
-                                  userId: userId!,
-                                  oldAttachmentId:
-                                      existing.judgmentAttachmentId,
-                                  file: _selectedJudgmentFile,
-                                  date: selectedDate,
-                                )
-                              : await CaseJudgmentService.addJudgment(
-                                  caseId: widget.caseId!,
-                                  result: resultController.text,
-                                  userId: userId!,
-                                  file: _selectedJudgmentFile,
-                                  date: selectedDate,
-                                );
+                    final response = isUpdate
+                        ? await CaseJudgmentService.updateJudgment(
+                      judgmentId: existing!.id,
+                      caseId: widget.caseId!,
+                      result: resultController.text,
+                      userId: userId!,
+                      oldAttachmentId: existing.judgmentAttachmentId,
+                      file: _selectedJudgmentFile,
+                      date: selectedDate,
+                    )
+                        : await CaseJudgmentService.addJudgment(
+                      caseId: widget.caseId!,
+                      result: resultController.text,
+                      userId: userId!,
+                      file: _selectedJudgmentFile,
+                      date: selectedDate,
+                    );
 
-                          print(
-                            "Case judgment status code :- ${success.statusCode}",
-                          );
+                    if (response.statusCode == 200 || response.statusCode == 201) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              isUpdate
+                                  ? "✓ Judgment updated successfully"
+                                  : "✓ Judgment added successfully",
+                            ),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                        Navigator.pop(ctx); // Close dialog
 
-                          if (success.statusCode == 200 ||
-                              success.statusCode == 201) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  isUpdate
-                                      ? "Judgment Updated"
-                                      : "Judgment Added",
-                                ),
-                              ),
-                            );
-                            Navigator.pop(ctx);
-                            setState(() {
-                              _loadFuture = _loadAllData();
-                            });
-                          } else {
-                            throw Exception("Failed");
-                          }
-                        } catch (e) {
-                          ScaffoldMessenger.of(
-                            context,
-                          ).showSnackBar(SnackBar(content: Text("Error: $e")));
-                        } finally {
-                          setDialogState(() => _isUploadingJudgment = false);
-                        }
-                      },
+                        setState(() {
+                          _loadFuture = _loadAllData();
+                        });
+                      }
+                    } else {
+                      throw Exception("Failed with status: ${response.statusCode}");
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text("✗ Error: ${e.toString()}"),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  } finally {
+                    setDialogState(() => _isUploadingJudgment = false);
+                  }
+                },
                 child: _isUploadingJudgment
                     ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
                     : Text(isUpdate ? "Update" : "Add"),
               ),
             ],
@@ -800,44 +823,47 @@ class _CaseTrackingState extends State<CaseTracking> {
             onPressed: () async {
               final price = double.tryParse(controller.text);
               if (price != null && price > 0) {
-                if (add) {
-                  SharedPreferences prefs =
-                      await SharedPreferences.getInstance();
-                  final token = prefs.getString('jwt_token');
-                  final userId = prefs.getString('userId');
+                Navigator.pop(ctx); // Close price dialog
 
-                  final response = await http.post(
-                    Uri.parse("${BASE_URL.Urls().baseURL}payment/add/$userId"),
-                    headers: {
-                      'Authorization': 'Bearer $token',
-                      'content-type': 'application/json',
-                    },
-                    body: jsonEncode({
-                      "caseId": widget.caseId,
-                      "paymentFor": paymentType,
-                      "price": price,
-                      "userId": userId,
-                    }),
-                  );
+                await _showLoadingDialog(
+                  loadingMessage: "Saving price...",
+                  task: () async {
+                    if (add) {
+                      SharedPreferences prefs = await SharedPreferences.getInstance();
+                      final token = prefs.getString('jwt_token');
+                      final userId = prefs.getString('userId');
 
-                  if (response.statusCode == 200 ||
-                      response.statusCode == 201) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Price updated to ৳$price")),
-                    );
+                      final response = await http.post(
+                        Uri.parse("${BASE_URL.Urls().baseURL}payment/add/$userId"),
+                        headers: {
+                          'Authorization': 'Bearer $token',
+                          'content-type': 'application/json',
+                        },
+                        body: jsonEncode({
+                          "caseId": widget.caseId,
+                          "paymentFor": paymentType,
+                          "price": price,
+                          "userId": userId,
+                        }),
+                      );
 
-                    Navigator.pop(ctx);
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Failed to Update price")),
-                    );
-                  }
+                      if (response.statusCode != 200 && response.statusCode != 201) {
+                        throw Exception("Failed to update price");
+                      }
+                    }
 
-                  Navigator.pop(ctx);
-                }
+                    await _savePaymentPrice(paymentType, price);
 
-                Navigator.pop(ctx);
-                await _savePaymentPrice(paymentType, price);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text("✓ Price updated to ৳$price"),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  },
+                );
               }
             },
             child: const Text("Save"),
@@ -869,7 +895,7 @@ class _CaseTrackingState extends State<CaseTracking> {
     final nextNumber = hearings.isEmpty
         ? 1
         : hearings.map((h) => h.hearingNumber).reduce((a, b) => a > b ? a : b) +
-              1;
+        1;
 
     final hearingNumber = isUpdate ? hearing.hearingNumber : nextNumber;
 
@@ -962,8 +988,8 @@ class _CaseTrackingState extends State<CaseTracking> {
 
                             // New files
                             ..._selectedHearingNewFiles.asMap().entries.map((
-                              entry,
-                            ) {
+                                entry,
+                                ) {
                               final idx = entry.key;
                               final file = entry.value;
                               return ListTile(
@@ -1006,12 +1032,10 @@ class _CaseTrackingState extends State<CaseTracking> {
                           child: ElevatedButton.icon(
                             icon: _isUploadingHearing
                                 ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
                                 : const Icon(Icons.save),
                             label: Text(
                               _isUploadingHearing
@@ -1024,85 +1048,72 @@ class _CaseTrackingState extends State<CaseTracking> {
                             onPressed: _isUploadingHearing
                                 ? null
                                 : () async {
-                                    setModalState(
-                                      () => _isUploadingHearing = true,
+                              setModalState(() => _isUploadingHearing = true);
+
+                              try {
+                                final filteredExisting = _hearingExistingAttachments
+                                    .where((id) => !_hearingAttachmentsToDelete.contains(id))
+                                    .toList();
+
+                                var response;
+
+                                if (isUpdate) {
+                                  response = await HearingService.updateHearing(
+                                    token: widget.token!,
+                                    hearingId: hearing!.id,
+                                    userId: widget.advocateUserId!,
+                                    caseId: hearing.caseId,
+                                    hearingNumber: hearing.hearingNumber,
+                                    existingFiles: filteredExisting,
+                                    files: _selectedHearingNewFiles,
+                                  );
+                                } else {
+                                  response = await HearingService.addHearing(
+                                    token: widget.token!,
+                                    userId: widget.advocateUserId!,
+                                    caseId: widget.caseId!,
+                                    hearingNumber: hearingNumber,
+                                    files: _selectedHearingNewFiles,
+                                  );
+                                }
+
+                                if (response.statusCode == 200 || response.statusCode == 201) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          isUpdate
+                                              ? "✓ Hearing #$hearingNumber updated successfully"
+                                              : "✓ New hearing #$hearingNumber added successfully",
+                                        ),
+                                        backgroundColor: Colors.green,
+                                      ),
                                     );
+                                    Navigator.pop(context); // Close bottom sheet
 
-                                    try {
-                                      final filteredExisting =
-                                          _hearingExistingAttachments
-                                              .where(
-                                                (id) =>
-                                                    !_hearingAttachmentsToDelete
-                                                        .contains(id),
-                                              )
-                                              .toList();
-
-                                      bool success;
-
-                                      var response;
-
-                                      if (isUpdate) {
-                                        response =
-                                            await HearingService.updateHearing(
-                                              token: widget.token!,
-                                              hearingId: hearing!.id,
-                                              userId: widget.advocateUserId!,
-                                              caseId: hearing.caseId,
-                                              hearingNumber:
-                                                  hearing.hearingNumber,
-                                              existingFiles: filteredExisting,
-                                              files: _selectedHearingNewFiles,
-                                            );
-                                      } else {
-                                        response =
-                                            await HearingService.addHearing(
-                                              token: widget.token!,
-                                              userId: widget.advocateUserId!,
-                                              caseId: widget.caseId!,
-                                              hearingNumber: hearingNumber,
-                                              files: _selectedHearingNewFiles,
-                                            );
-                                      }
-
-                                      success =
-                                          response.statusCode == 200 ||
-                                          response.statusCode == 201;
-
-                                      if (success) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              isUpdate
-                                                  ? "Hearing updated"
-                                                  : "New hearing added",
-                                            ),
-                                          ),
-                                        );
-                                        Navigator.pop(context);
-                                        setState(() {
-                                          _loadFuture = _loadAllData();
-                                          _selectedHearingNewFiles.clear();
-                                          _hearingAttachmentsToDelete.clear();
-                                          _hearingExistingAttachments.clear();
-                                        });
-                                      } else {
-                                        throw Exception("Operation failed");
-                                      }
-                                    } catch (e) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(content: Text("Error: $e")),
-                                      );
-                                    } finally {
-                                      setModalState(
-                                        () => _isUploadingHearing = false,
-                                      );
-                                    }
-                                  },
+                                    setState(() {
+                                      _loadFuture = _loadAllData();
+                                      _selectedHearingNewFiles.clear();
+                                      _hearingAttachmentsToDelete.clear();
+                                      _hearingExistingAttachments.clear();
+                                    });
+                                  }
+                                } else {
+                                  throw Exception("Operation failed");
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text("✗ Error: ${e.toString()}"),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              } finally {
+                                setModalState(() => _isUploadingHearing = false);
+                              }
+                            },
                           ),
                         ),
                       ],
@@ -1365,7 +1376,7 @@ class _CaseTrackingState extends State<CaseTracking> {
     final canEdit =
         (presentUsersAdvocateId != null &&
             widget.advocateId == presentUsersAdvocateId) &&
-        step.title != "Hearing Date Issued";
+            step.title != "Hearing Date Issued";
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1441,7 +1452,7 @@ class _CaseTrackingState extends State<CaseTracking> {
   Widget _hearingCard() {
     final isAdvocate =
         presentUsersAdvocateId != null &&
-        presentUsersAdvocateId == widget.advocateId;
+            presentUsersAdvocateId == widget.advocateId;
 
     // Correct logic: To add the NEXT hearing, price for it must be set first
     final canAddNextHearing = _hearingPriceCount >= hearings.length + 1;
@@ -1517,7 +1528,7 @@ class _CaseTrackingState extends State<CaseTracking> {
   Widget _hearingTile(Hearing hearing) {
     final isAdvocate =
         presentUsersAdvocateId != null &&
-        presentUsersAdvocateId == widget.advocateId;
+            presentUsersAdvocateId == widget.advocateId;
 
     // Get price for this specific hearing (using hearing number)
     final paymentType = "CASE_HEARING_PAYMENT"; // same type for all hearings
@@ -1548,30 +1559,58 @@ class _CaseTrackingState extends State<CaseTracking> {
                     widget.advocateId == presentUsersAdvocateId)
                   ElevatedButton.icon(
                     onPressed: () async {
-                      SharedPreferences prefs =
-                          await SharedPreferences.getInstance();
-                      final token = prefs.getString('jwt_token');
-                      final userId = prefs.getString('userId');
-
-                      bool deleted = await HearingService.removeHearing(
-                        token!,
-                        userId!,
-                        hearing.id,
+                      // Show confirmation dialog
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text("Delete Hearing"),
+                          content: Text("Are you sure you want to delete Hearing #${hearing.hearingNumber}?"),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text("Cancel"),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                              onPressed: () => Navigator.pop(context, true),
+                              child: const Text("Delete"),
+                            ),
+                          ],
+                        ),
                       );
 
-                      if (deleted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text("Hearing deleted")),
-                        );
+                      if (confirm != true) return;
 
-                        setState(() {
-                          _loadFuture = _loadAllData();
-                        });
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text("Failed to delete hearing")),
-                        );
-                      }
+                      await _showLoadingDialog(
+                        loadingMessage: "Deleting hearing #${hearing.hearingNumber}...",
+                        task: () async {
+                          SharedPreferences prefs = await SharedPreferences.getInstance();
+                          final token = prefs.getString('jwt_token');
+                          final userId = prefs.getString('userId');
+
+                          bool deleted = await HearingService.removeHearing(
+                            token!,
+                            hearing.id,
+                            userId!,
+                          );
+
+                          if (deleted) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text("✓ Hearing #${hearing.hearingNumber} deleted successfully"),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                              setState(() {
+                                _loadFuture = _loadAllData();
+                              });
+                            }
+                          } else {
+                            throw Exception("Failed to delete hearing");
+                          }
+                        },
+                      );
                     },
                     icon: const Icon(Icons.delete),
                     label: Text(""),
@@ -1583,18 +1622,18 @@ class _CaseTrackingState extends State<CaseTracking> {
         subtitle: Text("Date: ${_formatDate(hearing.issuedDate)}"),
         trailing: hearing.attachmentsId.isNotEmpty
             ? Column(
-                children: [
-                  Text(
-                    "${hearing.attachmentsId.length} files",
-                    style: const TextStyle(
-                      color: Colors.blue,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+          children: [
+            Text(
+              "${hearing.attachmentsId.length} files",
+              style: const TextStyle(
+                color: Colors.blue,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
 
 
-                ],
-              )
+          ],
+        )
             : null,
         children: [
           // ---------- ATTACHMENTS ----------
@@ -1605,21 +1644,21 @@ class _CaseTrackingState extends State<CaseTracking> {
                 children: hearing.attachmentsId
                     .map(
                       (attachmentId) => ListTile(
-                        leading: const Icon(Icons.insert_drive_file),
-                        title: Text(attachmentId),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => HearingAttachmentView(
-                                attachmentId: attachmentId,
-                                jwtToken: widget.token!,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    )
+                    leading: const Icon(Icons.insert_drive_file),
+                    title: Text(attachmentId),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => HearingAttachmentView(
+                            attachmentId: attachmentId,
+                            jwtToken: widget.token!,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                )
                     .toList(),
               ),
             ),
@@ -1724,62 +1763,84 @@ class _CaseTrackingState extends State<CaseTracking> {
           trailing: draft.attachmentsId.isEmpty
               ? null
               : SizedBox(
-                  width: 110,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Text(
-                        "${draft.attachmentsId.length} files",
-                        style: const TextStyle(
-                          color: Colors.blue,
-                          fontWeight: FontWeight.bold,
+            width: 110,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  "${draft.attachmentsId.length} files",
+                  style: const TextStyle(
+                    color: Colors.blue,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (presentUsersAdvocateId != null &&
+                    widget.advocateId == presentUsersAdvocateId)
+                  IconButton(
+                    icon: const Icon(Icons.delete),
+                    onPressed: () async {
+                      // Show confirmation dialog
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text("Delete Document Draft"),
+                          content: const Text("Are you sure you want to delete this document draft?"),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text("Cancel"),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                              onPressed: () => Navigator.pop(context, true),
+                              child: const Text("Delete"),
+                            ),
+                          ],
                         ),
-                      ),
-                      if (presentUsersAdvocateId != null &&
-                          widget.advocateId == presentUsersAdvocateId)
-                        IconButton(
-                          icon: const Icon(Icons.delete),
-                          onPressed: () async {
-                            // your existing delete code
-                            SharedPreferences prefs =
-                                await SharedPreferences.getInstance();
-                            final token = prefs.getString('jwt_token');
-                            final userId = prefs.getString('userId');
+                      );
 
-                            final response = await http.delete(
-                              Uri.parse(
-                                "${BASE_URL.Urls().baseURL}document-draft/${draft.id}?userId=$userId",
-                              ),
-                              headers: {
-                                'Authorization': 'Bearer $token',
-                                'content-type': 'application/json',
-                              },
-                            );
+                      if (confirm != true) return;
 
-                            bool deleted = response.statusCode == 200;
+                      await _showLoadingDialog(
+                        loadingMessage: "Deleting document draft...",
+                        task: () async {
+                          SharedPreferences prefs = await SharedPreferences.getInstance();
+                          final token = prefs.getString('jwt_token');
+                          final userId = prefs.getString('userId');
 
-                            if (deleted) {
+                          final response = await http.delete(
+                            Uri.parse(
+                              "${BASE_URL.Urls().baseURL}document-draft/${draft.id}?userId=$userId",
+                            ),
+                            headers: {
+                              'Authorization': 'Bearer $token',
+                              'content-type': 'application/json',
+                            },
+                          );
+
+                          if (response.statusCode == 200) {
+                            if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text("Document draft deleted"),
+                                  content: Text("✓ Document draft deleted successfully"),
+                                  backgroundColor: Colors.green,
                                 ),
                               );
                               setState(() {
                                 _loadFuture = _loadAllData();
                               });
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text("Failed to delete"),
-                                ),
-                              );
                             }
-                          },
-                        ),
-                    ],
+                          } else {
+                            throw Exception("Failed to delete");
+                          }
+                        },
+                      );
+                    },
                   ),
-                ),
+              ],
+            ),
+          ),
           onTap: () {
             if (draft.attachmentsId.isNotEmpty) {
               _showDraftAttachmentSheet(draft);
@@ -1811,7 +1872,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                 const SizedBox(height: 12),
 
                 ...draft.attachmentsId.map(
-                  (attachmentId) => Card(
+                      (attachmentId) => Card(
                     child: ListTile(
                       leading: const Icon(Icons.insert_drive_file),
                       title: Text(attachmentId),
@@ -1884,7 +1945,7 @@ class _CaseTrackingState extends State<CaseTracking> {
   Widget _caseJudgmentTile(CaseJudgment caseJudgment) {
     final isAdvocate =
         presentUsersAdvocateId != null &&
-        presentUsersAdvocateId == widget.advocateId;
+            presentUsersAdvocateId == widget.advocateId;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -1905,64 +1966,95 @@ class _CaseTrackingState extends State<CaseTracking> {
         subtitle: caseJudgment.judgmentAttachmentId == null
             ? null
             : Text(
-                caseJudgment.judgmentAttachmentId!,
-                style: const TextStyle(
-                  color: Colors.blue,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+          caseJudgment.judgmentAttachmentId!,
+          style: const TextStyle(
+            color: Colors.blue,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         trailing: isAdvocate
             ? SizedBox(
-                width: 96,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit),
-                      onPressed: () =>
-                          _showCaseJudgmentDialog(existing: caseJudgment),
+          width: 96,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.edit),
+                onPressed: () =>
+                    _showCaseJudgmentDialog(existing: caseJudgment),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete),
+                onPressed: () async {
+                  // Show confirmation dialog
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text("Delete Case Judgment"),
+                      content: const Text("Are you sure you want to delete this judgment?"),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text("Cancel"),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text("Delete"),
+                        ),
+                      ],
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.delete),
-                      onPressed: () async {
-                        final result = await CaseJudgmentService.remove(
-                          caseJudgment.id,
-                        );
-                        if (result.statusCode == 200) {
+                  );
+
+                  if (confirm != true) return;
+
+                  await _showLoadingDialog(
+                    loadingMessage: "Deleting case judgment...",
+                    task: () async {
+                      SharedPreferences prefs = await SharedPreferences.getInstance();
+                      final userId = prefs.getString('userId');
+
+                      if (userId == null) throw Exception("User not logged in");
+
+                      final result = await CaseJudgmentService.remove(
+                        caseJudgment.id,
+
+                      );
+
+                      if (result.statusCode == 200) {
+                        if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text("Case judgment deleted"),
+                              content: Text("✓ Case judgment deleted successfully"),
+                              backgroundColor: Colors.green,
                             ),
                           );
-
-                          Navigator.pop(context);
-
                           setState(() {
-
                             _loadFuture = _loadAllData();
                           });
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("Failed to delete")),
-                          );
                         }
-                      },
-                    ),
-                  ],
-                ),
-              )
+                      } else {
+                        throw Exception("Failed to delete (${result.statusCode})");
+                      }
+                    },
+                  );
+                },
+              ),
+            ],
+          ),
+        )
             : null,
         onTap: caseJudgment.judgmentAttachmentId != null
             ? () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => CaseJudgmentAttachmentView(
-                    attachmentId: caseJudgment.judgmentAttachmentId!,
-                    jwtToken: widget.token!,
-                  ),
-                ),
-              )
+          context,
+          MaterialPageRoute(
+            builder: (_) => CaseJudgmentAttachmentView(
+              attachmentId: caseJudgment.judgmentAttachmentId!,
+              jwtToken: widget.token!,
+            ),
+          ),
+        )
             : null,
       ),
     );

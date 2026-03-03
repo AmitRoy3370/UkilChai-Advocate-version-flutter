@@ -361,74 +361,99 @@ class CaseDetailsPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
+                // ==================== REPLACE THIS ENTIRE BUTTON ====================
                 ElevatedButton(
                   onPressed: () async {
-                    SharedPreferences prefs =
-                        await SharedPreferences.getInstance();
-                    final token = prefs.getString('jwt_token') ?? '';
-                    final userId = prefs.getString('userId') ?? '';
-
-                    final advocateName = await getNameFromAdvocate(
-                      caseModel.advocateId,
-                    );
-
-                    final nameResponse = await http.get(
-                      Uri.parse(
-                        '${BASE_URL.Urls().baseURL}user/search?userId=$userId',
-                      ),
-                      headers: {
-                        "content-type": "application/json",
-                        "Authorization": "Bearer $token",
-                      },
-                    );
-
-                    String? myName;
-
-                    if (nameResponse.statusCode == 200) {
-                      final body = jsonDecode(nameResponse.body);
-                      myName = body["name"] ?? "";
-                    }
-
-                    print(
-                      "userId :- $userId and case userId :- ${caseModel.userId}",
-                    );
-
-                    String? advocateUserId;
-
-                    final response = await http.get(
-                      Uri.parse(
-                        "${BASE_URL.Urls().baseURL}advocate/${caseModel.advocateId}",
-                      ),
-                      headers: {
-                        "content-type": "application/json",
-                        "Authorization": "Bearer $token",
-                      },
-                    );
-
-                    if (response.statusCode == 200) {
-                      final body = jsonDecode(response.body);
-                      advocateUserId = body["userId"];
-                    }
-
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => CaseTracking(
-                          caseId: caseModel.id,
-                          caseName: caseModel.caseName,
-                          caseLawyer: advocateName,
-                          issuedTime: caseModel.issuedTime,
-                          token: token,
-                          advocateUserId: advocateUserId,
-                          userName: myName,
-                          userId: caseModel.userId == userId ? userId : null,
-                          advocateId: caseModel.advocateId,
+                    // Show loader immediately
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false, // user can't close it
+                      builder: (ctx) => const Center(
+                        child: Card(
+                          child: Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircularProgressIndicator(),
+                                SizedBox(height: 16),
+                                Text(
+                                  "Loading Case Tracking...\nPlease wait",
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(fontSize: 16),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     );
+
+                    try {
+                      SharedPreferences prefs = await SharedPreferences.getInstance();
+                      final token = prefs.getString('jwt_token') ?? '';
+                      final userId = prefs.getString('userId') ?? '';
+
+                      // Pre-load everything needed (this was causing the delay)
+                      final advocateName = await getNameFromAdvocate(caseModel.advocateId);
+
+                      final nameResponse = await http.get(
+                        Uri.parse('${BASE_URL.Urls().baseURL}user/search?userId=$userId'),
+                        headers: {
+                          "content-type": "application/json",
+                          "Authorization": "Bearer $token",
+                        },
+                      );
+                      String? myName = "";
+                      if (nameResponse.statusCode == 200) {
+                        final body = jsonDecode(nameResponse.body);
+                        myName = body["name"] ?? "";
+                      }
+
+                      String? advocateUserId;
+                      final response = await http.get(
+                        Uri.parse("${BASE_URL.Urls().baseURL}advocate/${caseModel.advocateId}"),
+                        headers: {
+                          "content-type": "application/json",
+                          "Authorization": "Bearer $token",
+                        },
+                      );
+                      if (response.statusCode == 200) {
+                        final body = jsonDecode(response.body);
+                        advocateUserId = body["userId"];
+                      }
+
+                      // Close the loader dialog
+                      Navigator.pop(context);
+
+                      // Now navigate (page will open instantly because data is ready)
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CaseTracking(
+                            caseId: caseModel.id,
+                            caseName: caseModel.caseName,
+                            caseLawyer: advocateName,
+                            issuedTime: caseModel.issuedTime,
+                            token: token,
+                            advocateUserId: advocateUserId,
+                            userName: myName,
+                            userId: caseModel.userId == userId ? userId : null,
+                            advocateId: caseModel.advocateId,
+                          ),
+                        ),
+                      );
+                    } catch (e) {
+                      // Close loader if error
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Error loading tracking: $e")),
+                      );
+                    }
                   },
-                  child: Text("Case Tracking"),
+                  child: const Text("Case Tracking"),
                 ),
+// ===================================================================
 
                 FutureBuilder<bool>(
                   future: isMyCase(),

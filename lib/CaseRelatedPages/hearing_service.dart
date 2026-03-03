@@ -64,6 +64,12 @@ class HearingService {
     final uri = Uri.parse("$baseUrl/add/$userId");
     final request = http.MultipartRequest("POST", uri);
 
+    print("hearing add token :- $token");
+    print("hearing add case id :- $caseId");
+    print("hearing add userId :- $userId");
+    print("hearing add hearingNumber :- $hearingNumber");
+    print("hearing add issuedDate :- $issuedDate");
+
     request.headers.addAll(authHeader(token));
     request.fields['caseId'] = caseId;
     request.fields['hearningNumber'] = hearingNumber.toString();
@@ -108,6 +114,10 @@ class HearingService {
     }
 
     final response = await request.send();
+
+    print("response for add hearing service is :- ${response.statusCode}");
+    print("response for add hearing service is :- ${response.reasonPhrase}");
+
     return http.Response.fromStream(response);
   }
 
