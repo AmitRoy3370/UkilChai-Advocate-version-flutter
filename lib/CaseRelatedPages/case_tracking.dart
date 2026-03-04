@@ -2032,6 +2032,8 @@ class _CaseTrackingState extends State<CaseTracking> {
                           );
                           setState(() {
                             _loadFuture = _loadAllData();
+                            this.caseJudgment = null;
+
                           });
                         }
                       } else {
