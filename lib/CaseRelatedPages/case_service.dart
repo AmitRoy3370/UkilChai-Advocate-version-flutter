@@ -67,8 +67,15 @@ class CaseService {
   }) async {
     final uri = Uri.parse("${BASE_URL.Urls().baseURL}case/update");
 
+    print("hitted uri is :- $uri");
+
+    SharedPreferences preferences = await SharedPreferences.getInstance();
+    final token = preferences.getString('jwt_token') ?? '';
+
+    print("collected token is :- $token");
+
     final request = http.MultipartRequest("POST", uri)
-      ..headers.addAll(_headers)
+      ..headers["Authorization"] = "Bearer $token"
       ..fields['caseId'] = caseId
       ..fields['caseName'] = caseName
       ..fields['userId'] = userId
@@ -78,6 +85,11 @@ class CaseService {
       ..fields['existingFiles'] = jsonEncode(existingFiles);
 
     print("existing files :- ${request.fields["existingFiles"]}");
+    print("caseId is :- ${request.fields["caseId"]}");
+    print("userId is :- ${request.fields["userId"]}");
+    print("advocateId is :- ${request.fields["advocateId"]}");
+    print("case type is :- ${request.fields["caseType"]}");
+    print("case name is :- ${request.fields["caseName"]}");
 
     if (newFiles.isNotEmpty) {
       for (final f in newFiles) {
@@ -102,7 +114,12 @@ class CaseService {
       }
     }
 
+    print("total added new files are :- ${request.files.length}");
+
     final response = await request.send();
+
+    print("response of the update case is :- ${response.statusCode}");
+
     return response.statusCode == 200;
   }
 

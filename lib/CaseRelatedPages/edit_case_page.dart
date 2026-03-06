@@ -20,7 +20,11 @@ class EditCasePage extends StatefulWidget {
   final CaseModel acceptedCase;
   final String? token;
 
-  const EditCasePage({super.key, required this.acceptedCase, required this.token});
+  const EditCasePage({
+    super.key,
+    required this.acceptedCase,
+    required this.token,
+  });
 
   @override
   State<EditCasePage> createState() => _EditCasePageState();
@@ -207,7 +211,6 @@ class _EditCasePageState extends State<EditCasePage> {
       newFiles: newFiles, // ✅ PlatformFile list
       advocateId: requestedAdvocateId,
       userId: widget.acceptedCase.userId,
-
     );
 
     setState(() => loading = false);
@@ -328,11 +331,8 @@ class _EditCasePageState extends State<EditCasePage> {
                             deleteExistingAttachment(id);
 
                             setState(() {
-
                               existingAttachments.remove(id);
-
                             });
-
                           },
                         ),
                       ),
@@ -371,7 +371,31 @@ class _EditCasePageState extends State<EditCasePage> {
                     const SizedBox(height: 24),
 
                     ElevatedButton(
-                      onPressed: update,
+                      onPressed: () async {
+                        /*showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (BuildContext context) {
+                            return AlertDialog(
+                              title: const Text("Case Updating...."),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const CircularProgressIndicator(),
+                                  const SizedBox(height: 10),
+                                  Text('In progress....'),
+                                ],
+                              ),
+                            );
+                          },
+                        );*/
+
+                        update();
+
+                        /*if (context.mounted) {
+                          Navigator.pop(context);
+                        }*/
+                      },
                       child: const Text("Update Case"),
                     ),
                   ],

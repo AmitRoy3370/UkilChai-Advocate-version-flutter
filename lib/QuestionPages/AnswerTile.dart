@@ -284,7 +284,7 @@ class AnswerTile extends StatelessWidget {
                                           ),
                                           keyboardType: TextInputType.multiline,
                                           onChanged: (value) =>
-                                          editedMessage = value,
+                                              editedMessage = value,
                                           maxLines: null,
                                         ),
                                         const SizedBox(height: 10),
@@ -293,11 +293,11 @@ class AnswerTile extends StatelessWidget {
                                             final result = await FilePicker
                                                 .platform
                                                 .pickFiles(
-                                              allowMultiple:
-                                              false, // Changed to false since backend expects single "file"
-                                              withData: true,
-                                              type: FileType.any,
-                                            );
+                                                  allowMultiple:
+                                                      false, // Changed to false since backend expects single "file"
+                                                  withData: true,
+                                                  type: FileType.any,
+                                                );
 
                                             if (result != null &&
                                                 result.files.isNotEmpty) {
@@ -307,9 +307,7 @@ class AnswerTile extends StatelessWidget {
                                                   pickedFile!.extension;
                                               fileBytes = pickedFile!.bytes;
 
-                                              setDialogState(() {
-
-                                              });
+                                              setDialogState(() {});
                                             }
                                           },
                                           child: const Text(
@@ -335,9 +333,32 @@ class AnswerTile extends StatelessWidget {
                                   ),
                                   TextButton(
                                     onPressed: () async {
+
+                                      showDialog(
+                                          context: context,
+                                          barrierDismissible: false,
+                                          builder: (BuildContext context) {
+
+                                            return AlertDialog(
+                                              title: Text('Edit Answer'),
+                                              content: Column(
+                                                children: [
+
+                                                  const CircularProgressIndicator(),
+                                                  const SizedBox(height: 10),
+                                                  Text('In progress....'),
+
+
+                                                ]
+                                              )
+                                            );
+
+                                          }
+                                      );
+
                                       try {
                                         SharedPreferences prefs =
-                                        await SharedPreferences.getInstance();
+                                            await SharedPreferences.getInstance();
                                         final token =
                                             prefs.getString('jwt_token') ?? '';
                                         final userId =
@@ -351,7 +372,7 @@ class AnswerTile extends StatelessWidget {
                                         );
 
                                         request.headers['Authorization'] =
-                                        'Bearer $token';
+                                            'Bearer $token';
 
                                         request.fields['advocateId'] =
                                             answer.advocateId;
@@ -364,7 +385,7 @@ class AnswerTile extends StatelessWidget {
                                         if (answer.attachmentId != null &&
                                             pickedFile == null) {
                                           request.fields['attachmentId'] =
-                                          answer.attachmentId!;
+                                              answer.attachmentId!;
                                         }
 
                                         if (pickedFile != null) {
@@ -372,10 +393,10 @@ class AnswerTile extends StatelessWidget {
                                             fileExtension,
                                           );
                                           http.MediaType? contentType =
-                                          mimeTypeStr != null
+                                              mimeTypeStr != null
                                               ? http.MediaType.parse(
-                                            mimeTypeStr,
-                                          )
+                                                  mimeTypeStr,
+                                                )
                                               : null;
 
                                           if (kIsWeb) {
@@ -388,7 +409,7 @@ class AnswerTile extends StatelessWidget {
                                                   filename: pickedFile!
                                                       .name, // Critical: sets originalFilename in backend
                                                   contentType:
-                                                  contentType, // Sets proper MIME
+                                                      contentType, // Sets proper MIME
                                                 ),
                                               );
                                             }
@@ -422,9 +443,9 @@ class AnswerTile extends StatelessWidget {
                                         var streamedResponse = await request
                                             .send();
                                         var response =
-                                        await http.Response.fromStream(
-                                          streamedResponse,
-                                        );
+                                            await http.Response.fromStream(
+                                              streamedResponse,
+                                            );
 
                                         if (response.statusCode == 200) {
                                           ScaffoldMessenger.of(
@@ -438,6 +459,13 @@ class AnswerTile extends StatelessWidget {
                                           );
                                           Navigator.pop(dialogContext);
                                           onRefresh?.call();
+
+                                          if(context.mounted) {
+
+                                            Navigator.pop(context);
+
+                                          }
+
                                         } else {
                                           ScaffoldMessenger.of(
                                             context,
@@ -448,6 +476,13 @@ class AnswerTile extends StatelessWidget {
                                               ),
                                             ),
                                           );
+
+                                          if(context.mounted) {
+
+                                            Navigator.pop(context);
+
+                                          }
+
                                         }
                                       } catch (e) {
                                         ScaffoldMessenger.of(
@@ -455,6 +490,13 @@ class AnswerTile extends StatelessWidget {
                                         ).showSnackBar(
                                           SnackBar(content: Text('Error: $e')),
                                         );
+
+                                        if(context.mounted) {
+
+                                          Navigator.pop(context);
+
+                                        }
+
                                       }
                                     },
                                     child: const Text('Update'),
@@ -468,8 +510,25 @@ class AnswerTile extends StatelessWidget {
                     if (answer.advocateId == advocateId)
                       ElevatedButton(
                         onPressed: () async {
+                          showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (BuildContext context) {
+                              return AlertDialog(
+                                title: Text('Delete Answer'),
+                                content: Column(
+                                  children: [
+                                    const CircularProgressIndicator(),
+                                    const SizedBox(height: 10),
+                                    Text('In progress....'),
+                                  ],
+                                ),
+                              );
+                            },
+                          );
+
                           SharedPreferences prefs =
-                          await SharedPreferences.getInstance();
+                              await SharedPreferences.getInstance();
                           final token = prefs.getString('jwt_token') ?? '';
                           final userId = prefs.getString('userId') ?? '';
 
@@ -498,6 +557,10 @@ class AnswerTile extends StatelessWidget {
                                 content: Text("Answer not deleted"),
                               ),
                             );
+                          }
+
+                          if (context.mounted) {
+                            Navigator.pop(context);
                           }
                         },
                         child: Icon(Icons.delete),

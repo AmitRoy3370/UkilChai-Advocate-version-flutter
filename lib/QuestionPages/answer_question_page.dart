@@ -25,8 +25,6 @@ class AnswerQuestionPage extends StatefulWidget {
   }
 }
 
-
-
 class _AnswerQuestionPageState extends State<AnswerQuestionPage> {
   TextEditingController messageCtrl = TextEditingController();
   PlatformFile? selectedFile; // Unified for single file
@@ -63,7 +61,6 @@ class _AnswerQuestionPageState extends State<AnswerQuestionPage> {
         return 'application/octet-stream';
     }
   }
-
 
   Future<void> pickFiles() async {
     final result = await FilePicker.platform.pickFiles(
@@ -132,6 +129,23 @@ class _AnswerQuestionPageState extends State<AnswerQuestionPage> {
 
             ElevatedButton(
               onPressed: () async {
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (BuildContext context) {
+                    return AlertDialog(
+                      title: Text("Answering Question"),
+                      content: Column(
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 10),
+                          Text('In progress....'),
+                        ],
+                      ),
+                    );
+                  },
+                );
+
                 final message = messageCtrl.text;
 
                 SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -151,7 +165,9 @@ class _AnswerQuestionPageState extends State<AnswerQuestionPage> {
 
                 if (selectedFile != null) {
                   final mimeTypeStr = getMimeType(fileExtension);
-                  http.MediaType? contentType = mimeTypeStr != null ? http.MediaType.parse(mimeTypeStr) : null;
+                  http.MediaType? contentType = mimeTypeStr != null
+                      ? http.MediaType.parse(mimeTypeStr)
+                      : null;
 
                   if (kIsWeb) {
                     // Web: use bytes
@@ -160,7 +176,8 @@ class _AnswerQuestionPageState extends State<AnswerQuestionPage> {
                         http.MultipartFile.fromBytes(
                           "file",
                           selectedFile!.bytes!,
-                          filename: selectedFile!.name, // Critical: sets originalFilename in backend
+                          filename: selectedFile!
+                              .name, // Critical: sets originalFilename in backend
                           contentType: contentType, // Sets proper MIME
                         ),
                       );
@@ -208,12 +225,20 @@ class _AnswerQuestionPageState extends State<AnswerQuestionPage> {
                   messageCtrl.clear();
 
                   widget.onAnswerSubmitted?.call();
+
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                  }
                 } else {
                   final body = await response.stream.bytesToString();
 
                   ScaffoldMessenger.of(
                     context,
                   ).showSnackBar(SnackBar(content: Text(body)));
+
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                  }
                 }
 
                 setState(() {});

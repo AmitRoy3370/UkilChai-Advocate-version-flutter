@@ -294,7 +294,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
     );
   }
 
-
   // Pick CV PDF
   Future<void> pickCv() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -982,7 +981,37 @@ class _RegistrationPageState extends State<RegistrationPage> {
                             ),
                             const SizedBox(height: 20),
                             ElevatedButton(
-                              onPressed: _submitForm,
+                              onPressed: () async {
+                                showDialog(
+                                  context: context,
+                                  barrierDismissible: false,
+                                  builder: (BuildContext context) {
+                                    return AlertDialog(
+
+                                      content: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const CircularProgressIndicator(),
+                                          const SizedBox(height: 16),
+                                          Text("Sending request..."),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                );
+
+                                try {
+                                  await _submitForm();
+
+                                  if (context.mounted) {
+                                    Navigator.pop(context);
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    Navigator.pop(context);
+                                  }
+                                }
+                              },
                               child: const Text("Submit request"),
                             ),
                           ],

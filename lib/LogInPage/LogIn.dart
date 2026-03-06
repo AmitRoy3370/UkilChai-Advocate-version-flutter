@@ -145,7 +145,6 @@ class LogInState extends State<LogIn> {
 
           await prefs.setString("advocateId", advocateId);
 
-
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Logged in successfully...")),
           );
@@ -237,8 +236,38 @@ class LogInState extends State<LogIn> {
           const SizedBox(height: 20),
 
           ElevatedButton(
-            onPressed: () {
-              _submitForm();
+            onPressed: () async {
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (BuildContext context) {
+                  return AlertDialog(
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 16),
+                        Text("Processing..."),
+                      ],
+                    ),
+                  );
+                },
+              );
+
+              try {
+                await _submitForm();
+
+                if (context.mounted) {
+                  Navigator.pop(context);
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  Navigator.pop(context);
+                }
+                rethrow;
+              }
+
+              //_submitForm();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue,

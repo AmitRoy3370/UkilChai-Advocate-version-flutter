@@ -138,7 +138,8 @@ class _ReactionBarState extends State<ReactionBar> {
                   ),
                   const SizedBox(height: 4),
                   SizedBox(
-                    height: 300, // Fixed height for the list to prevent overflow
+                    height:
+                        300, // Fixed height for the list to prevent overflow
                     child: ListView.builder(
                       itemCount: reactions.length,
                       itemBuilder: (context, index) {
@@ -148,53 +149,55 @@ class _ReactionBarState extends State<ReactionBar> {
                             : "?";
                         final reactionIcon = r.reaction != null
                             ? Icon(
-                          reactionIcons[r.reaction] ?? Icons.help_outline,
-                          size: 16,
-                        )
+                                reactionIcons[r.reaction] ?? Icons.help_outline,
+                                size: 16,
+                              )
                             : null;
                         final isOwn = r.userId == myUserId;
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: CircleAvatar(
                             child: Text(
-                              userName.isNotEmpty ? userName[0].toUpperCase() : "?",
+                              userName.isNotEmpty
+                                  ? userName[0].toUpperCase()
+                                  : "?",
                               style: const TextStyle(fontSize: 12),
                             ),
                           ),
                           title: Text(userName),
                           subtitle: (r.reaction != null || r.comment != null)
                               ? Row(
-                            children: [
-                              if (reactionIcon != null) ...[
-                                reactionIcon,
-                                const SizedBox(width: 4),
-                              ],
-                              if (r.comment != null)
-                                Expanded(child: Text(r.comment!)),
-                            ],
-                          )
+                                  children: [
+                                    if (reactionIcon != null) ...[
+                                      reactionIcon,
+                                      const SizedBox(width: 4),
+                                    ],
+                                    if (r.comment != null)
+                                      Expanded(child: Text(r.comment!)),
+                                  ],
+                                )
                               : null,
                           trailing: isOwn
                               ? PopupMenuButton<String>(
-                            icon: const Icon(Icons.more_vert),
-                            onSelected: (value) {
-                              if (value == 'Update') {
-                                _editReaction(r);
-                              } else if (value == 'Delete') {
-                                _deleteReaction(r.id!);
-                              }
-                            },
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(
-                                value: 'Update',
-                                child: Text('Update'),
-                              ),
-                              const PopupMenuItem(
-                                value: 'Delete',
-                                child: Text('Delete'),
-                              ),
-                            ],
-                          )
+                                  icon: const Icon(Icons.more_vert),
+                                  onSelected: (value) {
+                                    if (value == 'Update') {
+                                      _editReaction(r);
+                                    } else if (value == 'Delete') {
+                                      _deleteReaction(r.id!);
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    const PopupMenuItem(
+                                      value: 'Update',
+                                      child: Text('Update'),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'Delete',
+                                      child: Text('Delete'),
+                                    ),
+                                  ],
+                                )
                               : null,
                         );
                       },
@@ -233,13 +236,39 @@ class _ReactionBarState extends State<ReactionBar> {
             child: ElevatedButton.icon(
               icon: submitting
                   ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Icon(Icons.send),
               label: const Text("Submit"),
-              onPressed: submitting ? null : _submitNew,
+              onPressed: submitting
+                  ? null
+                  : () async {
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (BuildContext context) {
+                          return AlertDialog(
+                            title: const Text("Submitting reaction...."),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const CircularProgressIndicator(),
+                                const SizedBox(height: 10),
+                                Text('In progress....'),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+
+                      await _submitNew();
+
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                      }
+                    },
             ),
           ),
         ],
@@ -320,7 +349,9 @@ class _ReactionBarState extends State<ReactionBar> {
                         return Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: FilterChip(
-                            label: Icon(reactionIcons[reaction] ?? Icons.help_outline),
+                            label: Icon(
+                              reactionIcons[reaction] ?? Icons.help_outline,
+                            ),
                             selected: isSelected,
                             onSelected: (_) {
                               setDialogState(() {

@@ -326,7 +326,36 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
             ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: submitPost,
+              onPressed: () async {
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (BuildContext context) {
+                    return AlertDialog(
+                      title: const Text("Submitting post"),
+                      content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(),
+                            const SizedBox(height:10),
+                            Text(isUpdate ? "Updating..." : "Posting..."),
+
+                          ]
+                      ),
+                    );
+                  },
+                );
+
+                await submitPost();
+
+                if(context.mounted) {
+
+                  Navigator.pop(context);
+
+                }
+
+              },
+
               child: Text(isUpdate ? "Update" : "Post"),
             ),
           ],

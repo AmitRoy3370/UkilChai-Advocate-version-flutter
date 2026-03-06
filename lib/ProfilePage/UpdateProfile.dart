@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:advocatechaiadvocate/ProfilePage/SeeMyProfile.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
@@ -1197,6 +1198,13 @@ class _UpdateProfileState extends State<UpdateProfile> {
           const SnackBar(content: Text("Registration Successful")),
         );
 
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const SeeMyProfile(),
+          )
+        );
+
         if (kDebugMode) {
           // print("JWT TOKEN => $token");
         }
@@ -1516,7 +1524,40 @@ class _UpdateProfileState extends State<UpdateProfile> {
                             ),
                             const SizedBox(height: 20),
                             ElevatedButton(
-                              onPressed: _submitForm,
+                              onPressed: () async {
+
+                                try {
+
+                                  showDialog(
+                                      context: context,
+                                      barrierDismissible: false,
+                                      builder: (BuildContext context) {
+
+                                        return Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const CircularProgressIndicator(),
+                                            const SizedBox(height: 10),
+                                            const Text("Please wait..."),
+                                        ]
+                                        );
+
+                                      }
+                                  );
+
+                                  await _submitForm();
+
+                                } catch(e) {
+
+                                  if(context.mounted) {
+
+                                    Navigator.pop(context);
+
+                                  }
+
+                                }
+
+                              },
                               child: const Text("Submit Registration"),
                             ),
                           ],
