@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:advocatechaiadvocate/Utils/BaseURL.dart' as BASE_URL;
-import './chat_message.dart';
+import 'package:advocatechaiadvocate/ChatRelatedPages/chat_message.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -20,7 +20,7 @@ class ChatScreen extends StatefulWidget {
     required this.otherUser,
     required this.othersName,
     required this.myName,
-    this.otherUserId
+    this.otherUserId,
   }) : super(key: key);
 
   @override
@@ -29,6 +29,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final TextEditingController _textController = TextEditingController();
+
   final List<ChatMessage> _messages = [];
   final ScrollController _scrollController = ScrollController();
   final Map<String, bool> _readStatus = {};
@@ -52,6 +53,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
     _loadChatHistory();
     _startPolling();
+    _textController.addListener(() {
+      setState(() {});
+    });
   }
 
   @override
@@ -81,8 +85,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     // Set up periodic polling
     _pollingTimer = Timer.periodic(Duration(seconds: _pollingInterval), (
-      timer,
-    ) {
+        timer,
+        ) {
       _pollForNewMessages();
     });
 
@@ -123,11 +127,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             .map((msg) => ChatMessage.fromJson(msg))
             .where(
               (msg) =>
-                  // Only get messages after last poll time
-                  msg.timeStamp.isAfter(_lastPollTime) &&
-                  // Don't add messages we already have
-                  !_messages.any((existing) => existing.id == msg.id),
-            )
+          // Only get messages after last poll time
+          msg.timeStamp.isAfter(_lastPollTime) &&
+              // Don't add messages we already have
+              !_messages.any((existing) => existing.id == msg.id),
+        )
             .toList();
 
         if (newMessages.isNotEmpty) {
@@ -375,7 +379,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     // Poll for read status updates
     _readStatusTimer = Timer.periodic(
       Duration(seconds: _readStatusPollingInterval),
-      (timer) {
+          (timer) {
         _pollForReadStatus();
       },
     );
@@ -483,11 +487,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
             Text(
               widget.othersName ?? 'Chat',
               style: TextStyle(fontWeight: FontWeight.bold),
@@ -511,9 +515,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 }
               },
             ),
-
-          ]
-        ) ,
+          ],
+        ),
 
         actions: [
           Padding(
@@ -538,51 +541,169 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _messages.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.chat_bubble_outline,
-                          size: 64,
-                          color: Colors.grey[300],
-                        ),
-                        SizedBox(height: 16),
-                        Text(
-                          'No messages yet',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Send a message to start chatting!',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[500],
-                          ),
-                        ),
-                      ],
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: _messages.isEmpty
+                  ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.chat_bubble_outline,
+                      size: 64,
+                      color: Colors.grey[300],
                     ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      final msg = _messages[index];
-                      final isMe = msg.sender == widget.currentUser;
-                      return _buildMessageBubble(msg, isMe);
-                    },
-                  ),
-          ),
-          _buildMessageInput(),
-        ],
+                    SizedBox(height: 16),
+                    Text(
+                      'No messages yet',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Send a message to start chatting!',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+              )
+                  : ListView.builder(
+                controller: _scrollController,
+                itemCount: _messages.length,
+                itemBuilder: (context, index) {
+                  final msg = _messages[index];
+                  final isMe = msg.sender == widget.currentUser;
+                  return _buildMessageBubble(msg, isMe);
+                },
+              ),
+            ),
+            _buildMessageInput(),
+          ],
+        ),
       ),
+    );
+  }
+
+  Future<void> _deleteMessage(ChatMessage msg) async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+
+      String? token = prefs.getString('jwt_token');
+
+      final response = await http.delete(
+        Uri.parse(
+          "${BASE_URL.Urls().baseURL}chat/delete/${msg.sender}/${msg.receiver}/${msg.id}",
+        ),
+        headers: {"Authorization": "Bearer $token"},
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _messages.removeWhere((m) => m.id == msg.id);
+        });
+      }
+    } catch (e) {
+      print("Delete error: $e");
+    }
+  }
+
+  Future<void> _editMessage(ChatMessage msg, String newText) async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+
+      String? token = prefs.getString('jwt_token');
+
+      final response = await http.put(
+        Uri.parse(
+          "${BASE_URL.Urls().baseURL}chat/edit/${msg.sender}/${msg.id}?newContent=$newText",
+        ),
+        headers: {"Authorization": "Bearer $token"},
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          msg.content = newText;
+        });
+      }
+    } catch (e) {
+      print("Edit error: $e");
+    }
+  }
+
+  void _showEditDialog(ChatMessage msg) {
+    TextEditingController editController = TextEditingController(
+      text: msg.content,
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Edit Message"),
+          content: TextField(
+            controller: editController,
+            decoration: InputDecoration(hintText: "Edit your message"),
+          ),
+          actions: [
+            TextButton(
+              child: Text("Cancel"),
+              onPressed: () => Navigator.pop(context),
+            ),
+
+            ElevatedButton(
+              child: Text("Save"),
+              onPressed: () async {
+                String newText = editController.text.trim();
+
+                if (newText.isEmpty) return;
+
+                await _editMessage(msg, newText);
+
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showMessageOptions(ChatMessage msg) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.edit),
+                title: Text("Edit Message"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showEditDialog(msg);
+                },
+              ),
+
+              ListTile(
+                leading: Icon(Icons.delete, color: Colors.red),
+                title: Text("Delete Message"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _deleteMessage(msg);
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -616,15 +737,75 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         color: Colors.blue[800],
                       ),
                     ),
+
                   if (!isMe) SizedBox(height: 2),
-                  Text(
-                    msg.content,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: isMe ? Colors.white : Colors.black,
-                    ),
+
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          msg.content,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: isMe ? Colors.white : Colors.black,
+                          ),
+                        ),
+                      ),
+
+                      if (isMe)
+                        PopupMenuButton<String>(
+                          icon: Icon(
+                            Icons.more_vert,
+                            size: 18,
+                            color: isMe ? Colors.white70 : Colors.grey[700],
+                          ),
+                          onSelected: (value) {
+                            if (value == "edit") {
+                              _showEditDialog(msg);
+                            } else if (value == "delete") {
+                              _deleteMessage(msg);
+                            }
+                          },
+                          itemBuilder: (context) {
+                            final isMe = msg.sender == widget.currentUser;
+
+                            return [
+                              if (isMe)
+                                PopupMenuItem(
+                                  value: "edit",
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.edit, size: 18),
+                                      SizedBox(width: 8),
+                                      Text("Edit"),
+                                    ],
+                                  ),
+                                ),
+
+                              if (isMe)
+                                PopupMenuItem(
+                                  value: "delete",
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.delete,
+                                        size: 18,
+                                        color: Colors.red,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text("Delete"),
+                                    ],
+                                  ),
+                                ),
+                            ];
+                          },
+                        ),
+                    ],
                   ),
+
                   SizedBox(height: 4),
+
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -635,6 +816,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           color: isMe ? Colors.white70 : Colors.grey[600],
                         ),
                       ),
+
                       if (isMe) SizedBox(width: 6),
                       if (isMe) _buildReadTick(msg),
                     ],
@@ -649,8 +831,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildMessageInput() {
+    bool hasText = _textController.text.trim().isNotEmpty;
+
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 8,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 8,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: Colors.grey[200]!)),
@@ -660,6 +849,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           Expanded(
             child: TextField(
               controller: _textController,
+              onChanged: (value) {
+                setState(() {});
+              },
               decoration: InputDecoration(
                 hintText: 'Type a message...',
                 border: OutlineInputBorder(
@@ -676,17 +868,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               onSubmitted: (_) => _sendMessage(),
             ),
           ),
+
           SizedBox(width: 8),
-          Container(
+
+          AnimatedContainer(
+            duration: Duration(milliseconds: 200),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: _textController.text.isNotEmpty
-                  ? Colors.blue
-                  : Colors.grey[300],
+              color: hasText ? Colors.blue : Colors.grey[300],
             ),
             child: IconButton(
               icon: Icon(Icons.send, color: Colors.white),
-              onPressed: _textController.text.isNotEmpty ? _sendMessage : null,
+              onPressed: hasText ? _sendMessage : null,
             ),
           ),
         ],
