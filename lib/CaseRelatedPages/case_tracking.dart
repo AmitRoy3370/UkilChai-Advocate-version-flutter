@@ -3519,7 +3519,15 @@ class _CaseTrackingState extends State<CaseTracking> {
                   ),
                 ],
               )
-            : null,
+            : Text(
+                currentPrice > 0
+                    ? "৳${currentPrice.toStringAsFixed(0)}"
+                    : "No price",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: currentPrice > 0 ? Colors.green : Colors.grey,
+                ),
+              ),
       ),
     );
   }
