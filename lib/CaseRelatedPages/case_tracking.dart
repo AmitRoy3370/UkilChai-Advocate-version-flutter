@@ -1321,15 +1321,18 @@ class _CaseTrackingState extends State<CaseTracking> {
 
                   if (response.statusCode == 200 ||
                       response.statusCode == 201) {
-                    setState(() => _loadFuture = _loadAllData());
+                    await _loadAllData(); // ← LOADER STAYS UNTIL FULL REFRESH
+                  } else {
+                    throw Exception("Failed: ${response.statusCode}");
+                  }
+
+                  if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text("✓ Price set to ৳$price"),
                         backgroundColor: Colors.green,
                       ),
                     );
-                  } else {
-                    throw Exception("Failed: ${response.statusCode}");
                   }
                 },
               );
@@ -3102,23 +3105,29 @@ class _CaseTrackingState extends State<CaseTracking> {
                                       );
 
                                 if (success) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          isUpdate
-                                              ? "✓ Read status updated successfully"
-                                              : "✓ Read status added successfully",
-                                        ),
-                                        backgroundColor: Colors.green,
-                                      ),
-                                    );
-                                    Navigator.pop(context);
+                                  await _loadAllData(); // ← LOADER STAYS UNTIL FULL REFRESH
+                                } else {
+                                  throw Exception(
+                                    "Failed to do the changes at here....",
+                                  );
+                                }
 
-                                    setState(() {
-                                      _loadFuture = _loadAllData();
-                                    });
-                                  }
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        isUpdate
+                                            ? "✓ Read status updated successfully"
+                                            : "✓ Read status added successfully",
+                                      ),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                  Navigator.pop(context);
+
+                                  setState(() {
+                                    _loadFuture = _loadAllData();
+                                  });
                                 }
                               } catch (e) {
                                 if (context.mounted) {
@@ -3269,30 +3278,36 @@ class _CaseTrackingState extends State<CaseTracking> {
                               );
 
                               try {
-                                final success = isUpdate
-                                    ? await _updateCaseTracking(
-                                        existing!.id!,
-                                        selectedStage!,
-                                      )
-                                    : await _addCaseTracking(selectedStage!);
+                                await _showLoadingDialog(
+                                  loadingMessage: "Saving stage...",
+                                  task: () async {
+                                    final success = isUpdate
+                                        ? await _updateCaseTracking(
+                                            existing!.id!,
+                                            selectedStage!,
+                                          )
+                                        : await _addCaseTracking(
+                                            selectedStage!,
+                                          );
 
-                                if (success) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          isUpdate
-                                              ? "✓ Timeline stage updated"
-                                              : "✓ New timeline stage added",
-                                        ),
-                                        backgroundColor: Colors.green,
+                                    if (success) {
+                                      await _loadAllData(); // ← LOADER STAYS UNTIL FULL REFRESH
+                                    }
+                                  },
+                                );
+
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        isUpdate
+                                            ? "✓ Timeline stage updated"
+                                            : "✓ New timeline stage added",
                                       ),
-                                    );
-                                    Navigator.pop(context);
-                                    setState(
-                                      () => _loadFuture = _loadAllData(),
-                                    );
-                                  }
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                  Navigator.pop(context);
                                 }
                               } catch (e) {
                                 if (context.mounted) {
@@ -3467,36 +3482,55 @@ class _CaseTrackingState extends State<CaseTracking> {
 
                         if (confirm != true) return;
 
+                        bool response = false;
+
                         await _showLoadingDialog(
                           loadingMessage: "Deleting stage...",
-                          task: () async => await _deleteCaseTracking(ct.id!),
+                          task: () async {
+                            response = await _deleteCaseTracking(ct.id!);
+                            await _loadAllData();
+                          },
                         );
 
-                        if (context.mounted) {
+                        if (context.mounted || response) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text("✓ Stage deleted successfully"),
                               backgroundColor: Colors.green,
                             ),
                           );
-                          setState(() => _loadFuture = _loadAllData());
+                          //setState(() => _loadFuture = _loadAllData());
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("✓ Stage not deleted"),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
                         }
                       } else if (v == "up" && canUp) {
                         await _showLoadingDialog(
-                          task: () => _swapCaseTrackings(
-                            caseTrackings[index - 1].id!,
-                            ct.id!,
-                          ),
+                          task: () async {
+                            await _swapCaseTrackings(
+                              caseTrackings[index - 1].id!,
+                              ct.id!,
+                            );
+                            await _loadAllData();
+                          },
                         );
-                        setState(() => _loadFuture = _loadAllData());
+
+                        //setState(() => _loadFuture = _loadAllData());
                       } else if (v == "down" && canDown) {
                         await _showLoadingDialog(
-                          task: () => _swapCaseTrackings(
-                            ct.id!,
-                            caseTrackings[index + 1].id!,
-                          ),
+                          task: () async {
+                            await _swapCaseTrackings(
+                              ct.id!,
+                              caseTrackings[index + 1].id!,
+                            );
+                            await _loadAllData();
+                          },
                         );
-                        setState(() => _loadFuture = _loadAllData());
+                        //setState(() => _loadFuture = _loadAllData());
                       }
                     },
                     itemBuilder: (_) => [
