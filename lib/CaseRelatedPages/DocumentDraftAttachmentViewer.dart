@@ -319,26 +319,30 @@ class _DocumentDraftAttachmentViewState
 
     // VIDEO
     if (contentType != null && contentType!.startsWith('video/')) {
-      return Column(
-        children: [
-          AspectRatio(
-            aspectRatio: videoController!.value.aspectRatio,
-            child: VideoPlayer(videoController!),
-          ),
-          VideoProgressIndicator(videoController!, allowScrubbing: true),
-          IconButton(
-            icon: Icon(
-              videoController!.value.isPlaying ? Icons.pause : Icons.play_arrow,
+      return SingleChildScrollView(
+        child: Column(
+          children: [
+            AspectRatio(
+              aspectRatio: videoController!.value.aspectRatio,
+              child: VideoPlayer(videoController!),
             ),
-            onPressed: () {
-              setState(() {
+            VideoProgressIndicator(videoController!, allowScrubbing: true),
+            IconButton(
+              icon: Icon(
                 videoController!.value.isPlaying
-                    ? videoController!.pause()
-                    : videoController!.play();
-              });
-            },
-          ),
-        ],
+                    ? Icons.pause
+                    : Icons.play_arrow,
+              ),
+              onPressed: () {
+                setState(() {
+                  videoController!.value.isPlaying
+                      ? videoController!.pause()
+                      : videoController!.play();
+                });
+              },
+            ),
+          ],
+        ),
       );
     }
 

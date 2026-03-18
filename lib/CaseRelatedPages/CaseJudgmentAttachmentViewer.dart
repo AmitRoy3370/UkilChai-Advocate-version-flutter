@@ -29,10 +29,12 @@ class CaseJudgmentAttachmentView extends StatefulWidget {
   });
 
   @override
-  State<CaseJudgmentAttachmentView> createState() => _CaseJudgmentAttachmentViewState();
+  State<CaseJudgmentAttachmentView> createState() =>
+      _CaseJudgmentAttachmentViewState();
 }
 
-class _CaseJudgmentAttachmentViewState extends State<CaseJudgmentAttachmentView> {
+class _CaseJudgmentAttachmentViewState
+    extends State<CaseJudgmentAttachmentView> {
   Uint8List? fileBytes;
   String? contentType;
   String? tempFilePath;
@@ -117,7 +119,6 @@ class _CaseJudgmentAttachmentViewState extends State<CaseJudgmentAttachmentView>
 
   // ---------- LOAD ATTACHMENT ----------
   Future<void> loadAttachment() async {
-
     print("trying to load attachment");
 
     final url = Uri.parse(
@@ -175,7 +176,7 @@ class _CaseJudgmentAttachmentViewState extends State<CaseJudgmentAttachmentView>
     if (kIsWeb && contentType != null && contentType!.contains('pdf')) {
       ui_web.platformViewRegistry.registerViewFactory(
         'case-pdf-${widget.attachmentId}',
-            (int viewId) => html.IFrameElement()
+        (int viewId) => html.IFrameElement()
           ..src = webUrl
           ..style.border = 'none'
           ..style.width = '100%'
@@ -321,26 +322,30 @@ class _CaseJudgmentAttachmentViewState extends State<CaseJudgmentAttachmentView>
 
     // VIDEO
     if (contentType != null && contentType!.startsWith('video/')) {
-      return Column(
-        children: [
-          AspectRatio(
-            aspectRatio: videoController!.value.aspectRatio,
-            child: VideoPlayer(videoController!),
-          ),
-          VideoProgressIndicator(videoController!, allowScrubbing: true),
-          IconButton(
-            icon: Icon(
-              videoController!.value.isPlaying ? Icons.pause : Icons.play_arrow,
+      return SingleChildScrollView(
+        child: Column(
+          children: [
+            AspectRatio(
+              aspectRatio: videoController!.value.aspectRatio,
+              child: VideoPlayer(videoController!),
             ),
-            onPressed: () {
-              setState(() {
+            VideoProgressIndicator(videoController!, allowScrubbing: true),
+            IconButton(
+              icon: Icon(
                 videoController!.value.isPlaying
-                    ? videoController!.pause()
-                    : videoController!.play();
-              });
-            },
-          ),
-        ],
+                    ? Icons.pause
+                    : Icons.play_arrow,
+              ),
+              onPressed: () {
+                setState(() {
+                  videoController!.value.isPlaying
+                      ? videoController!.pause()
+                      : videoController!.play();
+                });
+              },
+            ),
+          ],
+        ),
       );
     }
 
