@@ -141,7 +141,7 @@ class _CaseRequestListPageState extends State<CaseRequestListPage> {
                             c.requestDate.toLocal().toString().split(" ").first,
                           ),
                           onTap: () async {
-                            final result = Navigator.push<bool?>(
+                            final result = await Navigator.push<bool?>(
                               context,
                               MaterialPageRoute(
                                 builder: (_) =>

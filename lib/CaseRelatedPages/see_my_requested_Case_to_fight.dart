@@ -147,7 +147,7 @@ class _SeeMyRequestedCaseToFightListPageState
                             c.requestDate.toLocal().toString().split(" ").first,
                           ),
                           onTap: () async {
-                            final result = Navigator.push(
+                            final result = await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) =>
