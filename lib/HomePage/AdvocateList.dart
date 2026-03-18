@@ -139,7 +139,7 @@ class AdvocateList extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white70,
+        color: Colors.blue.shade50,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Column(

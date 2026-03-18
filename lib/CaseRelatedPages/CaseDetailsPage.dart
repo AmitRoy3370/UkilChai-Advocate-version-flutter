@@ -348,7 +348,7 @@ class CaseDetailsPage extends StatelessWidget {
                           icon: const Icon(Icons.delete),
                           label: const Text("Delete Case"),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
+                            backgroundColor: Colors.green,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
                           onPressed: () => confirmDelete(context),
@@ -362,71 +362,95 @@ class CaseDetailsPage extends StatelessWidget {
                 const SizedBox(height: 16),
 
                 // ==================== REPLACE THIS ENTIRE BUTTON ====================
-                ElevatedButton(
-                  onPressed: () async {
-                    // Show loader immediately
-                    showDialog(
-                      context: context,
-                      barrierDismissible: false, // user can't close it
-                      builder: (ctx) => const Center(
-                        child: Card(
-                          child: Padding(
-                            padding: EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                CircularProgressIndicator(),
-                                SizedBox(height: 16),
-                                Text(
-                                  "Loading Case Tracking...\nPlease wait",
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 16),
-                                ),
-                              ],
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.track_changes),
+                    label: const Text("Case Tracking"),
+
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: const BorderSide(color: Colors.green, width: 1),
+                      ),
+                    ),
+                    onPressed: () async {
+                      // Show loader immediately
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false, // user can't close it
+                        builder: (ctx) => const Center(
+                          child: Card(
+                            child: Padding(
+                              padding: EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircularProgressIndicator(),
+                                  SizedBox(height: 16),
+                                  Text(
+                                    "Loading Case Tracking...\nPlease wait",
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: 16),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    );
+                      );
 
-                    try {
-                      SharedPreferences prefs = await SharedPreferences.getInstance();
+                      SharedPreferences prefs =
+                      await SharedPreferences.getInstance();
                       final token = prefs.getString('jwt_token') ?? '';
                       final userId = prefs.getString('userId') ?? '';
 
-                      // Pre-load everything needed (this was causing the delay)
-                      final advocateName = await getNameFromAdvocate(caseModel.advocateId);
+                      final advocateName = await getNameFromAdvocate(
+                        caseModel.advocateId,
+                      );
 
                       final nameResponse = await http.get(
-                        Uri.parse('${BASE_URL.Urls().baseURL}user/search?userId=$userId'),
+                        Uri.parse(
+                          '${BASE_URL.Urls().baseURL}user/search?userId=$userId',
+                        ),
                         headers: {
                           "content-type": "application/json",
                           "Authorization": "Bearer $token",
                         },
                       );
-                      String? myName = "";
+
+                      String? myName;
+
                       if (nameResponse.statusCode == 200) {
                         final body = jsonDecode(nameResponse.body);
                         myName = body["name"] ?? "";
                       }
 
+                      print(
+                        "userId :- $userId and case userId :- ${caseModel.userId}",
+                      );
+
                       String? advocateUserId;
+
                       final response = await http.get(
-                        Uri.parse("${BASE_URL.Urls().baseURL}advocate/${caseModel.advocateId}"),
+                        Uri.parse(
+                          "${BASE_URL.Urls().baseURL}advocate/${caseModel.advocateId}",
+                        ),
                         headers: {
                           "content-type": "application/json",
                           "Authorization": "Bearer $token",
                         },
                       );
+
                       if (response.statusCode == 200) {
                         final body = jsonDecode(response.body);
                         advocateUserId = body["userId"];
                       }
 
-                      // Close the loader dialog
                       Navigator.pop(context);
 
-                      // Now navigate (page will open instantly because data is ready)
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -443,16 +467,11 @@ class CaseDetailsPage extends StatelessWidget {
                           ),
                         ),
                       );
-                    } catch (e) {
-                      // Close loader if error
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("Error loading tracking: $e")),
-                      );
-                    }
-                  },
-                  child: const Text("Case Tracking"),
+                    },
+                  ),
                 ),
+
+                const SizedBox(height: 16),
 // ===================================================================
 
                 FutureBuilder<bool>(
@@ -489,7 +508,7 @@ class CaseDetailsPage extends StatelessWidget {
                                 icon: const Icon(Icons.gavel),
                                 label: const Text("Case Appeal"),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.deepOrange,
+                                  backgroundColor: Colors.green,
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 14,
                                   ),

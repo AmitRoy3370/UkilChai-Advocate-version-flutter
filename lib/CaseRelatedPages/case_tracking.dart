@@ -1361,7 +1361,7 @@ class _CaseTrackingState extends State<CaseTracking> {
     }
   }
 
-  void _showHearingBottomSheet(Hearing? hearing) {
+  Future<void> _showHearingBottomSheet(Hearing? hearing) async {
     final isUpdate = hearing != null;
     final nextNumber = hearings.isEmpty
         ? 1
@@ -1575,9 +1575,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                                               backgroundColor: Colors.green,
                                             ),
                                           );
-                                          Navigator.pop(
-                                            context,
-                                          ); // Close bottom sheet
 
                                           setState(() {
                                             _loadFuture = _loadAllData();
@@ -1585,8 +1582,16 @@ class _CaseTrackingState extends State<CaseTracking> {
                                             _hearingAttachmentsToDelete.clear();
                                             _hearingExistingAttachments.clear();
                                           });
+
+                                          Navigator.pop(
+                                            context,
+                                            true,
+                                          ); // Close bottom sheet
+                                        } else {
+                                          Navigator.pop(context, false);
                                         }
                                       } else {
+                                        Navigator.pop(context, false);
                                         throw Exception("Operation failed");
                                       }
                                     } catch (e) {
@@ -2076,8 +2081,12 @@ class _CaseTrackingState extends State<CaseTracking> {
                         backgroundColor: Colors.blue,
                         minimumSize: const Size(double.infinity, 48),
                       ),
-                      onPressed: () {
-                        _showHearingBottomSheet(null);
+                      onPressed: () async {
+                        await _showHearingBottomSheet(
+                          null,
+                        ); // ← Now awaits result
+
+                        setState(() => _loadFuture = _loadAllData());
                       },
                     ),
                 ],
@@ -2273,7 +2282,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                         if (widget.userId != null)
                           ElevatedButton(
                             onPressed: () {
-                              Navigator.push(
+                              final result = Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) =>
@@ -2285,6 +2294,10 @@ class _CaseTrackingState extends State<CaseTracking> {
                                       ),
                                 ),
                               );
+
+                              if (result == true) {
+                                setState(() => _loadFuture = _loadAllData());
+                              }
                             },
                             child: Text(
                               "Schedule Appeal Hearing",

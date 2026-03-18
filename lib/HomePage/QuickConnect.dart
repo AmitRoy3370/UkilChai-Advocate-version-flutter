@@ -42,11 +42,12 @@ class QuickConnect extends StatelessWidget {
 
         // 2x2 Grid of Cards
         GridView.count(
-          crossAxisCount: 2,
+          crossAxisCount: 2,                    // ← Fixed to 2 columns forever
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
           shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(),
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: 1.35,               // nice proportion
           children: [
             // 1st Tile
             QuickCard(
