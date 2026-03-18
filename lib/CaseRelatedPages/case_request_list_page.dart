@@ -140,14 +140,18 @@ class _CaseRequestListPageState extends State<CaseRequestListPage> {
                           trailing: Text(
                             c.requestDate.toLocal().toString().split(" ").first,
                           ),
-                          onTap: () {
-                            Navigator.push(
+                          onTap: () async {
+                            final result = Navigator.push<bool?>(
                               context,
                               MaterialPageRoute(
                                 builder: (_) =>
                                     CaseRequestDetailsPage(caseRequest: c),
                               ),
                             );
+
+                            if (result == true) {
+                              loadAll();
+                            }
                           },
                         ),
                       );

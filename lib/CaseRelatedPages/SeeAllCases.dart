@@ -186,13 +186,22 @@ class _SeeAllCasesPageState extends State<SeeAllCasesPage> {
                   final token = prefs.getString('jwt_token') ?? '';
                   final userId = prefs.getString('userId') ?? '';
 
-                  Navigator.push(
+                  final result = Navigator.push<bool?>(
                     context,
                     MaterialPageRoute(
                       builder: (_) =>
                           CaseDetailsPage(caseModel: c, userId: userId),
                     ),
                   );
+
+                  if(result == true) {
+
+                    setState(() {
+                      futureCases = fetchMyCases();
+                    });
+
+                  }
+
                 },
                 child: Card(
                   margin: const EdgeInsets.all(12),

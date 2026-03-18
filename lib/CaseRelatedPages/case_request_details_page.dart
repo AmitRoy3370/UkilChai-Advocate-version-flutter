@@ -185,13 +185,40 @@ class CaseRequestDetailsPage extends StatelessWidget {
                     onPressed: () async {
                       // pass logged-in advocate userId
 
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (BuildContext context) {
+                          return AlertDialog(
+                            title: Text("Accepting case..."),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircularProgressIndicator(),
+                                SizedBox(height: 16),
+                                Text("Please wait while we are accepting this case..."),
+                                SizedBox(height: 8),
+                                Text("This may take a few seconds..."),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+
                       SharedPreferences prefs =
                           await SharedPreferences.getInstance();
 
                       String? userId = prefs.getString('userId');
 
                       await service.acceptCase(caseRequest.id, userId!);
-                      Navigator.pop(context);
+
+                      if(context.mounted) {
+
+                        Navigator.pop(context, true);
+
+                      }
+
+                      Navigator.pop(context, true);
                     },
                   );
                 } else {

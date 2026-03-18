@@ -177,9 +177,36 @@ class CaseDetailsPage extends StatelessWidget {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              Navigator.pop(context);
-              deleteCase(context);
+            onPressed: () async {
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (BuildContext context) {
+                  return AlertDialog(
+                    title: Text("Deleting case..."),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text("Please wait while we are deleting this case..."),
+                        SizedBox(height: 8),
+                        Text("This may take a few seconds..."),
+                      ],
+                    ),
+                  );
+                },
+              );
+
+              await deleteCase(context);
+
+              if (context.mounted) {
+                Navigator.pop(context, true);
+              }
+
+              try {
+                Navigator.pop(context, true);
+              } catch (e) {}
             },
             child: const Text("Delete"),
           ),
