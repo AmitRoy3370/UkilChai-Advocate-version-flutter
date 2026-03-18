@@ -196,7 +196,9 @@ class CaseRequestDetailsPage extends StatelessWidget {
                               children: [
                                 CircularProgressIndicator(),
                                 SizedBox(height: 16),
-                                Text("Please wait while we are accepting this case..."),
+                                Text(
+                                  "Please wait while we are accepting this case...",
+                                ),
                                 SizedBox(height: 8),
                                 Text("This may take a few seconds..."),
                               ],
@@ -210,12 +212,29 @@ class CaseRequestDetailsPage extends StatelessWidget {
 
                       String? userId = prefs.getString('userId');
 
-                      await service.acceptCase(caseRequest.id, userId!);
+                      bool response = await service.acceptCase(
+                        caseRequest.id,
+                        userId!,
+                      );
 
-                      if(context.mounted) {
+                      if (response) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text("Case is accepted successfully..."),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text("Case is not accepted....."),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
 
+                      if (context.mounted) {
                         Navigator.pop(context, true);
-
                       }
 
                       Navigator.pop(context, true);

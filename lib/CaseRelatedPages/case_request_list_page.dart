@@ -150,7 +150,7 @@ class _CaseRequestListPageState extends State<CaseRequestListPage> {
                             );
 
                             if (result == true) {
-                              loadAll();
+                              await loadAll();
                             }
                           },
                         ),

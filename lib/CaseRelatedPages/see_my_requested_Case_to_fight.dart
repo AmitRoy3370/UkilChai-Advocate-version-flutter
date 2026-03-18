@@ -156,9 +156,8 @@ class _SeeMyRequestedCaseToFightListPageState
                             );
 
                             if (result == true) {
-                              setState(() {
-                                loadAll();
-                              });
+                              await loadAll();
+
                             }
                           },
                         ),
