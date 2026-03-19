@@ -14,6 +14,7 @@ import './AppealCasePage.dart';
 import './case_model.dart';
 import 'package:advocatechaiadvocate/Utils/BaseURL.dart' as BASE_URL;
 import 'package:advocatechaiadvocate/Auth/AuthService.dart';
+import '../CaseRelatedPages/MyCasesPage.dart';
 
 import 'AttachmentViewer.dart';
 import 'case_tracking.dart';
@@ -22,8 +23,14 @@ import 'edit_case_page.dart';
 class CaseDetailsPage extends StatelessWidget {
   final CaseModel caseModel;
   final String? userId;
+  final VoidCallback? onDeleted; // ← NEW
 
-  CaseDetailsPage({super.key, required this.caseModel, this.userId});
+  CaseDetailsPage({
+    super.key,
+    required this.caseModel,
+    this.userId,
+    this.onDeleted,
+  });
 
   final String baseUrl = "${BASE_URL.Urls().baseURL}case";
 
@@ -131,7 +138,7 @@ class CaseDetailsPage extends StatelessWidget {
   }
 
   // ---------------- DELETE CASE ----------------
-  Future<void> deleteCase(BuildContext context) async {
+  Future<bool> deleteCase(BuildContext context) async {
     final url = "$baseUrl/${caseModel.id}/${caseModel.userId}";
 
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -145,13 +152,14 @@ class CaseDetailsPage extends StatelessWidget {
           "Authorization": "Bearer $token",
         },
       );
+
       final body = jsonDecode(response.body);
 
       if (response.statusCode == 200 && body["success"] == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Case deleted successfully")),
         );
-        Navigator.pop(context, true);
+        return true; // ✅ important
       } else {
         throw body["error"] ?? "Delete failed";
       }
@@ -159,54 +167,82 @@ class CaseDetailsPage extends StatelessWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.toString())));
+      return false; // ✅ important
     }
   }
 
-  void confirmDelete(BuildContext context) {
-    showDialog(
+  Future<bool?> confirmDelete(BuildContext context) async {
+    return await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text("Delete Case"),
         content: const Text(
           "Are you sure you want to delete this case?\nThis action cannot be undone.",
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text("Cancel"),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (BuildContext context) {
-                  return AlertDialog(
-                    title: Text("Deleting case..."),
+              Navigator.pop(dialogContext, true); // close confirm dialog
+
+              // show loading
+              if (context.mounted) {
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (_) => const AlertDialog(
+                    title: Text("Deleting Case"),
                     content: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         CircularProgressIndicator(),
                         SizedBox(height: 16),
-                        Text("Please wait while we are deleting this case..."),
-                        SizedBox(height: 8),
-                        Text("This may take a few seconds..."),
+                        Text(
+                          "Deleting case...\nPlease wait",
+                          textAlign: TextAlign.center,
+                        ),
                       ],
                     ),
-                  );
-                },
-              );
+                  ),
+                );
 
-              await deleteCase(context);
+                final success = await deleteCase(context);
 
-              if (context.mounted) {
-                Navigator.pop(context, true);
+                // Close loading dialog
+                if (context.mounted) {
+                  Navigator.pop(context); // close loading
+
+                  print("result is case details page :- $success");
+
+                  if (success) {
+                    onDeleted?.call();
+                    if (context.mounted) {
+                      SharedPreferences prefs =
+                          await SharedPreferences.getInstance();
+                      final userId = prefs.getString('userId') ?? '';
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => MyCasesPage(userId: userId),
+                        ),
+                      );
+
+                      // 🔥 THIS IS THE KEY CHANGE - return true to the previous page
+                      //Navigator.pop(context, true);
+                    }
+                  } else {
+                    if (context.mounted) {
+                      // Return false if deletion failed
+                      Navigator.pop(context, false);
+                    }
+                  }
+                }
               }
-
-              try {
-                Navigator.pop(context, true);
-              } catch (e) {}
             },
             child: const Text("Delete"),
           ),
@@ -430,7 +466,7 @@ class CaseDetailsPage extends StatelessWidget {
                       );
 
                       SharedPreferences prefs =
-                      await SharedPreferences.getInstance();
+                          await SharedPreferences.getInstance();
                       final token = prefs.getString('jwt_token') ?? '';
                       final userId = prefs.getString('userId') ?? '';
 
@@ -499,8 +535,8 @@ class CaseDetailsPage extends StatelessWidget {
                 ),
 
                 const SizedBox(height: 16),
-// ===================================================================
 
+                // ===================================================================
                 FutureBuilder<bool>(
                   future: isMyCase(),
                   builder: (context, snapshot) {

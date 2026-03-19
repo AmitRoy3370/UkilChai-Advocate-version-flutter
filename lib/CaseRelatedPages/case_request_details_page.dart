@@ -217,20 +217,34 @@ class CaseRequestDetailsPage extends StatelessWidget {
                         userId!,
                       );
 
+                      // Close loading dialog - ONLY POP ONCE
+                      if (context.mounted) {
+                        Navigator.pop(context); // Close loading dialog
+                      }
+
                       if (response) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text("Case is accepted successfully..."),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Case is accepted successfully..."),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+
+                          // Pop the details page with true result
+                          Navigator.pop(context, true);
+                        }
                       } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text("Case is not accepted....."),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Case is not accepted....."),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          // Stay on details page if failed
+                          Navigator.pop(context, true);
+                        }
                       }
 
                       if (context.mounted) {

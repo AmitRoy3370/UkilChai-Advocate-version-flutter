@@ -188,7 +188,11 @@ class _MyCasesPageState extends State<MyCasesPage> {
                     context,
                     MaterialPageRoute(
                       builder: (_) =>
-                          CaseDetailsPage(caseModel: c, userId: userId),
+                          CaseDetailsPage(caseModel: c, userId: userId,onDeleted: () {
+                            setState(() {
+                              futureCases = fetchMyCases();
+                            });
+                          },),
                     ),
                   );
 
