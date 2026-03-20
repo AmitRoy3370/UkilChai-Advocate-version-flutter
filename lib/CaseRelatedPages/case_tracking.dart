@@ -495,6 +495,9 @@ class _CaseTrackingState extends State<CaseTracking> {
     required Future<T> Function() task,
     String loadingMessage = "Processing...",
   }) async {
+
+    if (!mounted) return await task();
+
     // Show loading dialog
     showDialog(
       context: context,
@@ -515,6 +518,7 @@ class _CaseTrackingState extends State<CaseTracking> {
 
     try {
       final result = await task();
+      setState(() => _loadFuture = _loadAllData());
       if (context.mounted) Navigator.pop(context); // Close loading dialog
       return result;
     } catch (e) {
@@ -3294,6 +3298,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                                 await _showLoadingDialog(
                                   loadingMessage: "Saving stage...",
                                   task: () async {
+
                                     final success = isUpdate
                                         ? await _updateCaseTracking(
                                             existing!.id!,
@@ -3304,7 +3309,11 @@ class _CaseTrackingState extends State<CaseTracking> {
                                           );
 
                                     if (success) {
-                                      await _loadAllData(); // ← LOADER STAYS UNTIL FULL REFRESH
+                                      if (context.mounted) {
+                                        setState(() {
+                                          _loadFuture = _loadAllData();
+                                        });
+                                      }
                                     }
                                   },
                                 );
@@ -3450,6 +3459,11 @@ class _CaseTrackingState extends State<CaseTracking> {
                                 'Authorization': 'Bearer ${widget.token!}',
                               },
                             );
+
+                            setState(() {
+                              _loadFuture = _loadAllData();
+                            });
+
                             return response.statusCode == 200;
                           },
                         );
@@ -3501,7 +3515,11 @@ class _CaseTrackingState extends State<CaseTracking> {
                           loadingMessage: "Deleting stage...",
                           task: () async {
                             response = await _deleteCaseTracking(ct.id!);
-                            await _loadAllData();
+
+                            setState(() {
+                              _loadFuture = _loadAllData();
+                            });
+
                           },
                         );
 
@@ -3512,7 +3530,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                               backgroundColor: Colors.green,
                             ),
                           );
-                          //setState(() => _loadFuture = _loadAllData());
+                          setState(() => _loadFuture = _loadAllData());
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
@@ -3528,7 +3546,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                               caseTrackings[index - 1].id!,
                               ct.id!,
                             );
-                            await _loadAllData();
+                            setState(() => _loadFuture = _loadAllData());
                           },
                         );
 
@@ -3540,7 +3558,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                               ct.id!,
                               caseTrackings[index + 1].id!,
                             );
-                            await _loadAllData();
+                            setState(() => _loadFuture = _loadAllData());
                           },
                         );
                         //setState(() => _loadFuture = _loadAllData());
