@@ -46,7 +46,7 @@ class ChatWebSocketService {
       await _closeConnection();
 
       // SockJS endpoint
-      final wsUrl = Uri.parse('ws://178.104.120.196:8080/ws-chat/websocket');
+      final wsUrl = Uri.parse('wss://ukilchai.abrdns.com/ws-chat/websocket');
 
       _channel = IOWebSocketChannel.connect(
         wsUrl,
