@@ -37,10 +37,16 @@ class QuestionCard extends StatefulWidget {
 class _QuestionCardState extends State<QuestionCard> {
   String currentUserId = "";
   bool isMyQuestion = false;
+  bool isAdvocate = false;
 
   PlatformFile? selectedFile; // Unified for web/mobile
   String? fileName;
   String? fileExtension;
+
+  PlatformFile? answerFile;
+  String? answerFileName;
+  String? answerFileExtension;
+  TextEditingController answerController = TextEditingController();
 
   Future<void> pickFile() async {
     final result = await FilePicker.platform.pickFiles(
@@ -60,7 +66,6 @@ class _QuestionCardState extends State<QuestionCard> {
     });
 
     print("file name :- $fileName");
-
   }
 
   @override
@@ -72,9 +77,11 @@ class _QuestionCardState extends State<QuestionCard> {
   Future<void> loadUser() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     currentUserId = prefs.getString("userId") ?? "";
+    final currentAdvocateId = prefs.getString("advocateId") ?? "";
 
     setState(() {
       isMyQuestion = currentUserId == widget.question.userId;
+      isAdvocate = currentAdvocateId.isNotEmpty;
     });
   }
 
@@ -213,6 +220,150 @@ class _QuestionCardState extends State<QuestionCard> {
     }
   }
 
+  // ==================== ANSWER QUESTION METHOD ====================
+  Future<void> answerQuestion() async {
+    if (answerController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter an answer message")),
+      );
+      return;
+    }
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text("Posting Answer"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 10),
+              Text("Posting your answer..."),
+            ],
+          ),
+        );
+      },
+    );
+
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token') ?? '';
+      final userId = prefs.getString('userId') ?? '';
+      final currentAdvocateId = prefs.getString('advocateId') ?? '';
+
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse("${baseURL.Urls().baseURL}answers/add"),
+      );
+
+      request.headers['Authorization'] = 'Bearer $token';
+
+      request.fields['advocateId'] = currentAdvocateId;
+      request.fields['message'] = answerController.text.trim();
+      request.fields['questionId'] = widget.question.id!;
+      request.fields['userId'] = userId;
+
+      if (answerFile != null) {
+        final mimeTypeStr = getMimeType(answerFileExtension);
+        http.MediaType? contentType = mimeTypeStr != null
+            ? http.MediaType.parse(mimeTypeStr)
+            : null;
+
+        if (kIsWeb) {
+          if (answerFile!.bytes != null) {
+            request.files.add(
+              http.MultipartFile.fromBytes(
+                "file",
+                answerFile!.bytes!,
+                filename: answerFile!.name,
+                contentType: contentType,
+              ),
+            );
+          }
+        } else {
+          if (answerFile!.path != null) {
+            request.files.add(
+              await http.MultipartFile.fromPath(
+                "file",
+                answerFile!.path!,
+                filename: answerFile!.name,
+                contentType: contentType,
+              ),
+            );
+          } else if (answerFile!.bytes != null) {
+            request.files.add(
+              http.MultipartFile.fromBytes(
+                "file",
+                answerFile!.bytes!,
+                filename: answerFile!.name,
+                contentType: contentType,
+              ),
+            );
+          }
+        }
+      }
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      // Close loading dialog
+      if (context.mounted) {
+        Navigator.pop(context);
+      }
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Answer posted successfully!")),
+        );
+
+        // Clear the answer form
+        answerController.clear();
+        setState(() {
+          answerFile = null;
+          answerFileName = null;
+          answerFileExtension = null;
+        });
+
+        // Refresh the page to show new answer
+        widget.refreshMethod();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed to post answer: ${response.statusCode}"),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // Close loading dialog if still open
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error posting answer: $e")));
+    }
+  }
+
+  Future<void> pickAnswerFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      withData: true,
+      type: FileType.any,
+    );
+
+    if (result == null) return;
+
+    final file = result.files.first;
+
+    setState(() {
+      answerFile = file;
+      answerFileName = file.name;
+      answerFileExtension = file.extension;
+    });
+  }
+
   void showEditDialog() {
     TextEditingController messageController = TextEditingController(
       text: widget.question.message,
@@ -288,7 +439,7 @@ class _QuestionCardState extends State<QuestionCard> {
 
                 try {
                   SharedPreferences prefs =
-                  await SharedPreferences.getInstance();
+                      await SharedPreferences.getInstance();
                   final token = prefs.getString('jwt_token') ?? '';
 
                   final uri = Uri.parse(
@@ -309,7 +460,7 @@ class _QuestionCardState extends State<QuestionCard> {
                   request.fields["questionId"] = widget.question.id!;
                   if (widget.question.attachmentId != null) {
                     request.fields["attachmentId"] =
-                    widget.question.attachmentId!;
+                        widget.question.attachmentId!;
                   } else {
                     request.fields["attachmentId"] = "";
                   }
@@ -555,6 +706,62 @@ class _QuestionCardState extends State<QuestionCard> {
                 );
               },
             ),
+            const Divider(color: Colors.grey),
+
+            /// ================= ANSWER INPUT SECTION =================
+            if (isAdvocate) ...[
+              const Divider(color: Colors.grey),
+              const Text(
+                "Your Answer",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: answerController,
+                decoration: const InputDecoration(
+                  hintText: "Write your answer here...",
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.all(12),
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: pickAnswerFile,
+                    icon: const Icon(Icons.attach_file, size: 18),
+                    label: const Text("Attach File"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey[200],
+                      foregroundColor: Colors.black,
+                    ),
+                  ),
+                  if (answerFileName != null) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        answerFileName!,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: answerQuestion,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text("Post Answer"),
+                ),
+              ),
+            ],
           ],
         ),
       ),
