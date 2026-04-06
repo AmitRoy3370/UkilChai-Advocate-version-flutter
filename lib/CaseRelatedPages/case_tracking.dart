@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../ChatRelatedPages/chat_screen.dart';
 import '../Utils/BaseURL.dart' as BASE_URL;
 import '../Utils/case_stages.dart' as CASE_STAGES;
+import '../Utils/responsive_helper.dart';
 import 'case_close_service.dart';
 import 'case_judgment_service.dart';
 import 'CaseJudgmentModel.dart';
@@ -495,7 +496,6 @@ class _CaseTrackingState extends State<CaseTracking> {
     required Future<T> Function() task,
     String loadingMessage = "Processing...",
   }) async {
-
     if (!mounted) return await task();
 
     // Show loading dialog
@@ -1694,12 +1694,21 @@ class _CaseTrackingState extends State<CaseTracking> {
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 600;
+    final padding = ResponsiveHelper.padding(context, 12);
+    final spacing = ResponsiveHelper.padding(context, 12);
+
     return Scaffold(
       backgroundColor: Colors.white70,
       appBar: AppBar(
         title: const Text("Ukil App"),
         centerTitle: true,
         backgroundColor: Colors.green,
+        toolbarHeight:
+            ResponsiveHelper.buttonHeight(context) *
+            1.2, // AppBar height responsive
       ),
       body: FutureBuilder(
         future: _loadFuture,
@@ -1709,7 +1718,7 @@ class _CaseTrackingState extends State<CaseTracking> {
           }
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(padding),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1719,9 +1728,9 @@ class _CaseTrackingState extends State<CaseTracking> {
                   child: Column(
                     children: [
                       _caseSummaryCard(),
-                      const SizedBox(height: 16),
+                      SizedBox(height: spacing),
                       _caseTrackingCard(),
-                      const SizedBox(height: 16),
+                      SizedBox(height: spacing),
                       if (caseJudgment != null)
                         _caseJudgmentTile(caseJudgment!),
                       if (caseJudgment == null)
@@ -1735,7 +1744,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                           },
                           icon: Icon(Icons.add),
                         ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: spacing),
                       if (widget.userId != null) _advocateRatingCard(),
                     ],
                   ),
@@ -1792,11 +1801,11 @@ class _CaseTrackingState extends State<CaseTracking> {
                           ),
                         ),
 
-                      const SizedBox(height: 16),
+                      SizedBox(height: spacing),
                       _hearingCard(),
-                      const SizedBox(height: 16),
+                      SizedBox(height: spacing),
                       _readStatusCard(),
-                      const SizedBox(height: 16),
+                      SizedBox(height: spacing),
                       if (widget.userId != null) _caseCloseButton(),
                       const SizedBox(height: 16),
                       if (widget.userId != null)
@@ -1839,26 +1848,81 @@ class _CaseTrackingState extends State<CaseTracking> {
     );
   }
 
+  // Responsive Button Helper
+  Widget _buildResponsiveButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+    required Color color,
+    Color textColor = Colors.white,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: ResponsiveHelper.buttonHeight(context),
+      child: ElevatedButton.icon(
+        icon: Icon(icon, size: ResponsiveHelper.iconSize(context, 18)),
+        label: Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: ResponsiveHelper.fontSize(context, 14),
+            color: textColor,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
+              ResponsiveHelper.cardRadius(context) * 0.6,
+            ),
+          ),
+        ),
+        onPressed: onPressed,
+      ),
+    );
+  }
+
   // ================= CASE SUMMARY =================
   Widget _caseSummaryCard() {
+    final padding = ResponsiveHelper.padding(context, 12);
+    final fontSize = ResponsiveHelper.fontSize(context, 18);
+    final subFontSize = ResponsiveHelper.fontSize(context, 14);
+
     return Card(
       elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(
+          ResponsiveHelper.cardRadius(context),
+        ),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(padding),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               "Case Summary",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 16),
-            Text("Case title :- ${widget.caseName}"),
-            const SizedBox(height: 8),
-            Text("Lawyer : ${widget.caseLawyer}"),
-            const SizedBox(height: 8),
-            Text("Issued Time : ${widget.issuedTime}"),
+            SizedBox(height: ResponsiveHelper.padding(context, 12)),
+            Text(
+              "Case title :- ${widget.caseName}",
+              style: TextStyle(fontSize: subFontSize),
+              overflow: TextOverflow.ellipsis,
+            ),
+            SizedBox(height: ResponsiveHelper.padding(context, 6)),
+            Text(
+              "Lawyer : ${widget.caseLawyer}",
+              style: TextStyle(fontSize: subFontSize),
+              overflow: TextOverflow.ellipsis,
+            ),
+            SizedBox(height: ResponsiveHelper.padding(context, 6)),
+            Text(
+              "Issued Time : ${widget.issuedTime}",
+              style: TextStyle(fontSize: subFontSize),
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ),
       ),
@@ -2029,6 +2093,9 @@ class _CaseTrackingState extends State<CaseTracking> {
     // Correct logic: To add the NEXT hearing, price for it must be set first
     final canAddNextHearing = _hearingPriceCount >= hearings.length + 1;
 
+    final padding = ResponsiveHelper.padding(context, 12);
+    final titleSize = ResponsiveHelper.fontSize(context, 18);
+
     print(
       "total set hearing for price :- $_hearingPriceCount and total hearing :- ${hearings.length}",
     );
@@ -2037,36 +2104,41 @@ class _CaseTrackingState extends State<CaseTracking> {
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(padding),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               "Hearings",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: titleSize,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: ResponsiveHelper.padding(context, 12)),
 
-            if (hearings.isEmpty) const Text("No hearing scheduled"),
+            if (hearings.isEmpty)
+              Text(
+                "No hearing scheduled",
+                style: TextStyle(
+                  fontSize: ResponsiveHelper.fontSize(context, 14),
+                  color: Colors.grey,
+                ),
+              ),
 
             ...hearings.map(_hearingTile),
 
-            const SizedBox(height: 16),
+            SizedBox(height: ResponsiveHelper.padding(context, 12)),
 
             if (isAdvocate)
               Column(
                 children: [
                   // 1. Hearing Price button - only when next price is NOT set
                   if (!canAddNextHearing)
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.add),
-                      label: Text(
-                        "Set Price for Hearing #${hearings.length + 1}",
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        minimumSize: const Size(double.infinity, 48),
-                      ),
+                    _buildResponsiveButton(
+                      icon: Icons.attach_money,
+                      label: "Set Price for Hearing #${hearings.length + 1}",
+                      color: Colors.green,
                       onPressed: () {
                         _showPriceEditDialog(
                           "Hearing #${hearings.length + 1}",
@@ -2078,18 +2150,12 @@ class _CaseTrackingState extends State<CaseTracking> {
 
                   // 2. Add Hearing button - only when price is already set
                   if (canAddNextHearing)
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.add),
-                      label: const Text("Add New Hearing"),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        minimumSize: const Size(double.infinity, 48),
-                      ),
+                    _buildResponsiveButton(
+                      icon: Icons.add,
+                      label: "Add New Hearing",
+                      color: Colors.green,
                       onPressed: () async {
-                        await _showHearingBottomSheet(
-                          null,
-                        ); // ← Now awaits result
-
+                        await _showHearingBottomSheet(null);
                         setState(() => _loadFuture = _loadAllData());
                       },
                     ),
@@ -2110,30 +2176,53 @@ class _CaseTrackingState extends State<CaseTracking> {
     final paymentType = "CASE_HEARING_PAYMENT"; // same type for all hearings
     // We will show the price fetched for the case, but button allows update
 
+    final titleSize = ResponsiveHelper.fontSize(context, 15);
+    final subSize = ResponsiveHelper.fontSize(context, 12);
+
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6),
+      margin: EdgeInsets.symmetric(
+        vertical: ResponsiveHelper.padding(context, 6),
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(
+          ResponsiveHelper.cardRadius(context) * 0.7,
+        ),
+      ),
 
       child: ExpansionTile(
-        leading: const Icon(Icons.gavel),
+        leading: Icon(
+          Icons.gavel,
+          size: ResponsiveHelper.iconSize(context, 20),
+        ),
         title: Row(
           children: [
-            Text("Hearing #${hearing.hearingNumber}"),
+            Text(
+              "Hearing #${hearing.hearingNumber}",
+              style: TextStyle(
+                fontSize: titleSize,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
             const SizedBox(width: 8),
             Row(
               children: [
                 if (presentUsersAdvocateId != null &&
                     widget.advocateId == presentUsersAdvocateId)
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.edit),
-                    label: const Text(""),
+                  IconButton(
+                    icon: Icon(
+                      Icons.edit,
+                      size: ResponsiveHelper.iconSize(context, 18),
+                    ),
 
                     onPressed: () async {
                       _showHearingBottomSheet(hearing);
                     },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
                 if (presentUsersAdvocateId != null &&
                     widget.advocateId == presentUsersAdvocateId)
-                  ElevatedButton.icon(
+                  IconButton(
                     onPressed: () async {
                       // Show confirmation dialog
                       final confirm = await showDialog<bool>(
@@ -2196,14 +2285,21 @@ class _CaseTrackingState extends State<CaseTracking> {
                         },
                       );
                     },
-                    icon: const Icon(Icons.delete),
-                    label: Text(""),
+                    icon: Icon(
+                      Icons.delete,
+                      size: ResponsiveHelper.iconSize(context, 18),
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
               ],
             ),
           ],
         ),
-        subtitle: Text("Date: ${_formatDate(hearing.issuedDate)}"),
+        subtitle: Text(
+          "Date: ${_formatDate(hearing.issuedDate)}",
+          style: TextStyle(fontSize: subSize),
+        ),
         trailing: hearing.attachmentsId.isNotEmpty
             ? Column(
                 children: [
@@ -2221,7 +2317,9 @@ class _CaseTrackingState extends State<CaseTracking> {
           // ---------- ATTACHMENTS ----------
           if (hearing.attachmentsId.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: EdgeInsets.symmetric(
+                horizontal: ResponsiveHelper.padding(context, 12),
+              ),
               child: Column(
                 children: hearing.attachmentsId
                     .map(
@@ -2843,17 +2941,23 @@ class _CaseTrackingState extends State<CaseTracking> {
   }
 
   Widget _advocateRatingCard() {
+
+    final padding = ResponsiveHelper.padding(context, 12);
+    final titleSize = ResponsiveHelper.fontSize(context, 18);
+    final starSize = ResponsiveHelper.iconSize(context, 30);
+
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(padding),
+
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               "Rate Advocate",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: titleSize, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: ResponsiveHelper.padding(context, 10)),
 
             Row(
               children: List.generate(5, (index) {
@@ -2861,20 +2965,27 @@ class _CaseTrackingState extends State<CaseTracking> {
                   icon: Icon(
                     index < selectedStars ? Icons.star : Icons.star_border,
                     color: Colors.amber,
-                    size: 30,
+                    size: starSize,
                   ),
                   onPressed: () {
                     setState(() {
                       selectedStars = index + 1;
                     });
                   },
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                 );
               }),
             ),
 
-            Text("Score: ${selectedStars * 20} / 100"),
+            Text("Score: ${selectedStars * 20} / 100",
+              style: TextStyle(
+                fontSize: ResponsiveHelper.fontSize(context, 14),
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,),
 
-            const SizedBox(height: 10),
+            SizedBox(height: ResponsiveHelper.padding(context, 10)),
 
             ElevatedButton(
               onPressed: selectedStars == 0 ? null : _submitRating,
@@ -3178,34 +3289,45 @@ class _CaseTrackingState extends State<CaseTracking> {
         presentUsersAdvocateId != null &&
         presentUsersAdvocateId == widget.advocateId;
 
+    final padding = ResponsiveHelper.padding(context, 12);
+    final titleSize = ResponsiveHelper.fontSize(context, 18);
+
     return Card(
       elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(
+          ResponsiveHelper.cardRadius(context),
+        ),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(padding),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              "Manage Timeline Stages",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              "Timeline Stages",
+              style: TextStyle(
+                fontSize: titleSize,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: ResponsiveHelper.padding(context, 12)),
+
             if (caseTrackings.isEmpty)
-              const Text(
+              Text(
                 "No stages added yet",
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(
+                  fontSize: ResponsiveHelper.fontSize(context, 14),
+                  color: Colors.grey,
+                ),
               ),
             ...caseTrackings.map(_caseTrackingTile),
             const SizedBox(height: 16),
             if (isAdvocate)
-              ElevatedButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text("Add New Timeline Stage"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  minimumSize: const Size(double.infinity, 48),
-                ),
+              _buildResponsiveButton(
+                icon: Icons.add,
+                label: "Add New Stage",
+                color: Colors.green,
                 onPressed: () => _showCaseTrackingBottomSheet(null),
               ),
           ],
@@ -3298,7 +3420,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                                 await _showLoadingDialog(
                                   loadingMessage: "Saving stage...",
                                   task: () async {
-
                                     final success = isUpdate
                                         ? await _updateCaseTracking(
                                             existing!.id!,
@@ -3519,7 +3640,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                             setState(() {
                               _loadFuture = _loadAllData();
                             });
-
                           },
                         );
 

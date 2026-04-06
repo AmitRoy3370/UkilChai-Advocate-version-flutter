@@ -19,10 +19,23 @@ class QuickCard extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > 600;
 
-    final double iconSize = isDesktop ? 48 : 36;
-    final double titleSize = isDesktop ? 24 : 20;
-    final double subtitleSize = isDesktop ? 15 : 13;
-    final double padding = isDesktop ? 24 : 16;
+    // মোবাইলের জন্য responsive ফন্ট সাইজ
+    final double baseScale = screenWidth / 375; // 375 হল রেফারেন্স (ছোট মোবাইল)
+
+    // বিভিন্ন স্ক্রিনের জন্য ফন্ট সাইজ ক্যালকুলেশন
+    final double iconSize = isDesktop ? 48 : (screenWidth < 375 ? 28 : 32);
+    final double titleSize = isDesktop ? 24 : (screenWidth < 375 ? 16 : 18);
+    final double subtitleSize = isDesktop ? 15 : (screenWidth < 375 ? 11 : 12);
+    final double padding = isDesktop ? 24 : (screenWidth < 375 ? 12 : 14);
+    final double iconContainerPadding = screenWidth < 375 ? 8 : 10;
+
+    // ডায়নামিক হাইট লাইন (মোবাইলের জন্য আরও কম্প্যাক্ট)
+    final double titleHeight = isDesktop ? 1.3 : 1.2;
+    final double subtitleHeight = isDesktop ? 1.4 : 1.35;
+
+    // রেস্পন্সিভ স্পেসিং
+    final double iconTitleSpacing = screenWidth < 375 ? 10 : 12;
+    final double titleSubtitleSpacing = screenWidth < 375 ? 4 : 5;
 
     return Material(
       color: Colors.transparent,
@@ -51,7 +64,7 @@ class QuickCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: EdgeInsets.all(iconContainerPadding),
                 decoration: BoxDecoration(
                   color: Colors.green.shade50,
                   shape: BoxShape.circle,
@@ -62,23 +75,30 @@ class QuickCard extends StatelessWidget {
                   color: Colors.green.shade700,
                 ),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: iconTitleSpacing),
               Text(
                 title,
                 style: TextStyle(
                   fontSize: titleSize,
                   fontWeight: FontWeight.bold,
                   color: Colors.black87,
+                  height: titleHeight,
+                  // ছোট স্ক্রিনে টেক্সট ওভারফ্লো রোধ
+                  overflow: TextOverflow.ellipsis,
                 ),
+                maxLines: 2,
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: titleSubtitleSpacing),
               Text(
                 subtitle,
                 style: TextStyle(
                   fontSize: subtitleSize,
                   color: Colors.grey.shade700,
-                  height: 1.3,
+                  height: subtitleHeight,
+                  letterSpacing: screenWidth < 375 ? 0.2 : 0.3, // ছোট স্ক্রিনে আরও রিডেবল
                 ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
