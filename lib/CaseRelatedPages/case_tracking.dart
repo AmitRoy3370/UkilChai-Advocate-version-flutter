@@ -982,7 +982,14 @@ class _CaseTrackingState extends State<CaseTracking> {
                         height: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Text(isUpdate ? "Update" : "Add"),
+                    : Text(
+                        isUpdate ? "Update" : "Add",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
               ),
             ],
           );
@@ -1692,7 +1699,105 @@ class _CaseTrackingState extends State<CaseTracking> {
     }
   }
 
-  @override
+  // ==================== NEW RESPONSIVE HELPERS ====================
+  Widget _buildMainLeftContent(double spacing) {
+    return Column(
+      children: [
+        _caseSummaryCard(),
+        SizedBox(height: spacing),
+        _caseTrackingCard(),
+        SizedBox(height: spacing),
+        if (caseJudgment != null)
+          _caseJudgmentTile(caseJudgment!)
+        else
+          IconButton(
+            onPressed: () async {
+              _showCaseJudgmentDialog();
+            },
+            icon: const Icon(Icons.add),
+          ),
+        SizedBox(height: spacing),
+        if (widget.userId != null) _advocateRatingCard(),
+      ],
+    );
+  }
+
+  Widget _buildMainRightContent(double spacing) {
+    return Column(
+      children: [
+        if (documentDrafts != null)
+          _documentDraftTile(documentDrafts!)
+        else
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.description, color: Colors.grey),
+              title: const Text("Document Draft"),
+              subtitle: const Text("Not created yet"),
+            ),
+          ),
+        const SizedBox(height: 16),
+        if (presentUsersAdvocateId != null &&
+            widget.advocateId == presentUsersAdvocateId)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: ElevatedButton.icon(
+              icon: Icon(
+                documentDrafts == null ? Icons.add : Icons.edit,
+                size: 20,
+              ),
+              label: Text(
+                documentDrafts == null
+                    ? "Add Document Draft"
+                    : "Update Document Draft",
+                style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 24),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                minimumSize: const Size(double.infinity, 48),
+              ),
+              onPressed: _showDocumentDraftBottomSheet,
+            ),
+          ),
+        SizedBox(height: spacing),
+        _hearingCard(),
+        SizedBox(height: spacing),
+        _readStatusCard(),
+        SizedBox(height: spacing),
+        if (widget.userId != null) _caseCloseButton(),
+        const SizedBox(height: 16),
+        if (widget.userId != null)
+          ElevatedButton(
+            onPressed: () {
+              print(
+                "in case tracking other user :- ${widget.advocateUserId} and name :- ${widget.caseLawyer} and my name :- ${widget.userName} and my id :- ${widget.userId}",
+              );
+
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ChatScreen(
+                    otherUser: widget.advocateUserId,
+                    othersName: widget.caseLawyer,
+                    myName: widget.userName,
+                    currentUser: widget.userId,
+                  ),
+                ),
+              );
+            },
+            child: Text(
+              "Chat with ${widget.caseLawyer}",
+              style: TextStyle(
+                color: Colors.black,
+                fontSize: ResponsiveHelper.fontSize(context, 18),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /*@override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
@@ -1842,6 +1947,56 @@ class _CaseTrackingState extends State<CaseTracking> {
                 ),
               ],
             ),
+          );
+        },
+      ),
+    );
+  }*/
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 600; // Mobile / small tablet
+    final padding = ResponsiveHelper.padding(context, 12);
+    final spacing = ResponsiveHelper.padding(context, 12);
+
+    return Scaffold(
+      backgroundColor: Colors.white70,
+      appBar: AppBar(
+        title: const Text("Ukil App"),
+        centerTitle: true,
+        backgroundColor: Colors.green,
+        toolbarHeight: ResponsiveHelper.buttonHeight(context) * 1.2,
+      ),
+      body: FutureBuilder(
+        future: _loadFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          // ================= RESPONSIVE LAYOUT =================
+          return SingleChildScrollView(
+            padding: EdgeInsets.all(padding),
+            child: isSmallScreen
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildMainLeftContent(spacing),
+                      SizedBox(height: spacing * 2),
+                      _buildMainRightContent(spacing),
+                    ],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // LEFT SIDE (Timeline, Summary, Judgment, Rating)
+                      Expanded(flex: 2, child: _buildMainLeftContent(spacing)),
+                      const SizedBox(width: 16),
+                      // RIGHT SIDE (Draft, Hearings, Read Status, Close, Chat)
+                      Expanded(flex: 1, child: _buildMainRightContent(spacing)),
+                    ],
+                  ),
           );
         },
       ),
@@ -2941,7 +3096,6 @@ class _CaseTrackingState extends State<CaseTracking> {
   }
 
   Widget _advocateRatingCard() {
-
     final padding = ResponsiveHelper.padding(context, 12);
     final titleSize = ResponsiveHelper.fontSize(context, 18);
     final starSize = ResponsiveHelper.iconSize(context, 30);
@@ -2955,7 +3109,10 @@ class _CaseTrackingState extends State<CaseTracking> {
           children: [
             Text(
               "Rate Advocate",
-              style: TextStyle(fontSize: titleSize, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: titleSize,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             SizedBox(height: ResponsiveHelper.padding(context, 10)),
 
@@ -2978,12 +3135,14 @@ class _CaseTrackingState extends State<CaseTracking> {
               }),
             ),
 
-            Text("Score: ${selectedStars * 20} / 100",
+            Text(
+              "Score: ${selectedStars * 20} / 100",
               style: TextStyle(
                 fontSize: ResponsiveHelper.fontSize(context, 14),
                 fontWeight: FontWeight.w500,
               ),
-              textAlign: TextAlign.center,),
+              textAlign: TextAlign.center,
+            ),
 
             SizedBox(height: ResponsiveHelper.padding(context, 10)),
 
@@ -3030,7 +3189,7 @@ class _CaseTrackingState extends State<CaseTracking> {
             if (isAdvocate)
               ElevatedButton.icon(
                 icon: const Icon(Icons.add),
-                label: const Text("Add New Read Status"),
+                label: const Text("Add New Read Status", style: TextStyle(color: Colors.white, fontSize: 24),),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
                   minimumSize: const Size(double.infinity, 48),

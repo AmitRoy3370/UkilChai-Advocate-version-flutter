@@ -1,4 +1,3 @@
-// আপনার ফাইলের শুরুতে (import এর পরে) এই ক্লাসটি যোগ করুন
 import 'package:flutter/cupertino.dart';
 
 class ResponsiveHelper {
@@ -11,7 +10,6 @@ class ResponsiveHelper {
   }
 
   static double fontSize(BuildContext context, double size) {
-    // বেস স্ক্রিন 400 width ধরে fontSize adjust করবে
     double scale = MediaQuery.of(context).size.width / 400;
     return size * scale.clamp(0.8, 1.5);
   }
@@ -27,7 +25,7 @@ class ResponsiveHelper {
   }
 
   static double buttonHeight(BuildContext context) {
-    return MediaQuery.of(context).size.height * 0.065; // স্ক্রিনের 6.5%
+    return MediaQuery.of(context).size.height * 0.065;
   }
 
   static double cardRadius(BuildContext context) {
