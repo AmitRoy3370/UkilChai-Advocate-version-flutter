@@ -1,5 +1,125 @@
 class CaseStages {
 
+  static final Map<String, String> stageShortNames = {
+    "CASE_REQUEST_PAYMENT": "Request",
+    "CASE_DOCUMENT_DRAFT_PAYMENT": "Doc Draft",
+    "CASE_HEARING_PAYMENT": "Hearing",
+    "CASE_APPEAL_PAYMENT": "Appeal",
+    "CASE_HEARING_APPEAL_PAYMENT": "Appeal Hearing",
+    "CASE_CLOSING_PAYMENT": "Closing",
+    "CASE_JUDGMENT_PAYMENT": "Judgment",
+    "PAPER_FINALIZE_PAYMENT": "Finalize",
+    "CASE_FILING_PAYMENT": "Filing",
+
+    // Consultation & Initial Work
+    "CASE_INITIAL_CONSULTATION_PAYMENT": "Consult",
+    "CASE_LEGAL_ADVICE_PAYMENT": "Advice",
+    "CASE_CASE_REVIEW_PAYMENT": "Review",
+    "CASE_CASE_EVALUATION_PAYMENT": "Evaluate",
+    "CASE_CASE_STRATEGY_PAYMENT": "Strategy",
+    "CASE_CASE_PREPARATION_PAYMENT": "Prep",
+    "CASE_EVIDENCE_COLLECTION_PAYMENT": "Evidence",
+    "CASE_DOCUMENT_REVIEW_PAYMENT": "Doc Review",
+    "CASE_LEGAL_RESEARCH_PAYMENT": "Research",
+    "CASE_CASE_ANALYSIS_PAYMENT": "Analysis",
+
+    // Documentation Work
+    "CASE_DOCUMENT_PREPARATION_PAYMENT": "Doc Prep",
+    "CASE_DOCUMENT_CORRECTION_PAYMENT": "Correction",
+    "CASE_DOCUMENT_TRANSLATION_PAYMENT": "Translate",
+    "CASE_DOCUMENT_NOTARIZATION_PAYMENT": "Notary",
+    "CASE_DOCUMENT_VERIFICATION_PAYMENT": "Verify",
+    "CASE_DOCUMENT_SUBMISSION_PAYMENT": "Submit",
+    "CASE_DOCUMENT_RESUBMISSION_PAYMENT": "Resubmit",
+    "CASE_DOCUMENT_UPDATION_PAYMENT": "Update",
+    "CASE_DOCUMENT_VALIDATION_PAYMENT": "Validate",
+    "CASE_DOCUMENT_AUTHENTICATION_PAYMENT": "Auth",
+
+    // Filing & Registration
+    "CASE_REGISTRATION_PAYMENT": "Register",
+    "CASE_CASE_ACCEPTANCE_PAYMENT": "Accept",
+    "CASE_CASE_ADMISSION_PAYMENT": "Admit",
+    "CASE_CASE_PROCESSING_PAYMENT": "Process",
+    "CASE_CASE_LISTING_PAYMENT": "List",
+    "CASE_CASE_SCHEDULING_PAYMENT": "Schedule",
+    "CASE_CASE_RELISTING_PAYMENT": "Relist",
+    "CASE_CASE_REOPENING_PAYMENT": "Reopen",
+    "CASE_CASE_TRANSFER_PAYMENT": "Transfer",
+    "CASE_CASE_MERGE_PAYMENT": "Merge",
+
+    // Evidence & Investigation
+    "CASE_EVIDENCE_PRESENTATION_PAYMENT": "Present Evidence",
+    "CASE_EVIDENCE_VERIFICATION_PAYMENT": "Verify Evidence",
+    "CASE_EVIDENCE_CHALLENGE_PAYMENT": "Challenge",
+    "CASE_EVIDENCE_ADMISSION_PAYMENT": "Admit Evidence",
+    "CASE_EVIDENCE_REVIEW_PAYMENT": "Evidence Review",
+    "CASE_WITNESS_PREPARATION_PAYMENT": "Witness Prep",
+    "CASE_WITNESS_EXAMINATION_PAYMENT": "Examine",
+    "CASE_WITNESS_CROSS_EXAMINATION_PAYMENT": "Cross Exam",
+    "CASE_EXPERT_OPINION_PAYMENT": "Expert",
+    "CASE_INVESTIGATION_PAYMENT": "Investigate",
+
+    // Court Proceedings
+    "CASE_PRE_HEARING_PAYMENT": "Pre Hearing",
+    "CASE_INTERIM_HEARING_PAYMENT": "Interim",
+    "CASE_ARGUMENT_HEARING_PAYMENT": "Argument",
+    "CASE_FINAL_ARGUMENT_PAYMENT": "Final Arg",
+    "CASE_HEARING_RESCHEDULE_PAYMENT": "Reschedule",
+    "CASE_HEARING_EXTENSION_PAYMENT": "Extension",
+    "CASE_HEARING_PREPARATION_PAYMENT": "Hearing Prep",
+    "CASE_HEARING_ATTENDANCE_PAYMENT": "Attendance",
+    "CASE_HEARING_DOCUMENT_PAYMENT": "Hearing Doc",
+    "CASE_HEARING_REVIEW_PAYMENT": "Hearing Review",
+
+    // Appeals & Review
+    "CASE_APPEAL_PREPARATION_PAYMENT": "Appeal Prep",
+    "CASE_APPEAL_DOCUMENT_PAYMENT": "Appeal Doc",
+    "CASE_APPEAL_ARGUMENT_PAYMENT": "Appeal Arg",
+    "CASE_APPEAL_REVIEW_PAYMENT": "Appeal Review",
+    "CASE_APPEAL_HEARING_PAYMENT": "Appeal Hearing",
+    "CASE_SECOND_APPEAL_PAYMENT": "2nd Appeal",
+    "CASE_HIGH_COURT_APPEAL_PAYMENT": "High Court",
+    "CASE_SUPREME_COURT_APPEAL_PAYMENT": "Supreme",
+    "CASE_REVIEW_PETITION_PAYMENT": "Review Pet",
+    "CASE_REVISION_PETITION_PAYMENT": "Revision Pet",
+
+    // Settlement & Negotiation
+    "CASE_MEDIATION_PAYMENT": "Mediate",
+    "CASE_ARBITRATION_PAYMENT": "Arbitrate",
+    "CASE_SETTLEMENT_NEGOTIATION_PAYMENT": "Negotiate",
+    "CASE_OUT_OF_COURT_SETTLEMENT_PAYMENT": "Out of Court",
+    "CASE_COMPROMISE_PAYMENT": "Compromise",
+    "CASE_SETTLEMENT_DOCUMENT_PAYMENT": "Settle Doc",
+    "CASE_SETTLEMENT_REVIEW_PAYMENT": "Settle Review",
+    "CASE_SETTLEMENT_FINALIZATION_PAYMENT": "Final Settle",
+    "CASE_COMPENSATION_CLAIM_PAYMENT": "Claim",
+    "CASE_COMPENSATION_APPROVAL_PAYMENT": "Approve Claim",
+
+    // Judgment & Post Judgment
+    "CASE_JUDGMENT_PREPARATION_PAYMENT": "Judgment Prep",
+    "CASE_JUDGMENT_REVIEW_PAYMENT": "Judgment Review",
+    "CASE_JUDGMENT_COPY_PAYMENT": "Judgment Copy",
+    "CASE_JUDGMENT_CERTIFICATION_PAYMENT": "Certify",
+    "CASE_JUDGMENT_EXECUTION_PAYMENT": "Execute",
+    "CASE_DECREE_PREPARATION_PAYMENT": "Decree Prep",
+    "CASE_DECREE_EXECUTION_PAYMENT": "Decree Exec",
+    "CASE_ORDER_COPY_PAYMENT": "Order Copy",
+    "CASE_ORDER_CERTIFICATION_PAYMENT": "Order Cert",
+    "CASE_ORDER_EXECUTION_PAYMENT": "Order Exec",
+
+    // Closing & Archival
+    "CASE_FINAL_SETTLEMENT_PAYMENT": "Final Settle",
+    "CASE_CASE_COMPLETION_PAYMENT": "Complete",
+    "CASE_CASE_ARCHIVE_PAYMENT": "Archive",
+    "CASE_CASE_RECORD_PAYMENT": "Record",
+    "CASE_CASE_DOCUMENT_STORAGE_PAYMENT": "Storage",
+    "CASE_CASE_HISTORY_PREPARATION_PAYMENT": "History",
+    "CASE_CASE_SUMMARY_PAYMENT": "Summary",
+    "CASE_CASE_CLOSURE_REPORT_PAYMENT": "Closure",
+    "CASE_FINAL_LEGAL_ADVICE_PAYMENT": "Final Advice",
+    "CASE_FINAL_DOCUMENT_HANDOVER_PAYMENT": "Handover"
+  };
+
   List<String> allCasePaymentStages = [
 
     "CASE_REQUEST_PAYMENT",
@@ -120,5 +240,31 @@ class CaseStages {
     "CASE_FINAL_LEGAL_ADVICE_PAYMENT",
     "CASE_FINAL_DOCUMENT_HANDOVER_PAYMENT"
   ];
+
+  // শর্ট নাম পাওয়ার জন্য মেথড
+  static String getShortName(String stageKey) {
+    return stageShortNames[stageKey] ?? _defaultFormat(stageKey);
+  }
+
+  // ডিফল্ট ফরম্যাট (যদি শর্টকাট না থাকে)
+  static String _defaultFormat(String stage) {
+    String name = stage.replaceAll("CASE_", "").replaceAll("_PAYMENT", "");
+    String formatted = name
+        .split("_")
+        .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
+        .join(" ");
+
+    // অতিরিক্ত ছোট করা
+    if (formatted.length > 18) {
+      List<String> words = formatted.split(' ');
+      if (words.length > 2) {
+        return "${words[0]} ${words[1]}";
+      }
+      if (formatted.length > 22) {
+        return formatted.substring(0, 20) + '...';
+      }
+    }
+    return formatted;
+  }
 
 }

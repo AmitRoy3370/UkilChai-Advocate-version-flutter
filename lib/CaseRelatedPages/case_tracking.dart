@@ -417,11 +417,19 @@ class _CaseTrackingState extends State<CaseTracking> {
   }
 
   String _prettyStageName(String stage) {
+    String shortName = CASE_STAGES.CaseStages.getShortName(stage);
+
+    if (shortName != stage && shortName.length < 25) {
+      return shortName;
+    }
+
     String name = stage.replaceAll("CASE_", "").replaceAll("_PAYMENT", "");
-    return name
+    String formatted = name
         .split("_")
         .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
         .join(" ");
+
+    return formatted;
   }
 
   // ==================== READ STATUS API HELPERS (NEW) ====================
@@ -1825,26 +1833,37 @@ class _CaseTrackingState extends State<CaseTracking> {
 
           // ================= RESPONSIVE LAYOUT =================
           return SingleChildScrollView(
-            padding: EdgeInsets.all(padding),
-            child: isSmallScreen
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildMainLeftContent(spacing),
-                      SizedBox(height: spacing * 2),
-                      _buildMainRightContent(spacing),
-                    ],
-                  )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // LEFT SIDE (Timeline, Summary, Judgment, Rating)
-                      Expanded(flex: 2, child: _buildMainLeftContent(spacing)),
-                      const SizedBox(width: 16),
-                      // RIGHT SIDE (Draft, Hearings, Read Status, Close, Chat)
-                      Expanded(flex: 1, child: _buildMainRightContent(spacing)),
-                    ],
-                  ),
+            physics: const AlwaysScrollableScrollPhysics(),
+            scrollDirection: Axis.vertical,
+            child: SingleChildScrollView(
+              padding: EdgeInsets.all(padding),
+              scrollDirection: Axis.horizontal,
+              child: isSmallScreen
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildMainLeftContent(spacing),
+                        SizedBox(height: spacing * 2),
+                        _buildMainRightContent(spacing),
+                      ],
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // LEFT SIDE (Timeline, Summary, Judgment, Rating)
+                        Expanded(
+                          flex: 2,
+                          child: _buildMainLeftContent(spacing),
+                        ),
+                        const SizedBox(width: 16),
+                        // RIGHT SIDE (Draft, Hearings, Read Status, Close, Chat)
+                        Expanded(
+                          flex: 1,
+                          child: _buildMainRightContent(spacing),
+                        ),
+                      ],
+                    ),
+            ),
           );
         },
       ),
@@ -3508,139 +3527,154 @@ class _CaseTrackingState extends State<CaseTracking> {
     final currentPrice = currentPayment?.price ?? 0;
 
     final screenWidth = MediaQuery.of(context).size.width;
-    final isVerySmallScreen = screenWidth < 380;
     final isSmallMobile = screenWidth < 480;
+    final isVerySmall = screenWidth < 380;
 
-    // Responsive sizes
-    final iconSize = ResponsiveHelper.iconSize(context, 18);
-    final priceFontSize = ResponsiveHelper.fontSize(context, 11);
-    final titleFontSize = ResponsiveHelper.fontSize(context, 13);
-    final subtitleFontSize = ResponsiveHelper.fontSize(context, 11);
+    final titleSize = isVerySmall ? 12 : (isSmallMobile ? 13 : 14);
+    final subtitleSize = isVerySmall ? 10 : (isSmallMobile ? 11 : 12);
+
+    String stageName = _prettyStageName(ct.caseStage);
+    if (isVerySmall && stageName.length > 20) {
+      stageName = _prettyStageName(stageName);
+    } else if (isSmallMobile && stageName.length > 28) {
+      stageName = stageName.substring(0, 25) + '...';
+    }
 
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      child: ListTile(
-        leading: const Icon(Icons.timeline, color: Colors.deepPurple),
-        title: Text(
-          _prettyStageName(ct.caseStage),
-          style: const TextStyle(fontWeight: FontWeight.w600),
-          maxLines: 2, // ← Allows wrapping
-          softWrap: true, // ← Prevents one-letter-per-line
-          overflow: TextOverflow.ellipsis,
+      margin: EdgeInsets.symmetric(vertical: isVerySmall ? 4 : 6),
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(isVerySmall ? 8 : 10),
+      ),
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(
+          vertical: isVerySmall ? 8 : 10,
+          horizontal: isVerySmall ? 10 : 12,
         ),
-        subtitle: Text(
-          "Stage #${ct.stageNumber}",
-          maxLines: 2, // ← Allows wrapping
-          softWrap: true, // ← Prevents one-letter-per-line
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: isAdvocate
-            ? Row(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // আইকন
+            Icon(
+              Icons.timeline,
+              color: Colors.deepPurple,
+              size: isVerySmall ? 16 : 18,
+            ),
+            SizedBox(width: isVerySmall ? 8 : 12),
+
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                  Text(
+                    stageName,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: titleSize * 1.0,
+                      height: 1.3,
                     ),
-                    decoration: BoxDecoration(
-                      color: currentPrice > 0
-                          ? Colors.green.withOpacity(0.1)
-                          : Colors.grey.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      currentPrice > 0
-                          ? "৳${currentPrice.toStringAsFixed(0)}"
-                          : "No price",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: currentPrice > 0 ? Colors.green : Colors.grey,
-                        fontSize: priceFontSize,
-                      ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: true,
+                  ),
+                  SizedBox(height: isVerySmall ? 2 : 4),
+                  Text(
+                    "Stage #${ct.stageNumber}",
+                    style: TextStyle(
+                      fontSize: subtitleSize * 1.0,
+                      color: Colors.grey.shade600,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                ],
+              ),
+            ),
 
-                  // Edit Price
+            if (!isAdvocate && currentPrice > 0)
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isVerySmall ? 4 : 6,
+                  vertical: isVerySmall ? 2 : 3,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  "৳${currentPrice.toStringAsFixed(0)}",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                    fontSize: subtitleSize - 1,
+                  ),
+                ),
+              ),
+
+            if (isAdvocate)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (currentPrice > 0)
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isVerySmall ? 4 : 6,
+                        vertical: isVerySmall ? 2 : 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        "৳${currentPrice.toStringAsFixed(0)}",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                          fontSize: subtitleSize - 1,
+                        ),
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isVerySmall ? 4 : 6,
+                        vertical: isVerySmall ? 2 : 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        isVerySmall ? "Set" : "Set",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          color: Colors.orange.shade700,
+                          fontSize: subtitleSize - 1,
+                        ),
+                      ),
+                    ),
+
                   IconButton(
-                    icon: Icon(Icons.edit, color: Colors.green, size: iconSize),
+                    icon: Icon(
+                      Icons.edit,
+                      color: Colors.green,
+                      size: isVerySmall ? 16 : 18,
+                    ),
                     onPressed: () => _showPriceEditDialog(
-                      _prettyStageName(ct.caseStage),
+                      stageName,
                       ct.caseStage,
                       currentPayment == null,
                     ),
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                    constraints: BoxConstraints(
+                      minWidth: isVerySmall ? 28 : 32,
+                      minHeight: isVerySmall ? 28 : 32,
+                    ),
+                    splashRadius: 16,
                   ),
 
-                  // Delete Price
-                  if (currentPrice > 0)
-                    IconButton(
-                      icon: Icon(
-                        Icons.delete,
-                        color: Colors.red,
-                        size: iconSize,
-                      ),
-                      onPressed: () async {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text("Delete Price"),
-                            content: const Text("Delete this stage price?"),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx, false),
-                                child: const Text("Cancel"),
-                              ),
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                ),
-                                onPressed: () => Navigator.pop(ctx, true),
-                                child: const Text("Delete"),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (confirm != true) return;
-
-                        await _showLoadingDialog(
-                          loadingMessage: "Deleting price...",
-                          task: () async {
-                            final prefs = await SharedPreferences.getInstance();
-                            final userId =
-                                prefs.getString('userId') ??
-                                widget.advocateUserId;
-                            final response = await http.delete(
-                              Uri.parse(
-                                "${BASE_URL.Urls().baseURL}payment/${currentPayment!.id}/$userId",
-                              ),
-                              headers: {
-                                'Authorization': 'Bearer ${widget.token!}',
-                              },
-                            );
-
-                            setState(() {
-                              _loadFuture = _loadAllData();
-                            });
-
-                            return response.statusCode == 200;
-                          },
-                        );
-
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("✓ Price deleted"),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                          setState(() => _loadFuture = _loadAllData());
-                        }
-                      },
-                    ),
                   PopupMenuButton<String>(
+                    icon: Icon(Icons.more_vert, size: isVerySmall ? 16 : 18),
                     onSelected: (v) async {
                       if (v == "edit") {
                         _showCaseTrackingBottomSheet(ct);
@@ -3648,59 +3682,61 @@ class _CaseTrackingState extends State<CaseTracking> {
                         final confirm = await showDialog<bool>(
                           context: context,
                           builder: (context) => AlertDialog(
-                            title: const Text("Delete Timeline Stage"),
-                            content: const Text(
-                              "Are you sure you want to delete this stage?",
+                            title: Text(
+                              "Delete Stage",
+                              style: TextStyle(fontSize: titleSize + 2),
+                            ),
+                            content: Text(
+                              "Delete \"$stageName\"?",
+                              style: TextStyle(fontSize: subtitleSize * 1.0),
                             ),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(context, false),
-                                child: const Text("Cancel"),
+                                child: Text(
+                                  "Cancel",
+                                  style: TextStyle(
+                                    fontSize: subtitleSize * 1.0,
+                                  ),
+                                ),
                               ),
                               ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.red,
                                 ),
                                 onPressed: () => Navigator.pop(context, true),
-                                child: const Text("Delete"),
+                                child: Text(
+                                  "Delete",
+                                  style: TextStyle(
+                                    fontSize: subtitleSize * 1.0,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
                         );
-
                         if (confirm != true) return;
-
-                        bool response = false;
 
                         await _showLoadingDialog(
                           loadingMessage: "Deleting stage...",
                           task: () async {
-                            response = await _deleteCaseTracking(ct.id!);
-
-                            setState(() {
-                              _loadFuture = _loadAllData();
-                            });
+                            final response = await _deleteCaseTracking(ct.id!);
+                            setState(() => _loadFuture = _loadAllData());
+                            return response;
                           },
                         );
 
-                        if (context.mounted || response) {
+                        if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text("✓ Stage deleted successfully"),
+                              content: Text("✓ Stage deleted"),
                               backgroundColor: Colors.green,
-                            ),
-                          );
-                          setState(() => _loadFuture = _loadAllData());
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("✓ Stage not deleted"),
-                              backgroundColor: Colors.red,
                             ),
                           );
                         }
                       } else if (v == "up" && canUp) {
                         await _showLoadingDialog(
+                          loadingMessage: "Moving stage up...",
                           task: () async {
                             await _swapCaseTrackings(
                               caseTrackings[index - 1].id!,
@@ -3709,10 +3745,9 @@ class _CaseTrackingState extends State<CaseTracking> {
                             setState(() => _loadFuture = _loadAllData());
                           },
                         );
-
-                        //setState(() => _loadFuture = _loadAllData());
                       } else if (v == "down" && canDown) {
                         await _showLoadingDialog(
+                          loadingMessage: "Moving stage down...",
                           task: () async {
                             await _swapCaseTrackings(
                               ct.id!,
@@ -3721,7 +3756,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                             setState(() => _loadFuture = _loadAllData());
                           },
                         );
-                        //setState(() => _loadFuture = _loadAllData());
                       }
                     },
                     itemBuilder: (_) => [
@@ -3743,17 +3777,9 @@ class _CaseTrackingState extends State<CaseTracking> {
                     ],
                   ),
                 ],
-              )
-            : Text(
-                currentPrice > 0
-                    ? "৳${currentPrice.toStringAsFixed(0)}"
-                    : "No price",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: currentPrice > 0 ? Colors.green : Colors.grey,
-                  fontSize: priceFontSize,
-                ),
               ),
+          ],
+        ),
       ),
     );
   }
