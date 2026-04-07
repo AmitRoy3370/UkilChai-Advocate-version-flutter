@@ -1749,7 +1749,11 @@ class _CaseTrackingState extends State<CaseTracking> {
                 documentDrafts == null
                     ? "Add Document Draft"
                     : "Update Document Draft",
-                style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white, fontSize: 24),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  fontSize: 24,
+                ),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
@@ -1796,162 +1800,6 @@ class _CaseTrackingState extends State<CaseTracking> {
       ],
     );
   }
-
-  /*@override
-  Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 600;
-    final padding = ResponsiveHelper.padding(context, 12);
-    final spacing = ResponsiveHelper.padding(context, 12);
-
-    return Scaffold(
-      backgroundColor: Colors.white70,
-      appBar: AppBar(
-        title: const Text("Ukil App"),
-        centerTitle: true,
-        backgroundColor: Colors.green,
-        toolbarHeight:
-            ResponsiveHelper.buttonHeight(context) *
-            1.2, // AppBar height responsive
-      ),
-      body: FutureBuilder(
-        future: _loadFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          return SingleChildScrollView(
-            padding: EdgeInsets.all(padding),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ================= LEFT SIDE =================
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    children: [
-                      _caseSummaryCard(),
-                      SizedBox(height: spacing),
-                      _caseTrackingCard(),
-                      SizedBox(height: spacing),
-                      if (caseJudgment != null)
-                        _caseJudgmentTile(caseJudgment!),
-                      if (caseJudgment == null)
-                        IconButton(
-                          onPressed: () async {
-                            _showCaseJudgmentDialog();
-
-                            setState(() {
-                              //_loadAllData();
-                            });
-                          },
-                          icon: Icon(Icons.add),
-                        ),
-                      SizedBox(height: spacing),
-                      if (widget.userId != null) _advocateRatingCard(),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(width: 16),
-
-                // ================= RIGHT SIDE (HEARINGS) =================
-                Expanded(
-                  flex: 1,
-                  child: Column(
-                    children: [
-                      if (documentDrafts != null)
-                        _documentDraftTile(documentDrafts!)
-                      else
-                        Card(
-                          child: ListTile(
-                            leading: Icon(
-                              Icons.description,
-                              color: Colors.grey,
-                            ),
-                            title: Text("Document Draft"),
-                            subtitle: Text("Not created yet"),
-                          ),
-                        ),
-                      const SizedBox(height: 16),
-
-                      if (presentUsersAdvocateId != null &&
-                          widget.advocateId == presentUsersAdvocateId)
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: ElevatedButton.icon(
-                            icon: Icon(
-                              documentDrafts == null ? Icons.add : Icons.edit,
-                              size: 20,
-                            ),
-                            label: Text(
-                              documentDrafts == null
-                                  ? "Add Document Draft"
-                                  : "Update Document Draft",
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: documentDrafts == null
-                                  ? Colors.green
-                                  : Colors.green,
-                              minimumSize: const Size(double.infinity, 48),
-                            ),
-                            onPressed: () {
-                              _showDocumentDraftBottomSheet();
-                            },
-                          ),
-                        ),
-
-                      SizedBox(height: spacing),
-                      _hearingCard(),
-                      SizedBox(height: spacing),
-                      _readStatusCard(),
-                      SizedBox(height: spacing),
-                      if (widget.userId != null) _caseCloseButton(),
-                      const SizedBox(height: 16),
-                      if (widget.userId != null)
-                        ElevatedButton(
-                          onPressed: () {
-                            print(
-                              "in case tracking other user :- ${widget.advocateUserId} and name :- ${widget.caseLawyer} and my name :- ${widget.userName} and my id :- ${widget.userId}",
-                            );
-
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ChatScreen(
-                                  otherUser: widget.advocateUserId,
-                                  othersName: widget.caseLawyer,
-                                  myName: widget.userName,
-                                  currentUser: widget.userId,
-                                ),
-                              ),
-                            );
-                          },
-
-                          child: Text(
-                            "Chat with ${widget.caseLawyer}",
-                            style: TextStyle(
-                              color: Colors.black,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }*/
 
   @override
   Widget build(BuildContext context) {
@@ -2167,7 +2015,10 @@ class _CaseTrackingState extends State<CaseTracking> {
                 else
                   Text(
                     "No price",
-                    style: TextStyle(color: Colors.grey, fontSize: priceFontSize - 1),
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: priceFontSize - 1,
+                    ),
                   ),
 
                 const SizedBox(width: 8),
@@ -3200,7 +3051,10 @@ class _CaseTrackingState extends State<CaseTracking> {
             if (isAdvocate)
               ElevatedButton.icon(
                 icon: const Icon(Icons.add),
-                label: const Text("Add New Read Status", style: TextStyle(color: Colors.white, fontSize: 24),),
+                label: const Text(
+                  "Add New Read Status",
+                  style: TextStyle(color: Colors.white, fontSize: 24),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
                   minimumSize: const Size(double.infinity, 48),
@@ -3624,12 +3478,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                                 }
                               } catch (e) {
                                 if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text("✗ Error: $e"),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
+                                  Navigator.pop(context);
                                 }
                               } finally {
                                 setModalState(
@@ -3659,15 +3508,14 @@ class _CaseTrackingState extends State<CaseTracking> {
     final currentPrice = currentPayment?.price ?? 0;
 
     final screenWidth = MediaQuery.of(context).size.width;
-
-    // Better breakpoint for very small phones
     final isVerySmallScreen = screenWidth < 380;
+    final isSmallMobile = screenWidth < 480;
 
     // Responsive sizes
-    final iconSize = isVerySmallScreen
-        ? ResponsiveHelper.iconSize(context, 18)
-        : ResponsiveHelper.iconSize(context, 20);
-    final priceFontSize = ResponsiveHelper.fontSize(context, 14);
+    final iconSize = ResponsiveHelper.iconSize(context, 18);
+    final priceFontSize = ResponsiveHelper.fontSize(context, 11);
+    final titleFontSize = ResponsiveHelper.fontSize(context, 13);
+    final subtitleFontSize = ResponsiveHelper.fontSize(context, 11);
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -3676,8 +3524,16 @@ class _CaseTrackingState extends State<CaseTracking> {
         title: Text(
           _prettyStageName(ct.caseStage),
           style: const TextStyle(fontWeight: FontWeight.w600),
+          maxLines: 2, // ← Allows wrapping
+          softWrap: true, // ← Prevents one-letter-per-line
+          overflow: TextOverflow.ellipsis,
         ),
-        subtitle: Text("Stage #${ct.stageNumber}"),
+        subtitle: Text(
+          "Stage #${ct.stageNumber}",
+          maxLines: 2, // ← Allows wrapping
+          softWrap: true, // ← Prevents one-letter-per-line
+          overflow: TextOverflow.ellipsis,
+        ),
         trailing: isAdvocate
             ? Row(
                 mainAxisSize: MainAxisSize.min,
