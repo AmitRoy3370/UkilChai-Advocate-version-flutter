@@ -2115,6 +2115,17 @@ class _CaseTrackingState extends State<CaseTracking> {
         : null;
     final currentPrice = currentPayment?.price ?? 0;
 
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    // Better breakpoint for very small phones
+    final isVerySmallScreen = screenWidth < 380;
+
+    // Responsive sizes
+    final iconSize = isVerySmallScreen
+        ? ResponsiveHelper.iconSize(context, 18)
+        : ResponsiveHelper.iconSize(context, 20);
+    final priceFontSize = ResponsiveHelper.fontSize(context, 14);
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -2147,16 +2158,16 @@ class _CaseTrackingState extends State<CaseTracking> {
                 if (currentPrice > 0)
                   Text(
                     "৳${currentPrice.toStringAsFixed(0)}",
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontSize: priceFontSize,
                       color: Colors.green,
                     ),
                   )
                 else
-                  const Text(
+                  Text(
                     "No price",
-                    style: TextStyle(color: Colors.grey, fontSize: 14),
+                    style: TextStyle(color: Colors.grey, fontSize: priceFontSize - 1),
                   ),
 
                 const SizedBox(width: 8),
@@ -2165,7 +2176,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                   icon: Icon(
                     currentPrice > 0 ? Icons.edit : Icons.add_circle,
                     color: Colors.green,
-                    size: 22,
+                    size: iconSize,
                   ),
                   onPressed: () => _showPriceEditDialog(
                     step.title,
@@ -2176,7 +2187,7 @@ class _CaseTrackingState extends State<CaseTracking> {
 
                 if (currentPrice > 0) // ← DELETE BUTTON
                   IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red, size: 22),
+                    icon: Icon(Icons.delete, color: Colors.red, size: iconSize),
                     onPressed: () async {
                       final confirm = await showDialog<bool>(
                         context: context,
@@ -3647,6 +3658,17 @@ class _CaseTrackingState extends State<CaseTracking> {
     final currentPayment = stagePayments[ct.caseStage];
     final currentPrice = currentPayment?.price ?? 0;
 
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    // Better breakpoint for very small phones
+    final isVerySmallScreen = screenWidth < 380;
+
+    // Responsive sizes
+    final iconSize = isVerySmallScreen
+        ? ResponsiveHelper.iconSize(context, 18)
+        : ResponsiveHelper.iconSize(context, 20);
+    final priceFontSize = ResponsiveHelper.fontSize(context, 14);
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListTile(
@@ -3678,6 +3700,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: currentPrice > 0 ? Colors.green : Colors.grey,
+                        fontSize: priceFontSize,
                       ),
                     ),
                   ),
@@ -3685,21 +3708,23 @@ class _CaseTrackingState extends State<CaseTracking> {
 
                   // Edit Price
                   IconButton(
-                    icon: const Icon(Icons.edit, color: Colors.green, size: 22),
+                    icon: Icon(Icons.edit, color: Colors.green, size: iconSize),
                     onPressed: () => _showPriceEditDialog(
                       _prettyStageName(ct.caseStage),
                       ct.caseStage,
                       currentPayment == null,
                     ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
 
                   // Delete Price
                   if (currentPrice > 0)
                     IconButton(
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.delete,
                         color: Colors.red,
-                        size: 22,
+                        size: iconSize,
                       ),
                       onPressed: () async {
                         final confirm = await showDialog<bool>(
@@ -3870,6 +3895,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: currentPrice > 0 ? Colors.green : Colors.grey,
+                  fontSize: priceFontSize,
                 ),
               ),
       ),
