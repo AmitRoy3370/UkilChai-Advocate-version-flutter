@@ -1835,35 +1835,26 @@ class _CaseTrackingState extends State<CaseTracking> {
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             scrollDirection: Axis.vertical,
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(padding),
-              scrollDirection: Axis.horizontal,
-              child: isSmallScreen
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildMainLeftContent(spacing),
-                        SizedBox(height: spacing * 2),
-                        _buildMainRightContent(spacing),
-                      ],
-                    )
-                  : Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // LEFT SIDE (Timeline, Summary, Judgment, Rating)
-                        Expanded(
-                          flex: 2,
-                          child: _buildMainLeftContent(spacing),
-                        ),
-                        const SizedBox(width: 16),
-                        // RIGHT SIDE (Draft, Hearings, Read Status, Close, Chat)
-                        Expanded(
-                          flex: 1,
-                          child: _buildMainRightContent(spacing),
-                        ),
-                      ],
-                    ),
-            ),
+
+            child: isSmallScreen
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildMainLeftContent(spacing),
+                      SizedBox(height: spacing * 2),
+                      _buildMainRightContent(spacing),
+                    ],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // LEFT SIDE (Timeline, Summary, Judgment, Rating)
+                      Expanded(flex: 2, child: _buildMainLeftContent(spacing)),
+                      const SizedBox(width: 16),
+                      // RIGHT SIDE (Draft, Hearings, Read Status, Close, Chat)
+                      Expanded(flex: 1, child: _buildMainRightContent(spacing)),
+                    ],
+                  ),
           );
         },
       ),
@@ -3541,246 +3532,250 @@ class _CaseTrackingState extends State<CaseTracking> {
     }
 
     return Card(
-      margin: EdgeInsets.symmetric(vertical: isVerySmall ? 4 : 6),
-      elevation: 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(isVerySmall ? 8 : 10),
-      ),
-      child: Container(
-        width: double.infinity,
-        padding: EdgeInsets.symmetric(
-          vertical: isVerySmall ? 8 : 10,
-          horizontal: isVerySmall ? 10 : 12,
+        margin: EdgeInsets.symmetric(vertical: isVerySmall ? 4 : 6),
+        elevation: 1,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(isVerySmall ? 8 : 10),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // আইকন
-            Icon(
-              Icons.timeline,
-              color: Colors.deepPurple,
-              size: isVerySmall ? 16 : 18,
-            ),
-            SizedBox(width: isVerySmall ? 8 : 12),
-
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    stageName,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: titleSize * 1.0,
-                      height: 1.3,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    softWrap: true,
-                  ),
-                  SizedBox(height: isVerySmall ? 2 : 4),
-                  Text(
-                    "Stage #${ct.stageNumber}",
-                    style: TextStyle(
-                      fontSize: subtitleSize * 1.0,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.symmetric(
+            vertical: isVerySmall ? 8 : 10,
+            horizontal: isVerySmall ? 10 : 12,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // আইকন
+              Icon(
+                Icons.timeline,
+                color: Colors.deepPurple,
+                size: isVerySmall ? 16 : 18,
               ),
-            ),
+              SizedBox(width: isVerySmall ? 8 : 12),
 
-            if (!isAdvocate && currentPrice > 0)
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isVerySmall ? 4 : 6,
-                  vertical: isVerySmall ? 2 : 3,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  "৳${currentPrice.toStringAsFixed(0)}",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                    fontSize: subtitleSize - 1,
-                  ),
-                ),
-              ),
-
-            if (isAdvocate)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (currentPrice > 0)
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isVerySmall ? 4 : 6,
-                        vertical: isVerySmall ? 2 : 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        "৳${currentPrice.toStringAsFixed(0)}",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
-                          fontSize: subtitleSize - 1,
-                        ),
-                      ),
-                    )
-                  else
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isVerySmall ? 4 : 6,
-                        vertical: isVerySmall ? 2 : 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        isVerySmall ? "Set" : "Set",
-                        style: TextStyle(
-                          fontWeight: FontWeight.w500,
-                          color: Colors.orange.shade700,
-                          fontSize: subtitleSize - 1,
-                        ),
-                      ),
-                    ),
-
-                  IconButton(
-                    icon: Icon(
-                      Icons.edit,
-                      color: Colors.green,
-                      size: isVerySmall ? 16 : 18,
-                    ),
-                    onPressed: () => _showPriceEditDialog(
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
                       stageName,
-                      ct.caseStage,
-                      currentPayment == null,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: titleSize * 1.0,
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: true,
                     ),
-                    padding: EdgeInsets.zero,
-                    constraints: BoxConstraints(
-                      minWidth: isVerySmall ? 28 : 32,
-                      minHeight: isVerySmall ? 28 : 32,
+                    SizedBox(height: isVerySmall ? 2 : 4),
+                    Text(
+                      "Stage #${ct.stageNumber}",
+                      style: TextStyle(
+                        fontSize: subtitleSize * 1.0,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
-                    splashRadius: 16,
+                  ],
+                ),
+              ),
+
+              if (!isAdvocate && currentPrice > 0)
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isVerySmall ? 4 : 6,
+                    vertical: isVerySmall ? 2 : 3,
                   ),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    "৳${currentPrice.toStringAsFixed(0)}",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                      fontSize: subtitleSize - 1,
+                    ),
+                  ),
+                ),
 
-                  PopupMenuButton<String>(
-                    icon: Icon(Icons.more_vert, size: isVerySmall ? 16 : 18),
-                    onSelected: (v) async {
-                      if (v == "edit") {
-                        _showCaseTrackingBottomSheet(ct);
-                      } else if (v == "delete") {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: Text(
-                              "Delete Stage",
-                              style: TextStyle(fontSize: titleSize + 2),
-                            ),
-                            content: Text(
-                              "Delete \"$stageName\"?",
-                              style: TextStyle(fontSize: subtitleSize * 1.0),
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: Text(
-                                  "Cancel",
-                                  style: TextStyle(
-                                    fontSize: subtitleSize * 1.0,
-                                  ),
-                                ),
-                              ),
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                ),
-                                onPressed: () => Navigator.pop(context, true),
-                                child: Text(
-                                  "Delete",
-                                  style: TextStyle(
-                                    fontSize: subtitleSize * 1.0,
-                                  ),
-                                ),
-                              ),
-                            ],
+              if (isAdvocate)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (currentPrice > 0)
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isVerySmall ? 4 : 6,
+                          vertical: isVerySmall ? 2 : 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          "৳${currentPrice.toStringAsFixed(0)}",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green,
+                            fontSize: subtitleSize - 1,
                           ),
-                        );
-                        if (confirm != true) return;
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isVerySmall ? 4 : 6,
+                          vertical: isVerySmall ? 2 : 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          isVerySmall ? "Set" : "Set",
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: Colors.orange.shade700,
+                            fontSize: subtitleSize - 1,
+                          ),
+                        ),
+                      ),
 
-                        await _showLoadingDialog(
-                          loadingMessage: "Deleting stage...",
-                          task: () async {
-                            final response = await _deleteCaseTracking(ct.id!);
-                            setState(() => _loadFuture = _loadAllData());
-                            return response;
-                          },
-                        );
+                    IconButton(
+                      icon: Icon(
+                        Icons.edit,
+                        color: Colors.green,
+                        size: isVerySmall ? 16 : 18,
+                      ),
+                      onPressed: () => _showPriceEditDialog(
+                        stageName,
+                        ct.caseStage,
+                        currentPayment == null,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: BoxConstraints(
+                        minWidth: isVerySmall ? 28 : 32,
+                        minHeight: isVerySmall ? 28 : 32,
+                      ),
+                      splashRadius: 16,
+                    ),
 
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("✓ Stage deleted"),
-                              backgroundColor: Colors.green,
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.more_vert, size: isVerySmall ? 16 : 18),
+                      onSelected: (v) async {
+                        if (v == "edit") {
+                          _showCaseTrackingBottomSheet(ct);
+                        } else if (v == "delete") {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: Text(
+                                "Delete Stage",
+                                style: TextStyle(fontSize: titleSize + 2),
+                              ),
+                              content: Text(
+                                "Delete \"$stageName\"?",
+                                style: TextStyle(fontSize: subtitleSize * 1.0),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
+                                  child: Text(
+                                    "Cancel",
+                                    style: TextStyle(
+                                      fontSize: subtitleSize * 1.0,
+                                    ),
+                                  ),
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red,
+                                  ),
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: Text(
+                                    "Delete",
+                                    style: TextStyle(
+                                      fontSize: subtitleSize * 1.0,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           );
+                          if (confirm != true) return;
+
+                          await _showLoadingDialog(
+                            loadingMessage: "Deleting stage...",
+                            task: () async {
+                              final response = await _deleteCaseTracking(
+                                ct.id!,
+                              );
+                              setState(() => _loadFuture = _loadAllData());
+                              return response;
+                            },
+                          );
+
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("✓ Stage deleted"),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } else if (v == "up" && canUp) {
+                          await _showLoadingDialog(
+                            loadingMessage: "Moving stage up...",
+                            task: () async {
+                              await _swapCaseTrackings(
+                                caseTrackings[index - 1].id!,
+                                ct.id!,
+                              );
+                              setState(() => _loadFuture = _loadAllData());
+                            },
+                          );
+                        } else if (v == "down" && canDown) {
+                          await _showLoadingDialog(
+                            loadingMessage: "Moving stage down...",
+                            task: () async {
+                              await _swapCaseTrackings(
+                                ct.id!,
+                                caseTrackings[index + 1].id!,
+                              );
+                              setState(() => _loadFuture = _loadAllData());
+                            },
+                          );
                         }
-                      } else if (v == "up" && canUp) {
-                        await _showLoadingDialog(
-                          loadingMessage: "Moving stage up...",
-                          task: () async {
-                            await _swapCaseTrackings(
-                              caseTrackings[index - 1].id!,
-                              ct.id!,
-                            );
-                            setState(() => _loadFuture = _loadAllData());
-                          },
-                        );
-                      } else if (v == "down" && canDown) {
-                        await _showLoadingDialog(
-                          loadingMessage: "Moving stage down...",
-                          task: () async {
-                            await _swapCaseTrackings(
-                              ct.id!,
-                              caseTrackings[index + 1].id!,
-                            );
-                            setState(() => _loadFuture = _loadAllData());
-                          },
-                        );
-                      }
-                    },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(value: "edit", child: Text("Edit")),
-                      const PopupMenuItem(
-                        value: "delete",
-                        child: Text("Delete"),
-                      ),
-                      if (canUp)
+                      },
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(value: "edit", child: Text("Edit")),
                         const PopupMenuItem(
-                          value: "up",
-                          child: Text("Move Up"),
+                          value: "delete",
+                          child: Text("Delete"),
                         ),
-                      if (canDown)
-                        const PopupMenuItem(
-                          value: "down",
-                          child: Text("Move Down"),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-          ],
+                        if (canUp)
+                          const PopupMenuItem(
+                            value: "up",
+                            child: Text("Move Up"),
+                          ),
+                        if (canDown)
+                          const PopupMenuItem(
+                            value: "down",
+                            child: Text("Move Down"),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+            ],
+          ),
         ),
-      ),
+
     );
   }
 }
