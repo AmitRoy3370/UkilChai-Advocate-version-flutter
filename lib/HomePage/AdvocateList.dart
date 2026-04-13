@@ -31,6 +31,8 @@ class AdvocateList extends StatelessWidget {
     final token = await AuthService.getToken();
     final uri = Uri.parse("${baseURL.Urls().baseURL}advocate/all");
 
+    print("fetching all advocates from $uri");
+
     final response = await http.get(
       uri,
       headers: {"Authorization": "Bearer $token"},
@@ -40,96 +42,134 @@ class AdvocateList extends StatelessWidget {
       throw Exception("Failed to load advocates");
     }
 
+    print("advocate status code :- ${response.statusCode}");
+
     final List responseData = jsonDecode(response.body);
+
+    print("advocate response :- $responseData");
+
     List<AdvocateDetailsModel> list = [];
 
     for (var item in responseData) {
-      Map<String, dynamic> advocateDecoded = item;
+      final advocateDecoded = item as Map<String, dynamic>;
 
-      String userId = advocateDecoded["userId"];
+      print("advocate decoded :- $advocateDecoded");
 
-      print("getting userId :- $userId");
+      final String userId = advocateDecoded["userId"];
 
-      final userResponse = await http.get(
-        Uri.parse("${baseURL.Urls().baseURL}user/search?userId=$userId"),
-        headers: {"Authorization": "Bearer $token"},
-      );
+      // ---------- USER ----------
+      /*final userRes = await http.get(
+          Uri.parse("${BASE_URL.Urls().baseURL}user/search?userId=$userId"),
+          headers: {"Authorization": "Bearer $token"},
+        );
 
-      if (userResponse.statusCode == 200) {
-        final user = jsonDecode(userResponse.body);
+        print("user response for ${getNameFromUser(userId)} is ${userRes.statusCode}");
 
-        final contactResponse = await http.get(
+        if (userRes.statusCode != 200) continue;
+        final user = jsonDecode(userRes.body);*/
+
+      // ---------- CONTACT ----------
+      String? email;
+      String? phone;
+
+      /*final contactRes = await http.get(
           Uri.parse(
-            "${baseURL.Urls().baseURL}user/contact-info/user?userId=$userId",
+            "${BASE_URL.Urls().baseURL}user/contact-info/user?userId=$userId",
           ),
           headers: {"Authorization": "Bearer $token"},
         );
 
-        var advocateDetailsModel = AdvocateDetailsModel.defaultConstructor();
+        print("Contact response for ${getNameFromUser(userId)} is ${contactRes.statusCode}");*/
 
-        advocateDetailsModel.name = user["name"];
-        advocateDetailsModel.profileImageId = user["profileImageId"];
-        advocateDetailsModel.userId = userId;
+      //if (contactRes.statusCode == 200) {
+      //final contact = jsonDecode(contactRes.body);
+      email = advocateDecoded["email"];
+      phone = advocateDecoded["phone"];
+      //}
 
-        advocateDetailsModel.id = advocateDecoded["id"];
-        advocateDetailsModel.experience = advocateDecoded["experience"];
-        advocateDetailsModel.licenseKey = advocateDecoded["licenseKey"];
-        advocateDetailsModel.advocateSpeciality =
-            advocateDecoded["advocateSpeciality"];
-        advocateDetailsModel.degrees = advocateDecoded["degrees"];
-        advocateDetailsModel.workingExperiences =
-            advocateDecoded["workingExperiences"];
-        advocateDetailsModel.password = user["password"];
+      // ---------- LOCATION ----------
+      String? locationName;
+      double? lat;
+      double? lng;
 
-        if (contactResponse.statusCode == 200) {
-          final contact = jsonDecode(contactResponse.body);
+      /*final locationRes = await http.get(
+          Uri.parse(
+            "${BASE_URL.Urls().baseURL}userLocation/findByUserId/$userId",
+          ),
+          headers: {"Authorization": "Bearer $token"},
+        );
 
-          final locationResponse = await http.get(
-            Uri.parse(
-              "${baseURL.Urls().baseURL}userLocation/findByUserId/$userId",
-            ),
-            headers: {"Authorization": "Bearer $token"},
-          );
+        print("location response for ${getNameFromUser(userId)} is ${locationRes.statusCode}");
+        */
 
-          advocateDetailsModel.email = contact["email"];
-          advocateDetailsModel.phone = contact["phone"];
+      //if (locationRes.statusCode == 200) {
+      //final location = jsonDecode(locationRes.body);
+      locationName = advocateDecoded["locationName"];
+      lat = advocateDecoded["lattitude"];
+      lng = advocateDecoded["longitude"];
+      //}
 
-          if (locationResponse.statusCode == 200) {
-            final location = jsonDecode(locationResponse.body);
+      // ---------- BUILD MODEL ----------
+      /*final model = AdvocateDetailsModel.defaultConstructor()
+        ..id = advocateDecoded["id"]
+        ..userId = userId
+        ..name = advocateDecoded["name"]
+        ..profileImageId = advocateDecoded["profileImageId"]
+        ..experience = advocateDecoded["experience"]
+        ..licenseKey = advocateDecoded["licenseKey"]
+        ..advocateSpeciality = advocateDecoded["advocateSpeciality"] ?? []
+        ..degrees = advocateDecoded["degrees"] ?? []
+        ..workingExperiences = advocateDecoded["workingExperiences"] ?? []
+        ..email = email
+        ..phone = phone
+        ..locationName = locationName
+        ..lattitude = lat
+        ..longitude = lng
+        ..contactInfoId = advocateDecoded['advocateDecoded']
+        ..locationId = advocateDecoded['locationId']
+        ..cvHexKey = advocateDecoded['cvHexKey'];*/
 
-            advocateDetailsModel.locationName = location["locationName"];
-            advocateDetailsModel.lattitude = location["lattitude"];
-            advocateDetailsModel.longitude = location["longitude"];
+      final model = AdvocateDetailsModel.defaultConstructor()
+        ..id = advocateDecoded["id"]?.toString()
+        ..userId = userId
+        ..name = advocateDecoded["name"]?.toString()
+        ..profileImageId = advocateDecoded["profileImageId"]?.toString()
+        ..experience = (advocateDecoded["experience"] ?? 0)
+        ..licenseKey = advocateDecoded["licenseKey"]?.toString()
 
-            /*list.add(
-              AdvocateDetailsModel(
-                advocateDecoded["id"],
-                user["name"],
-                contact["email"],
-                contact["phone"],
-                user["profileImageId"],
-                location["locationName"],
-                location["lattitude"],
-                location["longitude"],
-                user["password"],
-                advocateDecoded["experience"],
-                advocateDecoded["licenseKey"],
-                advocateDecoded["advocateSpeciality"],
-                advocateDecoded["degrees"],
-                advocateDecoded["workingExperiences"],
-                userId
-              ),
-            );*/
-          }
-        }
+      // 🔥 FIXED LIST CONVERSION
+        ..advocateSpeciality = advocateDecoded["advocateSpeciality"] != null
+            ? List<String>.from(
+            advocateDecoded["advocateSpeciality"].map((e) => e.toString()))
+            : []
 
-        if (advocateDetailsModel.name != null &&
-            advocateDetailsModel.userId != null &&
-            advocateDetailsModel.id != null) {
-          list.add(advocateDetailsModel);
-        }
-      }
+        ..degrees = advocateDecoded["degrees"] != null
+            ? List<String>.from(
+            advocateDecoded["degrees"].map((e) => e.toString()))
+            : []
+
+        ..workingExperiences = advocateDecoded["workingExperiences"] != null
+            ? List<String>.from(
+            advocateDecoded["workingExperiences"].map((e) => e.toString()))
+            : []
+
+        ..email = email
+        ..phone = phone
+        ..locationName = locationName
+        ..lattitude = lat != null ? double.tryParse(lat.toString()) : null
+        ..longitude = lng != null ? double.tryParse(lng.toString()) : null
+
+      // ❗ ALSO FIX THIS (WRONG KEY)
+        ..contactInfoId = advocateDecoded['contactInfoId']?.toString()
+        ..locationId = advocateDecoded['locationId']?.toString()
+        ..cvHexKey = advocateDecoded['cvHexKey']?.toString();
+
+      print("advocate model :- $model");
+
+      list.add(model);
     }
+
+    print("all advocates :- $list");
 
     return list;
   }
@@ -165,11 +205,11 @@ class AdvocateList extends StatelessWidget {
       title,
       items.isEmpty
           ? [
-              const Text(
-                "No data available",
-                style: TextStyle(color: Colors.black),
-              ),
-            ]
+        const Text(
+          "No data available",
+          style: TextStyle(color: Colors.black),
+        ),
+      ]
           : items.map((e) => _row(Icons.check_circle, e)).toList(),
     );
   }
@@ -320,7 +360,9 @@ class AdvocateList extends StatelessWidget {
 
                               _listSection(
                                 "Specialities",
-                                (advocate.advocateSpeciality).cast<String>(),
+                                (advocate.advocateSpeciality ?? [])
+                                    .map((e) => e.toString())
+                                    .toList(),
                               ),
                             ],
                           ),

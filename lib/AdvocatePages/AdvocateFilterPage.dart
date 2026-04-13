@@ -22,6 +22,9 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
 
   List<AdvocateDetailsModel> list = [];
 
+  String? selectedLocation;
+  List<String> allLocations = [];
+
   @override
   void initState() {
     super.initState();
@@ -102,7 +105,7 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
         final String userId = advocateDecoded["userId"];
 
         // ---------- USER ----------
-        final userRes = await http.get(
+        /*final userRes = await http.get(
           Uri.parse("${BASE_URL.Urls().baseURL}user/search?userId=$userId"),
           headers: {"Authorization": "Bearer $token"},
         );
@@ -110,34 +113,33 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
         print("user response for ${getNameFromUser(userId)} is ${userRes.statusCode}");
 
         if (userRes.statusCode != 200) continue;
-        final user = jsonDecode(userRes.body);
+        final user = jsonDecode(userRes.body);*/
 
         // ---------- CONTACT ----------
         String? email;
         String? phone;
 
-        final contactRes = await http.get(
+        /*final contactRes = await http.get(
           Uri.parse(
             "${BASE_URL.Urls().baseURL}user/contact-info/user?userId=$userId",
           ),
           headers: {"Authorization": "Bearer $token"},
         );
 
-        print("Contact response for ${getNameFromUser(userId)} is ${contactRes.statusCode}");
+        print("Contact response for ${getNameFromUser(userId)} is ${contactRes.statusCode}");*/
 
-
-        if (contactRes.statusCode == 200) {
-          final contact = jsonDecode(contactRes.body);
-          email = contact["email"];
-          phone = contact["phone"];
-        }
+        //if (contactRes.statusCode == 200) {
+        //final contact = jsonDecode(contactRes.body);
+        email = advocateDecoded["email"];
+        phone = advocateDecoded["phone"];
+        //}
 
         // ---------- LOCATION ----------
         String? locationName;
         double? lat;
         double? lng;
 
-        final locationRes = await http.get(
+        /*final locationRes = await http.get(
           Uri.parse(
             "${BASE_URL.Urls().baseURL}userLocation/findByUserId/$userId",
           ),
@@ -145,21 +147,21 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
         );
 
         print("location response for ${getNameFromUser(userId)} is ${locationRes.statusCode}");
+        */
 
-
-        if (locationRes.statusCode == 200) {
-          final location = jsonDecode(locationRes.body);
-          locationName = location["locationName"];
-          lat = location["lattitude"];
-          lng = location["longitude"];
-        }
+        //if (locationRes.statusCode == 200) {
+        //final location = jsonDecode(locationRes.body);
+        locationName = advocateDecoded["locationName"];
+        lat = advocateDecoded["lattitude"];
+        lng = advocateDecoded["longitude"];
+        //}
 
         // ---------- BUILD MODEL ----------
-        final model = AdvocateDetailsModel.defaultConstructor()
+        /*final model = AdvocateDetailsModel.defaultConstructor()
           ..id = advocateDecoded["id"]
           ..userId = userId
-          ..name = user["name"]
-          ..profileImageId = user["profileImageId"]
+          ..name = advocateDecoded["name"]
+          ..profileImageId = advocateDecoded["profileImageId"]
           ..experience = advocateDecoded["experience"]
           ..licenseKey = advocateDecoded["licenseKey"]
           ..advocateSpeciality = advocateDecoded["advocateSpeciality"] ?? []
@@ -169,9 +171,55 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
           ..phone = phone
           ..locationName = locationName
           ..lattitude = lat
-          ..longitude = lng;
+          ..longitude = lng
+          ..contactInfoId = advocateDecoded['advocateDecoded']
+          ..locationId = advocateDecoded['locationId']
+          ..cvHexKey = advocateDecoded['cvHexKey'];*/
+
+        final model = AdvocateDetailsModel.defaultConstructor()
+          ..id = advocateDecoded["id"]?.toString()
+          ..userId = userId
+          ..name = advocateDecoded["name"]?.toString()
+          ..profileImageId = advocateDecoded["profileImageId"]?.toString()
+          ..experience = (advocateDecoded["experience"] ?? 0)
+          ..licenseKey = advocateDecoded["licenseKey"]?.toString()
+        // 🔥 FIXED LIST CONVERSION
+          ..advocateSpeciality = advocateDecoded["advocateSpeciality"] != null
+              ? List<String>.from(
+            advocateDecoded["advocateSpeciality"].map(
+                  (e) => e.toString(),
+            ),
+          )
+              : []
+          ..degrees = advocateDecoded["degrees"] != null
+              ? List<String>.from(
+            advocateDecoded["degrees"].map((e) => e.toString()),
+          )
+              : []
+          ..workingExperiences = advocateDecoded["workingExperiences"] != null
+              ? List<String>.from(
+            advocateDecoded["workingExperiences"].map(
+                  (e) => e.toString(),
+            ),
+          )
+              : []
+          ..email = email
+          ..phone = phone
+          ..locationName = locationName
+          ..lattitude = lat != null ? double.tryParse(lat.toString()) : null
+          ..longitude = lng != null ? double.tryParse(lng.toString()) : null
+        // ❗ ALSO FIX THIS (WRONG KEY)
+          ..contactInfoId = advocateDecoded['contactInfoId']?.toString()
+          ..locationId = advocateDecoded['locationId']?.toString()
+          ..cvHexKey = advocateDecoded['cvHexKey']?.toString();
 
         list.add(model);
+
+        if (locationName != null && locationName.isNotEmpty) {
+          if (!allLocations.contains(locationName)) {
+            allLocations.add(locationName);
+          }
+        }
       }
     } catch (e) {
       debugPrint("Error loading advocates: $e");
@@ -209,42 +257,43 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
         final String userId = advocateDecoded["userId"];
 
         // ---------- USER ----------
-        final userRes = await http.get(
+        /*final userRes = await http.get(
           Uri.parse("${BASE_URL.Urls().baseURL}user/search?userId=$userId"),
           headers: {"Authorization": "Bearer $token"},
         );
 
-        print("user response for ${getNameFromUser(userId)} is ${userRes.statusCode}");
+        print(
+          "user response for ${getNameFromUser(userId)} is ${userRes.statusCode}",
+        );
 
         if (userRes.statusCode != 200) continue;
-        final user = jsonDecode(userRes.body);
+        final user = jsonDecode(userRes.body);*/
 
         // ---------- CONTACT ----------
         String? email;
         String? phone;
 
-        final contactRes = await http.get(
+        /*final contactRes = await http.get(
           Uri.parse(
             "${BASE_URL.Urls().baseURL}user/contact-info/user?userId=$userId",
           ),
           headers: {"Authorization": "Bearer $token"},
         );
 
-        print("Contact response for ${getNameFromUser(userId)} is ${contactRes.statusCode}");
+        print("Contact response for ${getNameFromUser(userId)} is ${contactRes.statusCode}");*/
 
-
-        if (contactRes.statusCode == 200) {
-          final contact = jsonDecode(contactRes.body);
-          email = contact["email"];
-          phone = contact["phone"];
-        }
+        //if (contactRes.statusCode == 200) {
+        //final contact = jsonDecode(contactRes.body);
+        email = advocateDecoded["email"];
+        phone = advocateDecoded["phone"];
+        //}
 
         // ---------- LOCATION ----------
         String? locationName;
         double? lat;
         double? lng;
 
-        final locationRes = await http.get(
+        /*final locationRes = await http.get(
           Uri.parse(
             "${BASE_URL.Urls().baseURL}userLocation/findByUserId/$userId",
           ),
@@ -252,21 +301,21 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
         );
 
         print("location response for ${getNameFromUser(userId)} is ${locationRes.statusCode}");
+       */
 
-
-        if (locationRes.statusCode == 200) {
-          final location = jsonDecode(locationRes.body);
-          locationName = location["locationName"];
-          lat = location["lattitude"];
-          lng = location["longitude"];
-        }
+        //if (locationRes.statusCode == 200) {
+        //final location = jsonDecode(locationRes.body);
+        locationName = advocateDecoded["locationName"];
+        lat = advocateDecoded["lattitude"];
+        lng = advocateDecoded["longitude"];
+        //}
 
         // ---------- BUILD MODEL ----------
-        final model = AdvocateDetailsModel.defaultConstructor()
+        /*final model = AdvocateDetailsModel.defaultConstructor()
           ..id = advocateDecoded["id"]
           ..userId = userId
-          ..name = user["name"]
-          ..profileImageId = user["profileImageId"]
+          ..name = advocateDecoded["name"]
+          ..profileImageId = advocateDecoded["profileImageId"]
           ..experience = advocateDecoded["experience"]
           ..licenseKey = advocateDecoded["licenseKey"]
           ..advocateSpeciality = advocateDecoded["advocateSpeciality"] ?? []
@@ -276,12 +325,53 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
           ..phone = phone
           ..locationName = locationName
           ..lattitude = lat
-          ..longitude = lng;
+          ..longitude = lng
+          ..contactInfoId = advocateDecoded['contactInfoId']
+          ..locationId = advocateDecoded['locationId']
+          ..cvHexKey = advocateDecoded['cvHexKey'];*/
+
+        final model = AdvocateDetailsModel.defaultConstructor()
+          ..id = advocateDecoded["id"]?.toString()
+          ..userId = userId
+          ..name = advocateDecoded["name"]?.toString()
+          ..profileImageId = advocateDecoded["profileImageId"]?.toString()
+          ..experience = (advocateDecoded["experience"] ?? 0)
+          ..licenseKey = advocateDecoded["licenseKey"]?.toString()
+        // 🔥 FIXED LIST CONVERSION
+          ..advocateSpeciality = advocateDecoded["advocateSpeciality"] != null
+              ? List<String>.from(
+            advocateDecoded["advocateSpeciality"].map(
+                  (e) => e.toString(),
+            ),
+          )
+              : []
+          ..degrees = advocateDecoded["degrees"] != null
+              ? List<String>.from(
+            advocateDecoded["degrees"].map((e) => e.toString()),
+          )
+              : []
+          ..workingExperiences = advocateDecoded["workingExperiences"] != null
+              ? List<String>.from(
+            advocateDecoded["workingExperiences"].map(
+                  (e) => e.toString(),
+            ),
+          )
+              : []
+          ..email = email
+          ..phone = phone
+          ..locationName = locationName
+          ..lattitude = lat != null ? double.tryParse(lat.toString()) : null
+          ..longitude = lng != null ? double.tryParse(lng.toString()) : null
+        // ❗ ALSO FIX THIS (WRONG KEY)
+          ..contactInfoId = advocateDecoded['contactInfoId']?.toString()
+          ..locationId = advocateDecoded['locationId']?.toString()
+          ..cvHexKey = advocateDecoded['cvHexKey']?.toString();
 
         models.add(model);
       }
       setState(() {
-        list = /*body.map((e) => AdvocateDetailsModel.fromJson(e)).toList()*/ models;
+        list = /*body.map((e) => AdvocateDetailsModel.fromJson(e)).toList()*/
+        models;
         loading = false;
       });
     } else {
@@ -289,6 +379,160 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
         loading = false;
         list.clear();
       });
+    }
+  }
+
+  Future<void> fetchByLocation(String location) async {
+    setState(() {
+      loading = true;
+      list.clear();
+    });
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token') ?? '';
+
+      final response = await http.get(
+        Uri.parse("${BASE_URL.Urls().baseURL}advocate/location/$location"),
+        headers: {
+          "Authorization": "Bearer $token",
+          "content-type": "application/json",
+        },
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception("Failed to filter by location");
+      }
+
+      final List responseData = jsonDecode(response.body);
+
+      List<AdvocateDetailsModel> models = [];
+
+      for (final item in responseData) {
+        final advocateDecoded = item as Map<String, dynamic>;
+        final String userId = advocateDecoded["userId"];
+
+        // ---------- USER ----------
+        /*final userRes = await http.get(
+          Uri.parse("${BASE_URL.Urls().baseURL}user/search?userId=$userId"),
+          headers: {"Authorization": "Bearer $token"},
+        );
+
+        print(
+          "user response for ${getNameFromUser(userId)} is ${userRes.statusCode}",
+        );
+
+        if (userRes.statusCode != 200) continue;
+        final user = jsonDecode(userRes.body);*/
+
+        // ---------- CONTACT ----------
+        String? email;
+        String? phone;
+
+        /*final contactRes = await http.get(
+          Uri.parse(
+            "${BASE_URL.Urls().baseURL}user/contact-info/user?userId=$userId",
+          ),
+          headers: {"Authorization": "Bearer $token"},
+        );
+
+        print("Contact response for ${getNameFromUser(userId)} is ${contactRes.statusCode}");*/
+
+        //if (contactRes.statusCode == 200) {
+        //final contact = jsonDecode(contactRes.body);
+        email = advocateDecoded["email"];
+        phone = advocateDecoded["phone"];
+        //}
+
+        // ---------- LOCATION ----------
+        String? locationName;
+        double? lat;
+        double? lng;
+
+        /*final locationRes = await http.get(
+          Uri.parse(
+            "${BASE_URL.Urls().baseURL}userLocation/findByUserId/$userId",
+          ),
+          headers: {"Authorization": "Bearer $token"},
+        );
+
+        print("location response for ${getNameFromUser(userId)} is ${locationRes.statusCode}");
+       */
+
+        //if (locationRes.statusCode == 200) {
+        //final location = jsonDecode(locationRes.body);
+        locationName = advocateDecoded["locationName"];
+        lat = advocateDecoded["lattitude"];
+        lng = advocateDecoded["longitude"];
+        //}
+
+        // ---------- BUILD MODEL ----------
+        /*final model = AdvocateDetailsModel.defaultConstructor()
+          ..id = advocateDecoded["id"]
+          ..userId = userId
+          ..name = advocateDecoded["name"]
+          ..profileImageId = advocateDecoded["profileImageId"]
+          ..experience = advocateDecoded["experience"]
+          ..licenseKey = advocateDecoded["licenseKey"]
+          ..advocateSpeciality = advocateDecoded["advocateSpeciality"] ?? []
+          ..degrees = advocateDecoded["degrees"] ?? []
+          ..workingExperiences = advocateDecoded["workingExperiences"] ?? []
+          ..email = email
+          ..phone = phone
+          ..locationName = locationName
+          ..lattitude = lat
+          ..longitude = lng
+          ..contactInfoId = advocateDecoded['contactInfoId']
+          ..locationId = advocateDecoded['locationId']
+          ..cvHexKey = advocateDecoded['cvHexKey'];*/
+
+        final model = AdvocateDetailsModel.defaultConstructor()
+          ..id = advocateDecoded["id"]?.toString()
+          ..userId = userId
+          ..name = advocateDecoded["name"]?.toString()
+          ..profileImageId = advocateDecoded["profileImageId"]?.toString()
+          ..experience = (advocateDecoded["experience"] ?? 0)
+          ..licenseKey = advocateDecoded["licenseKey"]?.toString()
+        // 🔥 FIXED LIST CONVERSION
+          ..advocateSpeciality = advocateDecoded["advocateSpeciality"] != null
+              ? List<String>.from(
+            advocateDecoded["advocateSpeciality"].map(
+                  (e) => e.toString(),
+            ),
+          )
+              : []
+          ..degrees = advocateDecoded["degrees"] != null
+              ? List<String>.from(
+            advocateDecoded["degrees"].map((e) => e.toString()),
+          )
+              : []
+          ..workingExperiences = advocateDecoded["workingExperiences"] != null
+              ? List<String>.from(
+            advocateDecoded["workingExperiences"].map(
+                  (e) => e.toString(),
+            ),
+          )
+              : []
+          ..email = email
+          ..phone = phone
+          ..locationName = locationName
+          ..lattitude = lat != null ? double.tryParse(lat.toString()) : null
+          ..longitude = lng != null ? double.tryParse(lng.toString()) : null
+        // ❗ ALSO FIX THIS (WRONG KEY)
+          ..contactInfoId = advocateDecoded['contactInfoId']?.toString()
+          ..locationId = advocateDecoded['locationId']?.toString()
+          ..cvHexKey = advocateDecoded['cvHexKey']?.toString();
+
+        models.add(model);
+      }
+
+      setState(() {
+        list = models;
+        loading = false;
+      });
+    } catch (e) {
+      debugPrint("Location filter error: $e");
+      setState(() => loading = false);
     }
   }
 
@@ -313,7 +557,7 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
                   child: Text("All Specialities"),
                 ),
                 ...AdvocateSpeciality.values.map(
-                  (s) => DropdownMenuItem(
+                      (s) => DropdownMenuItem(
                     value: s,
                     child: Text(s.label), // 👈 from enum extension
                   ),
@@ -331,6 +575,35 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
             ),
           ),
 
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: DropdownButtonFormField<String>(
+              value: selectedLocation,
+              decoration: const InputDecoration(
+                labelText: "Filter by Location",
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                const DropdownMenuItem(
+                  value: null,
+                  child: Text("All Locations"),
+                ),
+                ...allLocations.map(
+                      (loc) => DropdownMenuItem(value: loc, child: Text(loc)),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() => selectedLocation = value);
+
+                if (value == null) {
+                  getAdvocateList();
+                } else {
+                  fetchByLocation(value);
+                }
+              },
+            ),
+          ),
+
           // ---------------- LIST ----------------
           Expanded(
             child: loading
@@ -338,40 +611,40 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
                 : list.isEmpty
                 ? const Center(child: Text("No advocates found"))
                 : ListView.builder(
-                    itemCount: list.length,
-                    itemBuilder: (context, index) {
-                      final adv = list[index];
+              itemCount: list.length,
+              itemBuilder: (context, index) {
+                final adv = list[index];
 
-                      return Card(
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        child: ListTile(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    AdvocateDetails(advocateDetailsModel: adv),
-                              ),
-                            );
-                          },
-                          leading: const Icon(Icons.person),
-                          title: Text("Advocate: ${adv.name ?? "Unknown"}"),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text("Experience: ${adv.experience ?? 0} years"),
-                              Text(
-                                "Speciality: ${adv.advocateSpeciality.join(", ")}",
-                              ),
-                            ],
-                          ),
+                return Card(
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  child: ListTile(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              AdvocateDetails(advocateDetailsModel: adv),
                         ),
                       );
                     },
+                    leading: const Icon(Icons.person),
+                    title: Text("Advocate: ${adv.name ?? "Unknown"}"),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("Experience: ${adv.experience ?? 0} years"),
+                        Text(
+                          "Speciality: ${adv.advocateSpeciality.join(", ")}",
+                        ),
+                      ],
+                    ),
                   ),
+                );
+              },
+            ),
           ),
         ],
       ),
