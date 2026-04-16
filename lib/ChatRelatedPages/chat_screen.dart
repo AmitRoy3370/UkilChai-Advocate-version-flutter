@@ -38,21 +38,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Timer? _pollingTimer;
   DateTime _lastPollTime = DateTime.now().subtract(Duration(minutes: 1));
   bool _isPolling = false;
-  static const int _pollingInterval = 3; // seconds
-
-  // Connection status
-  bool _isConnected = false;
-  bool _isUsingWebSocket = false; // Set to false to use HTTP polling
+  static const int _pollingInterval = 2; // seconds - faster for better UX
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    print(
-      'ChatScreen initialized for ${widget.currentUser} -> ${widget.otherUser}',
-    );
+    print('ChatScreen initialized for ${widget.currentUser} -> ${widget.otherUser}');
+
     _loadChatHistory();
     _startPolling();
+    _startReadStatusPolling();
     _textController.addListener(() {
       setState(() {});
     });
@@ -64,6 +60,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       case AppLifecycleState.resumed:
         print('App resumed - restarting polling');
         _startPolling();
+        _loadChatHistory(); // Refresh immediately on resume
         break;
       case AppLifecycleState.paused:
         print('App paused - stopping polling');
@@ -78,15 +75,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (_isPolling) return;
 
     _isPolling = true;
-    _isConnected = true; // We consider HTTP as "connected" since it's working
 
     // Initial poll immediately
     _pollForNewMessages();
 
     // Set up periodic polling
-    _pollingTimer = Timer.periodic(Duration(seconds: _pollingInterval), (
-        timer,
-        ) {
+    _pollingTimer = Timer.periodic(Duration(seconds: _pollingInterval), (timer) {
       _pollForNewMessages();
     });
 
@@ -97,12 +91,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _pollingTimer?.cancel();
     _pollingTimer = null;
     _isPolling = false;
-    _isConnected = false;
     print('⏹️ HTTP polling stopped');
   }
 
   Future<void> _pollForNewMessages() async {
     if (widget.currentUser == null || widget.otherUser == null) return;
+    if (!mounted) return;
 
     try {
       final apiBaseUrl = '${BASE_URL.Urls().baseURL}chat';
@@ -111,28 +105,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       String? token = prefs.getString('jwt_token');
 
       final response = await http.get(
-        Uri.parse(
-          '$apiBaseUrl/history/${widget.currentUser}/${widget.otherUser}',
-        ),
+        Uri.parse('$apiBaseUrl/history/${widget.currentUser}/${widget.otherUser}'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'Authorization': 'Bearer $token',
         },
-      );
+      ).timeout(Duration(seconds: 10));
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 && mounted) {
         final List<dynamic> data = jsonDecode(response.body);
-        final List<ChatMessage> newMessages = data
-            .map((msg) => ChatMessage.fromJson(msg))
-            .where(
-              (msg) =>
-          // Only get messages after last poll time
-          msg.timeStamp.isAfter(_lastPollTime) &&
-              // Don't add messages we already have
-              !_messages.any((existing) => existing.id == msg.id),
-        )
-            .toList();
+        final Set<String> existingIds = _messages.map((m) => m.id).toSet();
+
+        List<ChatMessage> newMessages = [];
+
+        for (var msgData in data) {
+          final msg = ChatMessage.fromJson(msgData);
+          if (!existingIds.contains(msg.id)) {
+            newMessages.add(msg);
+          }
+        }
 
         if (newMessages.isNotEmpty) {
           print('📨 Received ${newMessages.length} new messages via polling');
@@ -151,13 +143,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
           _scrollToBottom();
         }
-
-        // Update last poll time
-        _lastPollTime = DateTime.now();
       }
     } catch (e) {
       print('Polling error: $e');
-      // Don't stop polling on error, just log it
     }
   }
 
@@ -166,8 +154,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (content.isEmpty) return;
 
     print('📤 Sending message: $content');
-
-    // Always use HTTP for sending
     await _sendMessageViaHttp(content);
   }
 
@@ -209,16 +195,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   void _addMessageFromData(Map<String, dynamic> data) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
       setState(() {
         final newMessage = ChatMessage.fromJson(data);
-
-        // Check if message already exists (prevent duplicates)
         final exists = _messages.any((msg) => msg.id == newMessage.id);
         if (!exists) {
           _messages.add(newMessage);
           _messages.sort((a, b) => a.timeStamp.compareTo(b.timeStamp));
 
-          // Mark as read if it's for current user
           if (newMessage.receiver == widget.currentUser) {
             _markMessageAsRead(newMessage);
           }
@@ -235,14 +220,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
       final readableBase = '${BASE_URL.Urls().baseURL}readable-chat';
 
-      // Check if readability record exists
       final checkResponse = await http.get(
         Uri.parse('$readableBase/chat/${message.id}'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
       if (checkResponse.statusCode == 200) {
-        // Update existing record
         await http.put(
           Uri.parse('$readableBase/update/${message.id}/${widget.currentUser}'),
           headers: {
@@ -252,11 +235,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           body: jsonEncode({"chatId": message.id, "read": true}),
         );
 
-        setState(() {
-          _readStatus[message.id!] = true;
-        });
+        if (mounted) {
+          setState(() {
+            _readStatus[message.id!] = true;
+          });
+        }
       } else if (checkResponse.statusCode == 404) {
-        // Create new record
         await http.post(
           Uri.parse('$readableBase/add/${widget.currentUser}'),
           headers: {
@@ -266,9 +250,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           body: jsonEncode({"chatId": message.id, "read": true}),
         );
 
-        setState(() {
-          _readStatus[message.id!] = true;
-        });
+        if (mounted) {
+          setState(() {
+            _readStatus[message.id!] = true;
+          });
+        }
       }
     } catch (e) {
       print('Error marking message as read: $e');
@@ -283,9 +269,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       String? token = prefs.getString('jwt_token');
 
       final response = await http.get(
-        Uri.parse(
-          '$apiBaseUrl/history/${widget.currentUser}/${widget.otherUser}',
-        ),
+        Uri.parse('$apiBaseUrl/history/${widget.currentUser}/${widget.otherUser}'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -293,20 +277,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         },
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 && mounted) {
         final List<dynamic> data = jsonDecode(response.body);
         setState(() {
           _messages.clear();
-          _messages.addAll(
-            data.map((msg) => ChatMessage.fromJson(msg)).toList(),
-          );
+          _messages.addAll(data.map((msg) => ChatMessage.fromJson(msg)).toList());
           _messages.sort((a, b) => a.timeStamp.compareTo(b.timeStamp));
         });
 
-        // Load read status for sent messages
         await _loadReadStatus();
 
-        // Mark received messages as read
         for (var msg in _messages) {
           if (msg.receiver == widget.currentUser) {
             await _markMessageAsRead(msg);
@@ -325,7 +305,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('jwt_token');
-
       final readableBase = '${BASE_URL.Urls().baseURL}readable-chat';
 
       for (var msg in _messages) {
@@ -335,7 +314,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               Uri.parse('$readableBase/chat/${msg.id}'),
               headers: {'Authorization': 'Bearer $token'},
             );
-
             if (response.statusCode == 200) {
               var data = jsonDecode(response.body);
               _readStatus[msg.id!] = data['read'] == true;
@@ -345,7 +323,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           }
         }
       }
-
       if (mounted) setState(() {});
     } catch (e) {
       print('Read status load error: $e');
@@ -365,40 +342,25 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Timer? _readStatusTimer;
-  static const int _readStatusPollingInterval = 5; // seconds
-
-  void _stopReadStatusPolling() {
-    _readStatusTimer?.cancel();
-    _readStatusTimer = null;
-    print('⏹️ Read status polling stopped');
-  }
+  static const int _readStatusPollingInterval = 5;
 
   void _startReadStatusPolling() {
     _readStatusTimer?.cancel();
-
-    // Poll for read status updates
-    _readStatusTimer = Timer.periodic(
-      Duration(seconds: _readStatusPollingInterval),
-          (timer) {
-        _pollForReadStatus();
-      },
-    );
-
+    _readStatusTimer = Timer.periodic(Duration(seconds: _readStatusPollingInterval), (timer) {
+      _pollForReadStatus();
+    });
     print('✅ Read status polling started');
   }
 
   Future<void> _pollForReadStatus() async {
-    if (widget.currentUser == null) return;
+    if (widget.currentUser == null || !mounted) return;
 
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('jwt_token');
-
       final readableBase = '${BASE_URL.Urls().baseURL}readable-chat';
-
       bool statusChanged = false;
 
-      // Check read status for all messages sent by current user
       for (var msg in _messages) {
         if (msg.sender == widget.currentUser) {
           try {
@@ -406,18 +368,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               Uri.parse('$readableBase/chat/${msg.id}'),
               headers: {'Authorization': 'Bearer $token'},
             );
-
             if (response.statusCode == 200) {
               var data = jsonDecode(response.body);
               bool currentReadStatus = data['read'] == true;
-
-              // If status changed, update it
               if (_readStatus[msg.id] != currentReadStatus) {
                 _readStatus[msg.id] = currentReadStatus;
                 statusChanged = true;
-                print(
-                  '📨 Read status updated for message ${msg.id}: $currentReadStatus',
-                );
               }
             }
           } catch (e) {
@@ -426,7 +382,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         }
       }
 
-      // Refresh UI if any status changed
       if (statusChanged && mounted) {
         setState(() {});
       }
@@ -438,28 +393,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void _showErrorSnackBar(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        duration: Duration(seconds: 3),
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red, duration: Duration(seconds: 3)),
     );
   }
 
   Widget _buildReadTick(ChatMessage msg) {
     final isRead = _readStatus[msg.id] == true;
-
-    return Icon(
-      isRead ? Icons.done_all : Icons.done,
-      size: 16,
-      color: isRead ? Colors.lightBlueAccent : Colors.white70,
-    );
+    return Icon(isRead ? Icons.done_all : Icons.done, size: 16, color: isRead ? Colors.lightBlueAccent : Colors.white70);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopPolling();
+    _readStatusTimer?.cancel();
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -468,20 +415,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<bool> isActive(String? userId) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? token = prefs.getString('jwt_token');
-
     final response = await http.get(
       Uri.parse("${BASE_URL.Urls().baseURL}user-active/user/$userId"),
-      headers: {
-        'content-type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: {'content-type': 'application/json', 'Authorization': 'Bearer $token'},
     );
-
-    if (response.statusCode == 200) {
-      return true;
-    }
-
-    return false;
+    return response.statusCode == 200;
   }
 
   @override
@@ -492,49 +430,27 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              widget.othersName ?? 'Chat',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            FutureBuilder<bool>(
-              future: isActive(widget.otherUser),
-              builder: (context, snapshot) {
-                if (snapshot.hasData) {
-                  return Text(
-                    snapshot.data! ? 'Online' : 'Offline',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: snapshot.data! ? Colors.green : Colors.red,
-                    ),
-                  );
-                } else {
-                  return Text(
-                    'Offline',
-                    style: TextStyle(fontSize: 12, color: Colors.red),
-                  );
-                }
-              },
-            ),
+            Text(widget.othersName ?? 'Chat', style: TextStyle(fontWeight: FontWeight.bold)),
+            _buildStatusText(),
           ],
         ),
-
         actions: [
           Padding(
             padding: EdgeInsets.all(8.0),
             child: Row(
               children: [
                 Container(
-                  width: 12,
-                  height: 12,
+                  width: 10,
+                  height: 10,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: _isConnected ? Colors.green : Colors.red,
+                    color: _isPolling ? Colors.green : Colors.red,
                   ),
                 ),
                 SizedBox(width: 4),
                 Text(
-                  _isConnected ? 'Online' : 'Offline',
-                  style: TextStyle(fontSize: 12, color: Colors.white70),
+                  _isPolling ? 'Live' : 'Connecting...',
+                  style: TextStyle(fontSize: 11, color: Colors.white70),
                 ),
               ],
             ),
@@ -550,27 +466,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      Icons.chat_bubble_outline,
-                      size: 64,
-                      color: Colors.grey[300],
-                    ),
+                    Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey[300]),
                     SizedBox(height: 16),
-                    Text(
-                      'No messages yet',
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: Colors.grey[600],
-                      ),
-                    ),
+                    Text('No messages yet', style: TextStyle(fontSize: 18, color: Colors.grey[600])),
                     SizedBox(height: 8),
-                    Text(
-                      'Send a message to start chatting!',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[500],
-                      ),
-                    ),
+                    Text('Send a message to start chatting!', style: TextStyle(fontSize: 14, color: Colors.grey[500])),
                   ],
                 ),
               )
@@ -591,119 +491,108 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildStatusText() {
+    return FutureBuilder<bool>(
+      future: isActive(widget.otherUser),
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return Text(
+            snapshot.data! ? 'Online' : 'Offline',
+            style: TextStyle(fontSize: 12, color: snapshot.data! ? Colors.green : Colors.red),
+          );
+        }
+        return Text('Offline', style: TextStyle(fontSize: 12, color: Colors.red));
+      },
+    );
+  }
+
   Future<void> _deleteMessage(ChatMessage msg) async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
-
       String? token = prefs.getString('jwt_token');
 
       final response = await http.delete(
-        Uri.parse(
-          "${BASE_URL.Urls().baseURL}chat/delete/${msg.sender}/${msg.receiver}/${msg.id}",
-        ),
+        Uri.parse("${BASE_URL.Urls().baseURL}chat/delete/${msg.sender}/${msg.receiver}/${msg.id}"),
         headers: {"Authorization": "Bearer $token"},
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 && mounted) {
         setState(() {
           _messages.removeWhere((m) => m.id == msg.id);
         });
+        print('✅ Message deleted');
       }
     } catch (e) {
       print("Delete error: $e");
+      _showErrorSnackBar('Error deleting message');
     }
   }
 
   Future<void> _editMessage(ChatMessage msg, String newText) async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
-
       String? token = prefs.getString('jwt_token');
 
       final response = await http.put(
-        Uri.parse(
-          "${BASE_URL.Urls().baseURL}chat/edit/${msg.sender}/${msg.id}?newContent=$newText",
-        ),
+        Uri.parse("${BASE_URL.Urls().baseURL}chat/edit/${msg.sender}/${msg.id}?newContent=$newText"),
         headers: {"Authorization": "Bearer $token"},
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 && mounted) {
         setState(() {
           msg.content = newText;
         });
+        print('✅ Message edited');
       }
     } catch (e) {
       print("Edit error: $e");
+      _showErrorSnackBar('Error editing message');
     }
   }
 
   void _showEditDialog(ChatMessage msg) {
-    TextEditingController editController = TextEditingController(
-      text: msg.content,
-    );
-
+    TextEditingController editController = TextEditingController(text: msg.content);
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text("Edit Message"),
-          content: TextField(
-            controller: editController,
-            decoration: InputDecoration(hintText: "Edit your message"),
+      builder: (context) => AlertDialog(
+        title: Text("Edit Message"),
+        content: TextField(controller: editController, decoration: InputDecoration(hintText: "Edit your message")),
+        actions: [
+          TextButton(child: Text("Cancel"), onPressed: () => Navigator.pop(context)),
+          ElevatedButton(
+            child: Text("Save"),
+            onPressed: () async {
+              String newText = editController.text.trim();
+              if (newText.isEmpty) return;
+              await _editMessage(msg, newText);
+              Navigator.pop(context);
+            },
           ),
-          actions: [
-            TextButton(
-              child: Text("Cancel"),
-              onPressed: () => Navigator.pop(context),
-            ),
-
-            ElevatedButton(
-              child: Text("Save"),
-              onPressed: () async {
-                String newText = editController.text.trim();
-
-                if (newText.isEmpty) return;
-
-                await _editMessage(msg, newText);
-
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
   }
 
   void _showMessageOptions(ChatMessage msg) {
     showModalBottomSheet(
       context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: Icon(Icons.edit),
-                title: Text("Edit Message"),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showEditDialog(msg);
-                },
-              ),
-
-              ListTile(
-                leading: Icon(Icons.delete, color: Colors.red),
-                title: Text("Delete Message"),
-                onTap: () {
-                  Navigator.pop(context);
-                  _deleteMessage(msg);
-                },
-              ),
-            ],
-          ),
-        );
-      },
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.edit),
+              title: Text("Edit Message"),
+              onTap: () { Navigator.pop(context); _showEditDialog(msg); },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete, color: Colors.red),
+              title: Text("Delete Message"),
+              onTap: () { Navigator.pop(context); _deleteMessage(msg); },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -711,15 +600,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     return Container(
       margin: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       child: Row(
-        mainAxisAlignment: isMe
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
+        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
           Flexible(
             child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.75,
-              ),
+              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
               padding: EdgeInsets.symmetric(vertical: 10, horizontal: 14),
               decoration: BoxDecoration(
                 color: isMe ? Colors.blue[600] : Colors.grey[200],
@@ -728,95 +613,35 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (!isMe)
-                    Text(
-                      widget.othersName ?? '',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue[800],
-                      ),
-                    ),
-
-                  if (!isMe) SizedBox(height: 2),
-
+                  if (!isMe) ...[
+                    Text(widget.othersName ?? '', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue[800])),
+                    SizedBox(height: 2),
+                  ],
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          msg.content,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: isMe ? Colors.white : Colors.black,
-                          ),
-                        ),
-                      ),
-
+                      Expanded(child: Text(msg.content, style: TextStyle(fontSize: 16, color: isMe ? Colors.white : Colors.black))),
                       if (isMe)
                         PopupMenuButton<String>(
-                          icon: Icon(
-                            Icons.more_vert,
-                            size: 18,
-                            color: isMe ? Colors.white70 : Colors.grey[700],
-                          ),
+                          icon: Icon(Icons.more_vert, size: 18, color: isMe ? Colors.white70 : Colors.grey[700]),
                           onSelected: (value) {
-                            if (value == "edit") {
-                              _showEditDialog(msg);
-                            } else if (value == "delete") {
-                              _deleteMessage(msg);
-                            }
+                            if (value == "edit") _showEditDialog(msg);
+                            else if (value == "delete") _deleteMessage(msg);
                           },
-                          itemBuilder: (context) {
-                            final isMe = msg.sender == widget.currentUser;
-
-                            return [
-                              if (isMe)
-                                PopupMenuItem(
-                                  value: "edit",
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.edit, size: 18),
-                                      SizedBox(width: 8),
-                                      Text("Edit"),
-                                    ],
-                                  ),
-                                ),
-
-                              if (isMe)
-                                PopupMenuItem(
-                                  value: "delete",
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.delete,
-                                        size: 18,
-                                        color: Colors.red,
-                                      ),
-                                      SizedBox(width: 8),
-                                      Text("Delete"),
-                                    ],
-                                  ),
-                                ),
-                            ];
-                          },
+                          itemBuilder: (context) => [
+                            if (msg.sender == widget.currentUser)
+                              PopupMenuItem(value: "edit", child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text("Edit")])),
+                            if (msg.sender == widget.currentUser)
+                              PopupMenuItem(value: "delete", child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text("Delete")])),
+                          ],
                         ),
                     ],
                   ),
-
                   SizedBox(height: 4),
-
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        DateFormat('hh:mm a').format(msg.timeStamp),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isMe ? Colors.white70 : Colors.grey[600],
-                        ),
-                      ),
-
+                      Text(DateFormat('hh:mm a').format(msg.timeStamp), style: TextStyle(fontSize: 11, color: isMe ? Colors.white70 : Colors.grey[600])),
                       if (isMe) SizedBox(width: 6),
                       if (isMe) _buildReadTick(msg),
                     ],
@@ -832,55 +657,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Widget _buildMessageInput() {
     bool hasText = _textController.text.trim().isNotEmpty;
-
     return Container(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 8,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 8,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey[200]!)),
-      ),
+      padding: EdgeInsets.only(left: 16, right: 16, top: 8, bottom: MediaQuery.of(context).viewInsets.bottom + 8),
+      decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Colors.grey[200]!))),
       child: Row(
         children: [
           Expanded(
             child: TextField(
               controller: _textController,
-              onChanged: (value) {
-                setState(() {});
-              },
               decoration: InputDecoration(
                 hintText: 'Type a message...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
                 filled: true,
                 fillColor: Colors.grey[100],
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
-                ),
+                contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               ),
               onSubmitted: (_) => _sendMessage(),
             ),
           ),
-
           SizedBox(width: 8),
-
           AnimatedContainer(
             duration: Duration(milliseconds: 200),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: hasText ? Colors.blue : Colors.grey[300],
-            ),
-            child: IconButton(
-              icon: Icon(Icons.send, color: Colors.white),
-              onPressed: hasText ? _sendMessage : null,
-            ),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: hasText ? Colors.blue : Colors.grey[300]),
+            child: IconButton(icon: Icon(Icons.send, color: Colors.white), onPressed: hasText ? _sendMessage : null),
           ),
         ],
       ),

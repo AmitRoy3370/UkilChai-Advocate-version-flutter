@@ -6,6 +6,9 @@ import 'package:advocatechaiadvocate/Utils/BaseURL.dart' as BASE_URL;
 import 'package:advocatechaiadvocate/ChatRelatedPages/chat_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:advocatechaiadvocate/ChatRelatedPages/chat_list_item.dart';
+import '../ChatRelatedPages/chat_response.dart';
+import '../ChatRelatedPages/sender_info.dart';
+import '../ChatRelatedPages/receiver_info.dart';
 
 class AllUserChatListScreen extends StatefulWidget {
   final String? currentUserId;
@@ -29,6 +32,8 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
   String _errorMessage = '';
   TextEditingController _searchController = TextEditingController();
 
+  List<ChatResponse> chatResponses = [];
+
   // Center Admin Data
   List<dynamic> _centerAdmins = [];
   Map<String, dynamic> _userDetails = {};
@@ -49,14 +54,16 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
       // Load token
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('jwt_token');
+      String? userId = prefs.getString('userId');
 
       if (token == null) {
         throw Exception('Need to login first to load chat list');
       }
 
+
       // Step 1: Get all center admins
       final centerAdminResponse = await http.get(
-        Uri.parse('${BASE_URL.Urls().baseURL}user/all'),
+        Uri.parse('${BASE_URL.Urls().baseURL}chat/users/$userId'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -65,11 +72,15 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
       );
 
       if (centerAdminResponse.statusCode == 200) {
-        _centerAdmins = jsonDecode(centerAdminResponse.body);
-        print('Loaded ${_centerAdmins.length} Users');
+        final decodedResponse = jsonDecode(centerAdminResponse.body);
+        //print('Loaded ${_centerAdmins.length} Users');
+
+        chatResponses = List<ChatResponse>.from(
+          decodedResponse.map((item) => ChatResponse.fromJson(item)),
+        );
 
         // Step 2: Get user details for each admin
-        await _loadUserDetails(token);
+        //await _loadUserDetails(token);
 
         // Step 3: Build chat list
         await _buildChatList(token);
@@ -136,110 +147,144 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
   Future<void> _buildChatList(String token) async {
     List<ChatListItem> tempList = [];
 
+    final activeResponse = await http.get(
+      Uri.parse('${BASE_URL.Urls().baseURL}user-active/status?active=${true}'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    print("active users :- ${activeResponse.body}");
+
+    Map<String, bool> activeness = {};
+
+    if (activeResponse.statusCode == 200) {
+      List<dynamic> activeUsers = jsonDecode(activeResponse.body);
+
+      print("active users :- $activeUsers");
+
+      for (var user in activeUsers) {
+        String userId = user['userId'];
+        bool active = user['active'];
+
+        activeness[userId] = active;
+      }
+    }
+
+    bool val = false;
+
+    final unReadChatResponse = await http.get(
+      Uri.parse('${BASE_URL.Urls().baseURL}readable-chat/status?isRead=$val'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    print("un read messages :- ${unReadChatResponse.body}");
+
+    Map<String, bool> unReadChats = {};
+
+    if (unReadChatResponse.statusCode == 200) {
+      List<dynamic> unReadChatsList = jsonDecode(unReadChatResponse.body);
+
+      print("un read messages :- $unReadChatsList");
+
+      for (var chat in unReadChatsList) {
+        String chatId = chat['chatId'];
+        bool isRead = chat['isRead'];
+
+        unReadChats[chatId] = isRead;
+      }
+    }
+
     try {
-      for (var admin in _centerAdmins) {
-        String userId = admin['id'];
-
-        // Skip current user
-        if (userId == widget.currentUserId) continue;
-
-        // Get user name from user details or use fallback
-        String userName = 'Unknown User';
-        if (_userDetails.containsKey(userId)) {
-          var userData = _userDetails[userId];
-          userName = userData['name'] ?? userData['name'] ?? 'Unknown User';
-        }
-
-        // Get last message from chat history
-        String? lastMessage;
-        DateTime? lastMessageTime;
-        int unreadCount = 0;
-
+      for (var admin in chatResponses) {
         try {
-          final chatHistoryResponse = await http.get(
-            Uri.parse(
-              '${BASE_URL.Urls().baseURL}chat/history/${widget.currentUserId}/$userId',
-            ),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
+          DateTime? timeStamp = admin.timeStamp;
+
+          print("time stamp setted :- $timeStamp");
+
+          SenderInfo? senderInfo = admin.senderInfo;
+          ReceiverInfo? receiverInfo = admin.receiverInfo;
+
+          print(
+            "collect the sender info and receiver info :- ${senderInfo != null ? senderInfo.toString() : null} , ${receiverInfo != null ? receiverInfo.toString() : null}",
           );
 
-          if (chatHistoryResponse.statusCode == 200) {
-            List<dynamic> messages = jsonDecode(chatHistoryResponse.body);
-            if (messages.isNotEmpty) {
-              // Sort by timestamp (newest first)
-              messages.sort((a, b) {
-                DateTime timeA = DateTime.parse(a['timeStamp']).toLocal();
-                DateTime timeB = DateTime.parse(b['timeStamp']).toLocal();
-                return timeB.compareTo(timeA);
-              });
+          String? lateMessage;
 
-              // Get latest message
-              var lastMsg = messages.first;
-              lastMessage = lastMsg['content'];
-              lastMessageTime = DateTime.parse(lastMsg['timeStamp']).toLocal();
+          String? otherUserId, otherUserName;
 
-              // Calculate unread messages (messages where receiver is current user and not read)
-              /*unreadCount = messages.where((msg) {
-                return msg['receiver'] == widget.currentUserId &&
-                    (msg['read'] == null || msg['read'] == false);
-              }).length;*/
+          if (senderInfo != null && senderInfo.receiverId != null) {
+            lateMessage = senderInfo.message;
+            otherUserId = senderInfo.receiverId;
+            otherUserName = senderInfo.receiverName;
+          } else if (receiverInfo != null && receiverInfo.senderId != null) {
+            lateMessage = receiverInfo.message;
+            otherUserId = receiverInfo.senderId;
+            otherUserName = receiverInfo.senderName;
+          } else {
+            continue;
+          }
 
-              for (var msg in messages) {
-                if (msg['receiver'] == widget.currentUserId) {
-                  String chatId = msg['id'];
+          print(
+            "other user id :- $otherUserId , other user name :- $otherUserName",
+          );
 
-                  try {
-                    final readResponse = await http.get(
-                      Uri.parse(
-                        '${BASE_URL.Urls().baseURL}readable-chat/chat/$chatId',
-                      ),
-                      headers: {'Authorization': 'Bearer $token'},
-                    );
+          if (otherUserId == null || otherUserName == null) {
+            continue;
+          }
 
-                    if (readResponse.statusCode == 200) {
-                      var readable = jsonDecode(readResponse.body);
+          print("other user id :- $otherUserId");
 
-                      if (readable['read'] == false) {
-                        unreadCount++;
-                      }
-                    } else {
-                      // If readability not found → treat as unread
-                      unreadCount++;
-                    }
-                  } catch (_) {
-                    unreadCount++;
-                  }
-                }
-              }
-            }
+          String userAvatar = otherUserName[0].toString();
+
+          bool? isOnline =
+              activeness.isNotEmpty && activeness.containsKey(otherUserId);
+          bool? isUnread =
+              unReadChats.isNotEmpty && unReadChats.containsKey(admin.id);
+
+          print(
+            "userId :- $otherUserId , userName :- $otherUserName , isOnline :- $isOnline , isUnread :- $isUnread , timeStamp :- $timeStamp , lateMessage :- $lateMessage , userAvatar :- $userAvatar",
+          );
+
+          try {
+            ChatListItem listItem = ChatListItem(
+              userId: otherUserId,
+              userName: otherUserName,
+              userAvatar: userAvatar,
+              lastMessage: lateMessage,
+              lastMessageTime: timeStamp,
+              unreadCount: isUnread ? 1 : 0,
+              isOnline: isOnline ? true : false,
+            );
+
+            print("chat list item :- ${listItem.userName}");
+
+            tempList.add(listItem);
+          } catch (e) {
+            print("error :- $e");
           }
         } catch (e) {
-          print('Error loading chat history for $userId: $e');
+          print("error :- $e");
         }
-
-        // Create chat list item
-        tempList.add(
-          ChatListItem(
-            userId: userId,
-            userName: userName,
-            lastMessage: lastMessage,
-            lastMessageTime: lastMessageTime,
-            unreadCount: unreadCount,
-          ),
-        );
       }
 
-      // Sort by last message time (most recent first)
-      tempList.sort((a, b) {
-        if (a.lastMessageTime == null && b.lastMessageTime == null) return 0;
-        if (a.lastMessageTime == null) return 1;
-        if (b.lastMessageTime == null) return -1;
-        return b.lastMessageTime!.compareTo(a.lastMessageTime!);
-      });
+      try {
+        // Sort by last message time (most recent first)
+        tempList.sort((a, b) {
+          if (a.lastMessageTime == null && b.lastMessageTime == null) return 0;
+          if (a.lastMessageTime == null) return 1;
+          if (b.lastMessageTime == null) return -1;
+          return b.lastMessageTime!.compareTo(a.lastMessageTime!);
+        });
+      } catch (e) {
+        print('Error sorting chat list: $e');
+      }
 
       setState(() {
         _chatList = tempList;
@@ -561,16 +606,16 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
                 : _filteredChatList.isEmpty
                 ? _buildEmptyState()
                 : RefreshIndicator(
-                    onRefresh: () async {
-                      await _loadChatList();
-                    },
-                    child: ListView.builder(
-                      itemCount: _filteredChatList.length,
-                      itemBuilder: (context, index) {
-                        return _buildChatListItem(_filteredChatList[index]);
-                      },
-                    ),
-                  ),
+              onRefresh: () async {
+                await _loadChatList();
+              },
+              child: ListView.builder(
+                itemCount: _filteredChatList.length,
+                itemBuilder: (context, index) {
+                  return _buildChatListItem(_filteredChatList[index]);
+                },
+              ),
+            ),
           ),
         ],
       ),

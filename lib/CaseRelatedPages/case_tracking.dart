@@ -365,7 +365,7 @@ class _CaseTrackingState extends State<CaseTracking> {
     throw Exception('Failed to load trackings');
   }
 
-  Future<bool> _addCaseTracking(String caseStage) async {
+  Future<bool> _addCaseTracking(String caseStage, DateTime selectedDateTime) async {
     final userId =
         widget.advocateUserId ??
         (await SharedPreferences.getInstance()).getString('userId');
@@ -375,12 +375,12 @@ class _CaseTrackingState extends State<CaseTracking> {
         'Authorization': 'Bearer ${widget.token!}',
         'content-type': 'application/json',
       },
-      body: jsonEncode({"caseId": widget.caseId!, "caseStage": caseStage}),
+      body: jsonEncode({"caseId": widget.caseId!, "caseStage": caseStage, "trackingTime": selectedDateTime.toUtc().toIso8601String()}),
     );
     return response.statusCode == 200 || response.statusCode == 201;
   }
 
-  Future<bool> _updateCaseTracking(String id, String caseStage) async {
+  Future<bool> _updateCaseTracking(String id, String caseStage, DateTime selectedDateTime) async {
     final userId =
         widget.advocateUserId ??
         (await SharedPreferences.getInstance()).getString('userId');
@@ -390,7 +390,7 @@ class _CaseTrackingState extends State<CaseTracking> {
         'Authorization': 'Bearer ${widget.token!}',
         'content-type': 'application/json',
       },
-      body: jsonEncode({"caseId": widget.caseId!, "caseStage": caseStage}),
+      body: jsonEncode({"caseId": widget.caseId!, "caseStage": caseStage, "trackingTime": selectedDateTime.toUtc().toIso8601String()}),
     );
     return response.statusCode == 200 || response.statusCode == 201;
   }
@@ -3374,6 +3374,10 @@ class _CaseTrackingState extends State<CaseTracking> {
     final isUpdate = existing != null;
     String? selectedStage = existing?.caseStage;
 
+    DateTime selectedDateTime = existing?.trackingTime != null
+        ? existing!.trackingTime!
+        : DateTime.now();
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -3393,6 +3397,70 @@ class _CaseTrackingState extends State<CaseTracking> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Date & Time Picker
+                    InkWell(
+                      onTap: () async {
+                        final DateTime? pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDateTime,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2030),
+                        );
+
+                        if (pickedDate != null && context.mounted) {
+                          final TimeOfDay? pickedTime = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.fromDateTime(selectedDateTime),
+                          );
+
+                          if (pickedTime != null && context.mounted) {
+                            setModalState(() {
+                              selectedDateTime = DateTime(
+                                pickedDate.year,
+                                pickedDate.month,
+                                pickedDate.day,
+                                pickedTime.hour,
+                                pickedTime.minute,
+                              );
+                            });
+                          }
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.calendar_today,
+                              color: Colors.grey.shade700,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                DateFormat('dd MMM yyyy, hh:mm a').format(selectedDateTime),
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              Icons.arrow_drop_down,
+                              color: Colors.grey.shade700,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
                     Text(
                       isUpdate
                           ? "Update Timeline Stage"
@@ -3458,9 +3526,11 @@ class _CaseTrackingState extends State<CaseTracking> {
                                         ? await _updateCaseTracking(
                                             existing!.id!,
                                             selectedStage!,
+                                        selectedDateTime
                                           )
                                         : await _addCaseTracking(
                                             selectedStage!,
+                                            selectedDateTime
                                           );
 
                                     if (success) {
@@ -3578,6 +3648,14 @@ class _CaseTrackingState extends State<CaseTracking> {
                         color: Colors.grey.shade600,
                       ),
                     ),
+                    if(ct.trackingTime != null)
+                      Text(
+                        "${ct.trackingTime}",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: subtitleSize * 1.0,
+                        ),
+                      ),
                   ],
                 ),
               ),

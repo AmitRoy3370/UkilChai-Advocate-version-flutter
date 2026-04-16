@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:advocatechaiadvocate/ChatRelatedPages/receiver_info.dart';
+import 'package:advocatechaiadvocate/ChatRelatedPages/sender_info.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
@@ -6,6 +8,8 @@ import 'package:advocatechaiadvocate/Utils/BaseURL.dart' as BASE_URL;
 import 'package:advocatechaiadvocate/ChatRelatedPages/chat_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:advocatechaiadvocate/ChatRelatedPages/chat_list_item.dart';
+
+import 'chat_response.dart';
 
 class CenterAdminChatListScreen extends StatefulWidget {
   final String currentUserId;
@@ -34,6 +38,8 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
   List<dynamic> _centerAdmins = [];
   Map<String, dynamic> _userDetails = {};
 
+  List<ChatResponse> chatResponses = [];
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +56,7 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
       // Load token
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('jwt_token');
+      String? userId = prefs.getString('userId');
 
       if (token == null) {
         throw Exception('No authentication token found');
@@ -57,7 +64,7 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
 
       // Step 1: Get all center admins
       final centerAdminResponse = await http.get(
-        Uri.parse('${BASE_URL.Urls().baseURL}center-admin/all'),
+        Uri.parse('${BASE_URL.Urls().baseURL}chat/center-admins/$userId'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -66,14 +73,21 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
       );
 
       if (centerAdminResponse.statusCode == 200) {
-        _centerAdmins = jsonDecode(centerAdminResponse.body);
-        print('Loaded ${_centerAdmins.length} center admins');
+        final decodedResponse = jsonDecode(centerAdminResponse.body);
+
+        print("chat response :- $decodedResponse");
+
+        chatResponses = List<ChatResponse>.from(
+          decodedResponse.map((item) => ChatResponse.fromJson(item)),
+        );
+
+        print('Loaded ${chatResponses.length} center admins');
 
         // Step 2: Get user details for each admin
-        await _loadUserDetails(token);
+        //await _loadUserDetails(token);
 
         // Step 3: Build chat list
-        await _buildChatList(token);
+        await _buildChatList(token, userId!);
       } else {
         throw Exception(
           'Failed to load center admins: ${centerAdminResponse.statusCode}',
@@ -134,117 +148,142 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
     }
   }
 
-  Future<void> _buildChatList(String token) async {
+  Future<void> _buildChatList(String token, String userId) async {
     List<ChatListItem> tempList = [];
 
+    final activeResponse = await http.get(
+      Uri.parse('${BASE_URL.Urls().baseURL}user-active/status?active=${true}'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    print("active users :- ${activeResponse.body}");
+
+    Map<String, bool> activeness = {};
+
+    if (activeResponse.statusCode == 200) {
+      List<dynamic> activeUsers = jsonDecode(activeResponse.body);
+
+      print("active users :- $activeUsers");
+
+      for (var user in activeUsers) {
+        String userId = user['userId'];
+        bool active = user['active'];
+
+        activeness[userId] = active;
+      }
+    }
+
+    bool val = false;
+
+    final unReadChatResponse = await http.get(
+      Uri.parse('${BASE_URL.Urls().baseURL}readable-chat/status?isRead=$val'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    print("un read messages :- ${unReadChatResponse.body}");
+
+    Map<String, bool> unReadChats = {};
+
+    if (unReadChatResponse.statusCode == 200) {
+      List<dynamic> unReadChatsList = jsonDecode(unReadChatResponse.body);
+
+      print("un read messages :- $unReadChatsList");
+
+      for (var chat in unReadChatsList) {
+        String chatId = chat['chatId'];
+        bool isRead = chat['isRead'];
+
+        unReadChats[chatId] = isRead;
+      }
+    }
+
     try {
-      for (var admin in _centerAdmins) {
-        String userId = admin['userId'];
-
-        // Skip current user
-        if (userId == widget.currentUserId) continue;
-
-        // Get user name from user details or use fallback
-        String userName = 'Unknown User';
-        if (_userDetails.containsKey(userId)) {
-          var userData = _userDetails[userId];
-          userName = userData['name'] ?? userData['name'] ?? 'Unknown User';
-        }
-
-        // Get last message from chat history
-        String? lastMessage;
-        DateTime? lastMessageTime;
-        int unreadCount = 0;
+      for (var admin in chatResponses) {
 
         try {
-          final chatHistoryResponse = await http.get(
-            Uri.parse(
-              '${BASE_URL.Urls().baseURL}chat/history/${widget.currentUserId}/$userId',
-            ),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-          );
+          DateTime? timeStamp = admin.timeStamp;
 
-          if (chatHistoryResponse.statusCode == 200) {
-            List<dynamic> messages = jsonDecode(chatHistoryResponse.body);
-            if (messages.isNotEmpty) {
-              // Sort by timestamp (newest first)
-              messages.sort((a, b) {
-                DateTime timeA = DateTime.parse(a['timeStamp']).toLocal();
-                DateTime timeB = DateTime.parse(b['timeStamp']).toLocal();
-                return timeB.compareTo(timeA);
-              });
+          print("time stamp setted :- $timeStamp");
 
-              print("current user id :- ${widget.currentUserId}");
+          SenderInfo? senderInfo = admin.senderInfo;
+          ReceiverInfo? receiverInfo = admin.receiverInfo;
 
-              for (var msg in messages) {
-                if (msg['receiver'] == widget.currentUserId) {
-                  String chatId = msg['id'];
+          print("collect the sender info and receiver info :- ${senderInfo != null ? senderInfo.toString() : null} , ${receiverInfo != null ? receiverInfo.toString() : null}");
 
-                  try {
-                    final readResponse = await http.get(
-                      Uri.parse(
-                        '${BASE_URL.Urls().baseURL}readable-chat/chat/$chatId',
-                      ),
-                      headers: {'Authorization': 'Bearer $token'},
-                    );
+          String? lateMessage;
 
-                    if (readResponse.statusCode == 200) {
-                      var readable = jsonDecode(readResponse.body);
+          String? otherUserId, otherUserName;
 
-                      if (readable['read'] == false) {
-                        unreadCount++;
-                      }
-                    } else {
-                      // If readability not found → treat as unread
-                      unreadCount++;
-                    }
-                  } catch (_) {
-                    unreadCount++;
-                  }
-                }
-              }
-
-              print("total un read message :- $unreadCount");
-
-              // Get latest message
-              var lastMsg = messages.first;
-              lastMessage = lastMsg['content'];
-              lastMessageTime = DateTime.parse(lastMsg['timeStamp']).toLocal();
-
-              // Calculate unread messages (messages where receiver is current user and not read)
-              /*unreadCount = messages.where((msg) {
-                return msg['receiver'] == widget.currentUserId &&
-                    (msg['read'] == null || msg['read'] == false);
-              }).length;*/
-            }
+          if (senderInfo != null && senderInfo.receiverId != null) {
+            lateMessage = senderInfo.message;
+            otherUserId = senderInfo.receiverId;
+            otherUserName = senderInfo.receiverName;
+          } else if (receiverInfo != null && receiverInfo.senderId != null) {
+            lateMessage = receiverInfo.message;
+            otherUserId = receiverInfo.senderId;
+            otherUserName = receiverInfo.senderName;
+          } else {
+            continue;
           }
-        } catch (e) {
-          print('Error loading chat history for $userId: $e');
-        }
 
-        // Create chat list item
-        tempList.add(
-          ChatListItem(
-            userId: userId,
-            userName: userName,
-            lastMessage: lastMessage,
-            lastMessageTime: lastMessageTime,
-            unreadCount: unreadCount,
-          ),
-        );
+          print("other user id :- $otherUserId , other user name :- $otherUserName");
+
+          if (otherUserId == null || otherUserName == null) {
+            continue;
+          }
+
+          print("other user id :- $otherUserId");
+
+          String userAvatar = otherUserName[0].toString();
+
+          bool? isOnline =
+              activeness.isNotEmpty && activeness.containsKey(otherUserId);
+          bool? isUnread =
+              unReadChats.isNotEmpty && unReadChats.containsKey(admin.id);
+
+          print("userId :- $otherUserId , userName :- $otherUserName , isOnline :- $isOnline , isUnread :- $isUnread , timeStamp :- $timeStamp , lateMessage :- $lateMessage , userAvatar :- $userAvatar");
+
+          try {
+            ChatListItem listItem = ChatListItem(
+              userId: otherUserId,
+              userName: otherUserName,
+              userAvatar: userAvatar,
+              lastMessage: lateMessage,
+              lastMessageTime: timeStamp,
+              unreadCount: isUnread ? 1 : 0,
+              isOnline: isOnline ? true : false,
+            );
+
+            print("chat list item :- ${listItem.userName}");
+
+            tempList.add(listItem);
+          } catch (e) {
+            print("error :- $e");
+          }
+        } catch(e) {
+          print("error :- $e");
+        }
       }
 
-      // Sort by last message time (most recent first)
-      tempList.sort((a, b) {
-        if (a.lastMessageTime == null && b.lastMessageTime == null) return 0;
-        if (a.lastMessageTime == null) return 1;
-        if (b.lastMessageTime == null) return -1;
-        return b.lastMessageTime!.compareTo(a.lastMessageTime!);
-      });
+      try {
+        // Sort by last message time (most recent first)
+        tempList.sort((a, b) {
+          if (a.lastMessageTime == null && b.lastMessageTime == null) return 0;
+          if (a.lastMessageTime == null) return 1;
+          if (b.lastMessageTime == null) return -1;
+          return b.lastMessageTime!.compareTo(a.lastMessageTime!);
+        });
+      } catch (e) {
+        print('Error sorting chat list: $e');
+      }
 
       setState(() {
         _chatList = tempList;
@@ -502,7 +541,7 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
           ),
           SizedBox(height: 10),
           Text(
-            'Start a conversation with other center admins',
+            'Start a conversation with other Ukil Chai owners',
             style: TextStyle(fontSize: 14, color: Colors.grey[500]),
             textAlign: TextAlign.center,
           ),
@@ -523,7 +562,7 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Center Admin Chats'),
+        title: Text('Owners Chats'),
         actions: [
           IconButton(
             icon: Icon(Icons.refresh),
@@ -566,16 +605,16 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
                 : _filteredChatList.isEmpty
                 ? _buildEmptyState()
                 : RefreshIndicator(
-                    onRefresh: () async {
-                      await _loadChatList();
-                    },
-                    child: ListView.builder(
-                      itemCount: _filteredChatList.length,
-                      itemBuilder: (context, index) {
-                        return _buildChatListItem(_filteredChatList[index]);
-                      },
-                    ),
-                  ),
+              onRefresh: () async {
+                await _loadChatList();
+              },
+              child: ListView.builder(
+                itemCount: _filteredChatList.length,
+                itemBuilder: (context, index) {
+                  return _buildChatListItem(_filteredChatList[index]);
+                },
+              ),
+            ),
           ),
         ],
       ),
