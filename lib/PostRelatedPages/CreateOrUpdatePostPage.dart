@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:advocatechaiadvocate/PostRelatedPages/post_response.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -15,7 +16,7 @@ import 'AdvocatePost.dart';
 // import 'PostAttachmentViewer.dart'; // Uncomment if needed
 
 class CreateOrUpdatePostPage extends StatefulWidget {
-  final AdvocatePost? post;
+  final PostResponse? post;
   const CreateOrUpdatePostPage({super.key, this.post});
 
   @override
@@ -40,7 +41,7 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
     super.initState();
     if (isUpdate) {
       contentController.text = widget.post!.postContent;
-      selectedType = AdvocateSpecialityExt.fromApi(widget.post!.postType);
+      selectedType = AdvocateSpecialityExt.fromApi(widget.post!.postType.apiValue);
       if (widget.post!.attachmentId != null &&
           widget.post!.attachmentId!.isNotEmpty) {
         fileName = "Existing Attachment";

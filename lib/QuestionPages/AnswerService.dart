@@ -5,9 +5,10 @@ import 'package:http/http.dart' as http;
 import '../Auth/AuthService.dart';
 import '../Utils/BaseURL.dart' as BASEURL;
 import 'AnswerModel.dart';
+import 'answer_response.dart';
 
 class AnswerService {
-  static Future<List<AnswerModel>> getByQuestion(String questionId) async {
+  static Future<List<AnswerResponse>> getByQuestion(String questionId) async {
     final token = await AuthService.getToken();
 
     final res = await http.get(
@@ -19,13 +20,13 @@ class AnswerService {
 
     if (res.statusCode == 200) {
       return (jsonDecode(res.body) as List)
-          .map((e) => AnswerModel.fromJson(e))
+          .map((e) => AnswerResponse.fromJson(e))
           .toList();
     }
     return [];
   }
 
-  static Future<List<AnswerModel>> search(String keyword) async {
+  static Future<List<AnswerResponse>> search(String keyword) async {
     final token = await AuthService.getToken();
 
     final res = await http.get(
@@ -37,7 +38,7 @@ class AnswerService {
 
     if (res.statusCode == 200) {
       return (jsonDecode(res.body) as List)
-          .map((e) => AnswerModel.fromJson(e))
+          .map((e) => AnswerResponse.fromJson(e))
           .toList();
     }
     return [];

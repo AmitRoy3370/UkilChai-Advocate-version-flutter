@@ -1,15 +1,17 @@
 import 'dart:convert';
 
+import 'package:advocatechaiadvocate/PostRelatedPages/post_response.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../Utils/AdvocateSpeciality.dart';
 import '../Utils/BaseURL.dart' as BASE_URL;
 import './AdvocatePost.dart';
 import 'PostAttachmentViewer.dart';
 import 'reaction_bar.dart';
 
 class PostCard extends StatelessWidget {
-  final AdvocatePost post;
+  final PostResponse post;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
@@ -80,18 +82,7 @@ class PostCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: FutureBuilder<String>(
-                    future: getNameFromAdvocate(post.advocateId),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Text("Loading...");
-                      }
-                      if (!snapshot.hasData || snapshot.hasError) {
-                        return const SizedBox.shrink();
-                      }
-                      return Text(snapshot.data!);
-                    },
-                  ),
+                  child: Text(post.advocateName,style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
                 ),
                 Row(
                   children: [
@@ -112,7 +103,7 @@ class PostCard extends StatelessWidget {
 
             const SizedBox(height: 6),
             Text(
-              post.postType,
+              post.postType.apiValue,
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
@@ -143,7 +134,7 @@ class PostCard extends StatelessWidget {
                   ],
                 ),
               ),
-            ReactionBar(postId: post.id),
+            ReactionBar(postResponse: post),
           ],
         ),
       ),

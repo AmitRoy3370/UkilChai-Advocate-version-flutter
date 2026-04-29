@@ -222,24 +222,11 @@ class _MyCasesPageState extends State<MyCasesPage> {
                         ),
                         const SizedBox(height: 6),
                         Text("Type: ${c.caseType}"),
-                        FutureBuilder<String>(
-                          future: getNameFromAdvocate(c.advocateId),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState ==
-                                ConnectionState.waiting) {
-                              return const Text("Advocate: loading...");
-                            }
-
-                            if (snapshot.hasError ||
-                                !snapshot.hasData ||
-                                snapshot.data!.isEmpty) {
-                              return const Text("Advocate: N/A");
-                            }
-
-                            return Text("Advocate: ${snapshot.data}");
-                          },
-                        ),
-
+                        const SizedBox(height: 6),
+                        Text("Advocate :- ${c.advocateName}", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),),
+                        const SizedBox(height: 6),
+                        Text('User ${c.userName}',style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),),
+                        const SizedBox(height: 6),
                         Text("Issued: ${c.issuedTime}"),
 
                         const SizedBox(height: 10),

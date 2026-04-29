@@ -23,6 +23,7 @@ import '../PostRelatedPages/AdvocatePost.dart';
 import '../PostRelatedPages/PostService.dart';
 import '../PostRelatedPages/post_card.dart';
 import '../PostRelatedPages/post_card_home_page.dart';
+import '../PostRelatedPages/post_response.dart';
 import '../Utils/BaseURL.dart' as BASE_URL;
 
 class AdvocateDetails extends StatefulWidget {
@@ -37,7 +38,7 @@ class AdvocateDetails extends StatefulWidget {
 class AdvocateDetailsState extends State<AdvocateDetails> {
   int totalCases = 0;
   bool loading = true;
-  List<AdvocatePost> posts = [];
+  List<PostResponse> posts = [];
 
   double averageRating = 0.0;
   int totalRatings = 0;

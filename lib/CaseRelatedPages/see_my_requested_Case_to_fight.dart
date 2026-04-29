@@ -121,26 +121,11 @@ class _SeeMyRequestedCaseToFightListPageState
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              Text("User :- ${c.userName}", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
+                              const SizedBox(height: 6,),
                               Text(c.caseType.label),
                               if (c.requestedAdvocateId != null)
-                                FutureBuilder<String>(
-                                  future: getAdvocateName(
-                                    c.requestedAdvocateId!,
-                                  ),
-                                  builder: (context, snapshot) {
-                                    if (snapshot.connectionState ==
-                                        ConnectionState.waiting) {
-                                      return const Text("Loading advocate...");
-                                    }
-                                    if (!snapshot.hasData ||
-                                        snapshot.hasError) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    return Text(
-                                      "Requested Advocate: ${snapshot.data}",
-                                    );
-                                  },
-                                ),
+                                Text("Advocate :- ${c.requestAdvocateName}", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),),
                             ],
                           ),
                           trailing: Text(

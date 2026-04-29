@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:advocatechaiadvocate/PostRelatedPages/post_reaction_response.dart';
+import 'package:advocatechaiadvocate/PostRelatedPages/post_response.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,8 +9,8 @@ import './ReactionService.dart';
 import './PostReaction.dart';
 
 class ReactionBar extends StatefulWidget {
-  final String postId;
-  const ReactionBar({super.key, required this.postId});
+  final PostResponse postResponse;
+  const ReactionBar({super.key, required this.postResponse});
   @override
   State<ReactionBar> createState() => _ReactionBarState();
 }
@@ -17,7 +19,7 @@ class _ReactionBarState extends State<ReactionBar> {
   final TextEditingController _commentController = TextEditingController();
   String? selectedReaction;
   bool submitting = false;
-  List<PostReaction> reactions = [];
+  List<PostReactionResponse> reactions = [];
   Map<String, String> userNames = {}; // cache userId -> name
   String? myUserId;
 
@@ -52,25 +54,10 @@ class _ReactionBarState extends State<ReactionBar> {
     final token = prefs.getString('jwt_token') ?? '';
     myUserId ??= prefs.getString('userId');
 
-    final fetched = await ReactionService.fetchByPost(widget.postId, token);
-
-    // collect user names
-    List<String> newUserIds = [];
-    for (var r in fetched) {
-      if (r.userId != null &&
-          !userNames.containsKey(r.userId) &&
-          !newUserIds.contains(r.userId!)) {
-        newUserIds.add(r.userId!);
-      }
-    }
-
-    final names = await Future.wait(newUserIds.map(getNameFromUser));
+    final fetched = widget.postResponse.reactions;
 
     setState(() {
       reactions = fetched;
-      for (int i = 0; i < newUserIds.length; i++) {
-        userNames[newUserIds[i]] = names[i];
-      }
     });
   }
 
@@ -97,8 +84,9 @@ class _ReactionBarState extends State<ReactionBar> {
   Widget build(BuildContext context) {
     // Group reactions by type and count for summary (only those with reaction)
     Map<String, int> reactionCounts = {};
-    for (var r in reactions.where((r) => r.reaction != null)) {
-      reactionCounts[r.reaction!] = (reactionCounts[r.reaction!] ?? 0) + 1;
+    for (var r in reactions.where((r) => r.postReaction.value != null)) {
+      reactionCounts[r.postReaction.value] =
+          (reactionCounts[r.postReaction.value] ?? 0) + 1;
     }
 
     return SingleChildScrollView(
@@ -144,12 +132,11 @@ class _ReactionBarState extends State<ReactionBar> {
                       itemCount: reactions.length,
                       itemBuilder: (context, index) {
                         var r = reactions[index];
-                        final userName = r.userId != null
-                            ? userNames[r.userId!] ?? "User"
-                            : "?";
-                        final reactionIcon = r.reaction != null
+                        final userName = r.userName;
+                        final reactionIcon = r.postReaction.value.isNotEmpty
                             ? Icon(
-                                reactionIcons[r.reaction] ?? Icons.help_outline,
+                                reactionIcons[r.postReaction.value] ??
+                                    Icons.help_outline,
                                 size: 16,
                               )
                             : null;
@@ -165,7 +152,9 @@ class _ReactionBarState extends State<ReactionBar> {
                             ),
                           ),
                           title: Text(userName),
-                          subtitle: (r.reaction != null || r.comment != null)
+                          subtitle:
+                              (r.postReaction.value.isNotEmpty ||
+                                  r.comment != null)
                               ? Row(
                                   children: [
                                     if (reactionIcon != null) ...[
@@ -308,7 +297,7 @@ class _ReactionBarState extends State<ReactionBar> {
     final userId = prefs.getString('userId') ?? '';
     try {
       await ReactionService.addReaction(
-        widget.postId,
+        widget.postResponse.id,
         userId,
         selectedReaction,
         token,
@@ -326,8 +315,8 @@ class _ReactionBarState extends State<ReactionBar> {
   }
 
   /// ---------- EDIT REACTION ----------
-  Future<void> _editReaction(PostReaction r) async {
-    String? editReaction = r.reaction;
+  Future<void> _editReaction(PostReactionResponse r) async {
+    String? editReaction = r.postReaction.value;
     final editCommentController = TextEditingController(text: r.comment ?? '');
 
     final result = await showDialog<bool>(
@@ -407,8 +396,8 @@ class _ReactionBarState extends State<ReactionBar> {
       final token = prefs.getString('jwt_token') ?? '';
       try {
         await ReactionService.updateReaction(
-          r.id!,
-          widget.postId,
+          r.id,
+          widget.postResponse.id,
           myUserId!,
           editReaction,
           token,

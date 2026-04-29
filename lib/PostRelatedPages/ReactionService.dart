@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:advocatechaiadvocate/PostRelatedPages/post_reaction_response.dart';
 import 'package:http/http.dart' as http;
 import '../Utils/BaseURL.dart' as BASE_URL;
 import 'PostReaction.dart';
@@ -10,7 +11,7 @@ class ReactionService {
       "${BASE_URL.Urls().baseURL}post-reactions";
 
   /// ---------- FETCH REACTIONS BY POST ----------
-  static Future<List<PostReaction>> fetchByPost(
+  static Future<List<PostReactionResponse>> fetchByPost(
       String postId, String token) async {
 
     final res = await http.get(
@@ -23,7 +24,7 @@ class ReactionService {
 
     if (res.statusCode == 200) {
       final List data = jsonDecode(res.body);
-      return data.map((e) => PostReaction.fromJson(e)).toList();
+      return data.map((e) => PostReactionResponse.fromJson(e)).toList();
     }
 
     return [];
@@ -110,7 +111,7 @@ class ReactionService {
   }
 
   /// ---------- FETCH REACTIONS BY USER ----------
-  static Future<List<PostReaction>> fetchByUser(
+  static Future<List<PostReactionResponse>> fetchByUser(
       String userId, String token) async {
 
     final res = await http.get(
@@ -122,7 +123,7 @@ class ReactionService {
 
     if (res.statusCode == 200) {
       final List data = jsonDecode(res.body);
-      return data.map((e) => PostReaction.fromJson(e)).toList();
+      return data.map((e) => PostReactionResponse.fromJson(e)).toList();
     }
 
     return [];

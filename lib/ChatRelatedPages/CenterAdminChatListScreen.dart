@@ -177,37 +177,8 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
       }
     }
 
-    bool val = false;
-
-    final unReadChatResponse = await http.get(
-      Uri.parse('${BASE_URL.Urls().baseURL}readable-chat/status?isRead=$val'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
-
-    print("un read messages :- ${unReadChatResponse.body}");
-
-    Map<String, bool> unReadChats = {};
-
-    if (unReadChatResponse.statusCode == 200) {
-      List<dynamic> unReadChatsList = jsonDecode(unReadChatResponse.body);
-
-      print("un read messages :- $unReadChatsList");
-
-      for (var chat in unReadChatsList) {
-        String chatId = chat['chatId'];
-        bool isRead = chat['isRead'];
-
-        unReadChats[chatId] = isRead;
-      }
-    }
-
     try {
       for (var admin in chatResponses) {
-
         try {
           DateTime? timeStamp = admin.timeStamp;
 
@@ -216,9 +187,13 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
           SenderInfo? senderInfo = admin.senderInfo;
           ReceiverInfo? receiverInfo = admin.receiverInfo;
 
-          print("collect the sender info and receiver info :- ${senderInfo != null ? senderInfo.toString() : null} , ${receiverInfo != null ? receiverInfo.toString() : null}");
+          print(
+            "collect the sender info and receiver info :- ${senderInfo != null ? senderInfo.toString() : null} , ${receiverInfo != null ? receiverInfo.toString() : null}",
+          );
 
           String? lateMessage;
+
+          bool readChat = true;
 
           String? otherUserId, otherUserName;
 
@@ -226,15 +201,19 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
             lateMessage = senderInfo.message;
             otherUserId = senderInfo.receiverId;
             otherUserName = senderInfo.receiverName;
+            readChat = senderInfo.readChat!;
           } else if (receiverInfo != null && receiverInfo.senderId != null) {
             lateMessage = receiverInfo.message;
             otherUserId = receiverInfo.senderId;
             otherUserName = receiverInfo.senderName;
+            readChat = receiverInfo.readChat!;
           } else {
             continue;
           }
 
-          print("other user id :- $otherUserId , other user name :- $otherUserName");
+          print(
+            "other user id :- $otherUserId , other user name :- $otherUserName",
+          );
 
           if (otherUserId == null || otherUserName == null) {
             continue;
@@ -246,10 +225,11 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
 
           bool? isOnline =
               activeness.isNotEmpty && activeness.containsKey(otherUserId);
-          bool? isUnread =
-              unReadChats.isNotEmpty && unReadChats.containsKey(admin.id);
+          bool? isUnread = readChat == false;
 
-          print("userId :- $otherUserId , userName :- $otherUserName , isOnline :- $isOnline , isUnread :- $isUnread , timeStamp :- $timeStamp , lateMessage :- $lateMessage , userAvatar :- $userAvatar");
+          print(
+            "userId :- $otherUserId , userName :- $otherUserName , isOnline :- $isOnline , isUnread :- $isUnread , timeStamp :- $timeStamp , lateMessage :- $lateMessage , userAvatar :- $userAvatar",
+          );
 
           try {
             ChatListItem listItem = ChatListItem(
@@ -268,7 +248,7 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
           } catch (e) {
             print("error :- $e");
           }
-        } catch(e) {
+        } catch (e) {
           print("error :- $e");
         }
       }
@@ -605,16 +585,16 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
                 : _filteredChatList.isEmpty
                 ? _buildEmptyState()
                 : RefreshIndicator(
-              onRefresh: () async {
-                await _loadChatList();
-              },
-              child: ListView.builder(
-                itemCount: _filteredChatList.length,
-                itemBuilder: (context, index) {
-                  return _buildChatListItem(_filteredChatList[index]);
-                },
-              ),
-            ),
+                    onRefresh: () async {
+                      await _loadChatList();
+                    },
+                    child: ListView.builder(
+                      itemCount: _filteredChatList.length,
+                      itemBuilder: (context, index) {
+                        return _buildChatListItem(_filteredChatList[index]);
+                      },
+                    ),
+                  ),
           ),
         ],
       ),

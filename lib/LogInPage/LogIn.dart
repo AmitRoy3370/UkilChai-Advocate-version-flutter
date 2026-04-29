@@ -186,7 +186,7 @@ class LogInState extends State<LogIn> {
 
           TextField(
             decoration: InputDecoration(
-              hintText: 'Enter your name',
+              hintText: 'Enter your userName',
               prefixIcon: Icon(Icons.person),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.all(Radius.circular(25.0)),

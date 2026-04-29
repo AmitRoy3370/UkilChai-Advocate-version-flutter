@@ -2,11 +2,13 @@ class ReceiverInfo {
   String? senderId;
   String? senderName;
   String? message;
+  bool? readChat;
 
   ReceiverInfo({
     this.senderId,
     this.senderName,
     this.message,
+    this.readChat
   });
 
   factory ReceiverInfo.fromJson(Map<String, dynamic> json) {
@@ -14,6 +16,7 @@ class ReceiverInfo {
       senderId: json['senderId'],
       senderName: json['senderName'],
       message: json['message'],
+      readChat: json['readChat']
     );
   }
 
@@ -22,6 +25,7 @@ class ReceiverInfo {
       'senderId': senderId,
       'senderName': senderName,
       'message': message,
+      'readChat':readChat
     };
   }
 }

@@ -14,8 +14,10 @@ import '../Utils/BaseURL.dart' as baseURL;
 import 'AnswerModel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'answer_response.dart';
+
 class AnswerTile extends StatelessWidget {
-  final AnswerModel answer;
+  final AnswerResponse answer;
   final VoidCallback? onRefresh;
   const AnswerTile({required this.answer, this.onRefresh, super.key});
 
@@ -214,28 +216,11 @@ class AnswerTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          FutureBuilder<String>(
-            future: getNameFromAdvocate(answer.advocateId),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Text("Advocate: loading...");
-              }
-              if (snapshot.hasError ||
-                  !snapshot.hasData ||
-                  snapshot.data!.isEmpty) {
-                return const Text("Advocate: N/A");
-              } else {
-                return Text(
-                  "Advocate: ${snapshot.data}",
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
-                );
-              }
-            },
+          Text(
+            answer.advocateName,
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
+          const SizedBox(height: 10),
 
           FutureBuilder<String>(
             future: getAdvocateId(),
@@ -333,27 +318,21 @@ class AnswerTile extends StatelessWidget {
                                   ),
                                   TextButton(
                                     onPressed: () async {
-
                                       showDialog(
-                                          context: context,
-                                          barrierDismissible: false,
-                                          builder: (BuildContext context) {
-
-                                            return AlertDialog(
-                                              title: Text('Edit Answer'),
-                                              content: Column(
-                                                children: [
-
-                                                  const CircularProgressIndicator(),
-                                                  const SizedBox(height: 10),
-                                                  Text('In progress....'),
-
-
-                                                ]
-                                              )
-                                            );
-
-                                          }
+                                        context: context,
+                                        barrierDismissible: false,
+                                        builder: (BuildContext context) {
+                                          return AlertDialog(
+                                            title: Text('Edit Answer'),
+                                            content: Column(
+                                              children: [
+                                                const CircularProgressIndicator(),
+                                                const SizedBox(height: 10),
+                                                Text('In progress....'),
+                                              ],
+                                            ),
+                                          );
+                                        },
                                       );
 
                                       try {
@@ -460,12 +439,9 @@ class AnswerTile extends StatelessWidget {
                                           Navigator.pop(dialogContext);
                                           onRefresh?.call();
 
-                                          if(context.mounted) {
-
+                                          if (context.mounted) {
                                             Navigator.pop(context);
-
                                           }
-
                                         } else {
                                           ScaffoldMessenger.of(
                                             context,
@@ -477,12 +453,9 @@ class AnswerTile extends StatelessWidget {
                                             ),
                                           );
 
-                                          if(context.mounted) {
-
+                                          if (context.mounted) {
                                             Navigator.pop(context);
-
                                           }
-
                                         }
                                       } catch (e) {
                                         ScaffoldMessenger.of(
@@ -491,12 +464,9 @@ class AnswerTile extends StatelessWidget {
                                           SnackBar(content: Text('Error: $e')),
                                         );
 
-                                        if(context.mounted) {
-
+                                        if (context.mounted) {
                                           Navigator.pop(context);
-
                                         }
-
                                       }
                                     },
                                     child: const Text('Update'),

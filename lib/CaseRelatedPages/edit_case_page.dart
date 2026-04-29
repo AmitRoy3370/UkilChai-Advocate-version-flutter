@@ -87,8 +87,8 @@ class _EditCasePageState extends State<EditCasePage> {
           loadedAdvocates.add(advocate);
 
           // 🔥 fetch advocate name via userId
-          final name = await getNameFromUser(advocate.userId);
-          loadedNames.add(name);
+          final name = advocate.name;
+          loadedNames.add(name!);
         }
 
         if (mounted) {
@@ -237,7 +237,7 @@ class _EditCasePageState extends State<EditCasePage> {
                   children: [
                     TextFormField(
                       controller: nameCtrl,
-                      decoration: const InputDecoration(labelText: "Case Name"),
+                      decoration: const InputDecoration(labelText: "Case Description"),
                       validator: (v) =>
                           v == null || v.isEmpty ? "Required" : null,
                     ),

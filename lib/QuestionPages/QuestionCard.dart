@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:advocatechaiadvocate/QuestionPages/question_response.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -21,7 +22,7 @@ import 'QuestionModel.dart';
 import 'QuestionService.dart';
 
 class QuestionCard extends StatefulWidget {
-  final QuestionModel question;
+  final QuestionResponse question;
   final VoidCallback refreshMethod;
 
   const QuestionCard({
@@ -369,7 +370,7 @@ class _QuestionCardState extends State<QuestionCard> {
       text: widget.question.message,
     );
 
-    String selectedType = widget.question.questionType;
+    String selectedType = widget.question.questionType.apiValue;
 
     showDialog(
       context: context,
@@ -563,14 +564,14 @@ class _QuestionCardState extends State<QuestionCard> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
         padding: const EdgeInsets.all(14),
-        child: Column(
+        child: SingleChildScrollView( child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  widget.question.questionType,
+                  widget.question.questionType.apiValue,
                   style: const TextStyle(color: Colors.green),
                 ),
                 if (isMyQuestion)
@@ -645,18 +646,9 @@ class _QuestionCardState extends State<QuestionCard> {
             ),
 
             const SizedBox(height: 6),
-            FutureBuilder<String>(
-              future: getNameFromUser(widget.question.userId),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Text("Loading...");
-                }
-
-                return Text(
-                  "Asked by ${snapshot.data}",
-                  style: const TextStyle(color: Colors.black),
-                );
-              },
+            Text(
+              widget.question.userName,
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
             Text(
@@ -683,7 +675,17 @@ class _QuestionCardState extends State<QuestionCard> {
             const Divider(color: Colors.grey),
 
             /// ================= ANSWERS =================
-            FutureBuilder<List<AnswerModel>>(
+            if (widget.question.answers.isNotEmpty) Text("Answers"),
+            if (widget.question.answers.isNotEmpty)
+              Column(
+                children: widget.question.answers
+                    .map((a) => AnswerTile(answer: a))
+                    .toList(),
+              ),
+            if (widget.question.answers.isEmpty)
+              Text("No answers yet", style: TextStyle(color: Colors.grey)),
+
+            /*FutureBuilder<List<AnswerModel>>(
               future: AnswerService.getByQuestion(widget.question.id!),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
@@ -705,7 +707,7 @@ class _QuestionCardState extends State<QuestionCard> {
                   children: answers.map((a) => AnswerTile(answer: a)).toList(),
                 );
               },
-            ),
+            ),*/
             const Divider(color: Colors.grey),
 
             /// ================= ANSWER INPUT SECTION =================
@@ -764,6 +766,7 @@ class _QuestionCardState extends State<QuestionCard> {
             ],
           ],
         ),
+      ),
       ),
     );
   }

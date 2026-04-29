@@ -42,7 +42,7 @@ class _NotificationPageState extends State<NotificationPage> {
       setState(() {
         notifications =
             data.map((e) => NotificationModel.fromJson(e)).toList();
-        notifications.reversed;
+        notifications = notifications.reversed.toList();
         loading = false;
       });
     } else {

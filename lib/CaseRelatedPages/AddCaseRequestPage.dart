@@ -134,7 +134,7 @@ class _AddCaseRequestPageState extends State<AddCaseRequestPage> {
           loadedAdvocates.add(advocate);
 
           // 🔥 fetch advocate name via userId
-          final name = await getNameFromUser(advocate.userId);
+          final name = advocate.name!;
           loadedNames.add(name);
         }
 
@@ -240,7 +240,7 @@ class _AddCaseRequestPageState extends State<AddCaseRequestPage> {
             TextField(
               controller: caseNameController,
               decoration: const InputDecoration(
-                labelText: "Case Name",
+                labelText: "Case Description",
                 border: OutlineInputBorder(),
               ),
             ),

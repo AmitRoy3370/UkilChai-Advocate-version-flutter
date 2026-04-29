@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'package:advocatechaiadvocate/PostRelatedPages/post_response.dart';
 import 'package:http/http.dart' as http;
 import './AdvocatePost.dart';
 import '../Utils/BaseURL.dart' as BASE_URL;
 
 class PostService {
-  static Future<List<AdvocatePost>> fetchAllPosts(String token) async {
+  static Future<List<PostResponse>> fetchAllPosts(String token) async {
     final res = await http.get(
       Uri.parse("${BASE_URL.Urls().baseURL}advocate/posts/all"),
       headers: {"Authorization": "Bearer $token"},
@@ -13,10 +14,10 @@ class PostService {
     if (res.statusCode != 200) throw Exception("Failed to load posts");
 
     final List data = jsonDecode(res.body);
-    return data.map((e) => AdvocatePost.fromJson(e)).toList();
+    return data.map((e) => PostResponse.fromJson(e)).toList();
   }
 
-  static Future<List<AdvocatePost>> searchPosts(
+  static Future<List<PostResponse>> searchPosts(
     String keyword,
     String token,
   ) async {
@@ -28,10 +29,10 @@ class PostService {
     );
 
     final List data = jsonDecode(res.body);
-    return data.map((e) => AdvocatePost.fromJson(e)).toList();
+    return data.map((e) => PostResponse.fromJson(e)).toList();
   }
 
-  static Future<List<AdvocatePost>> fetchSpecificAdvocatesPosts(
+  static Future<List<PostResponse>> fetchSpecificAdvocatesPosts(
     String? advocateId,
     String token,
   ) async {
@@ -45,7 +46,7 @@ class PostService {
     if (res.statusCode != 200) throw Exception("Failed to load posts");
 
     final List data = jsonDecode(res.body);
-    return data.map((e) => AdvocatePost.fromJson(e)).toList();
+    return data.map((e) => PostResponse.fromJson(e)).toList();
   }
 
   static Future<int> deletePost(

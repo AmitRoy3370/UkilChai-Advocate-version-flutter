@@ -1,4 +1,5 @@
 import 'package:advocatechaiadvocate/PostRelatedPages/post_card_home_page.dart';
+import 'package:advocatechaiadvocate/PostRelatedPages/post_response.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import './AdvocatePost.dart';
@@ -14,7 +15,7 @@ class PostFeedPageHomePage extends StatefulWidget {
 
 class _PostFeedPageHomePageState extends State<PostFeedPageHomePage> {
   bool loading = true;
-  List<AdvocatePost> posts = [];
+  List<PostResponse> posts = [];
 
   final ScrollController _scrollController = ScrollController();
 
@@ -37,6 +38,7 @@ class _PostFeedPageHomePageState extends State<PostFeedPageHomePage> {
     final data = await PostService.fetchAllPosts(token);
     setState(() {
       posts = data;
+      posts = posts.reversed.toList();
       loading = false;
     });
   }

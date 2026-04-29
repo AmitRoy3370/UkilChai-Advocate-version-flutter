@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:advocatechaiadvocate/QuestionPages/question_response.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -158,55 +159,71 @@ class QuestionService {
   /// -------------------------------------------------
   /// GET ALL QUESTIONS
   /// -------------------------------------------------
-  static Future<List<QuestionModel>> getAllQuestions() async {
+  static Future<List<QuestionResponse>> getAllQuestions() async {
     final res = await http.get(
       Uri.parse("$_base/all"),
       headers: await _headers(),
     );
 
-    return _parseList(res);
+    List<QuestionResponse> questions = _parseList(res);
+
+    questions = questions.reversed.toList();
+
+    return questions;
   }
 
   /// -------------------------------------------------
   /// GET QUESTIONS BY USER
   /// -------------------------------------------------
-  static Future<List<QuestionModel>> getByUser(String userId) async {
+  static Future<List<QuestionResponse>> getByUser(String userId) async {
     final res = await http.get(
       Uri.parse("$_base/user/$userId"),
       headers: await _headers(),
     );
 
-    return _parseList(res);
+    List<QuestionResponse> questions = _parseList(res);
+
+    questions = questions.reversed.toList();
+
+    return questions;
   }
 
   /// -------------------------------------------------
   /// SEARCH BY KEYWORD
   /// -------------------------------------------------
-  static Future<List<QuestionModel>> search(String keyword) async {
+  static Future<List<QuestionResponse>> search(String keyword) async {
     final res = await http.get(
       Uri.parse("$_base/search?keyword=$keyword"),
       headers: await _headers(),
     );
 
-    return _parseList(res);
+    List<QuestionResponse> questions = _parseList(res);
+
+    questions = questions.reversed.toList();
+
+    return questions;
   }
 
   /// -------------------------------------------------
   /// FILTER BY QUESTION TYPE
   /// -------------------------------------------------
-  static Future<List<QuestionModel>> filterByType(String type) async {
+  static Future<List<QuestionResponse>> filterByType(String type) async {
     final res = await http.get(
       Uri.parse("$_base/type/$type"),
       headers: await _headers(),
     );
 
-    return _parseList(res);
+    List<QuestionResponse> questions = _parseList(res);
+
+    questions = questions.reversed.toList();
+
+    return questions;
   }
 
   /// -------------------------------------------------
   /// FILTER BETWEEN TIME
   /// -------------------------------------------------
-  static Future<List<QuestionModel>> findBetween(
+  static Future<List<QuestionResponse>> findBetween(
       DateTime start,
       DateTime end,
       ) async {
@@ -217,44 +234,56 @@ class QuestionService {
       headers: await _headers(),
     );
 
-    return _parseList(res);
+    List<QuestionResponse> questions = _parseList(res);
+
+    questions = questions.reversed.toList();
+
+    return questions;
   }
 
   /// -------------------------------------------------
   /// FILTER AFTER TIME
   /// -------------------------------------------------
-  static Future<List<QuestionModel>> findAfter(DateTime time) async {
+  static Future<List<QuestionResponse>> findAfter(DateTime time) async {
     final res = await http.get(
       Uri.parse("$_base/after?time=${time.toIso8601String()}"),
       headers: await _headers(),
     );
 
-    return _parseList(res);
+    List<QuestionResponse> questions = _parseList(res);
+
+    questions = questions.reversed.toList();
+
+    return questions;
   }
 
   /// -------------------------------------------------
   /// FILTER BEFORE TIME
   /// -------------------------------------------------
-  static Future<List<QuestionModel>> findBefore(DateTime time) async {
+  static Future<List<QuestionResponse>> findBefore(DateTime time) async {
     final res = await http.get(
       Uri.parse("$_base/before?time=${time.toIso8601String()}"),
       headers: await _headers(),
     );
 
-    return _parseList(res);
+    List<QuestionResponse> questions = _parseList(res);
+
+    questions = questions.reversed.toList();
+
+    return questions;
   }
 
   /// -------------------------------------------------
   /// FIND BY QUESTION ID
   /// -------------------------------------------------
-  static Future<QuestionModel> findById(String id) async {
+  static Future<QuestionResponse> findById(String id) async {
     final res = await http.get(
       Uri.parse("$_base/findByQuestionId?questionId=$id"),
       headers: await _headers(),
     );
 
     if (res.statusCode == 200) {
-      return QuestionModel.fromJson(jsonDecode(res.body));
+      return QuestionResponse.fromJson(jsonDecode(res.body));
     } else {
       throw Exception(res.body);
     }
@@ -273,10 +302,10 @@ class QuestionService {
   /// -------------------------------------------------
   /// PARSER
   /// -------------------------------------------------
-  static List<QuestionModel> _parseList(http.Response res) {
+  static List<QuestionResponse> _parseList(http.Response res) {
     if (res.statusCode == 200) {
       final List data = jsonDecode(res.body);
-      return data.map((e) => QuestionModel.fromJson(e)).toList();
+      return data.map((e) => QuestionResponse.fromJson(e)).toList();
     } else {
       throw Exception(res.body);
     }

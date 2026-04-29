@@ -470,26 +470,9 @@ class CaseDetailsPage extends StatelessWidget {
                       final token = prefs.getString('jwt_token') ?? '';
                       final userId = prefs.getString('userId') ?? '';
 
-                      final advocateName = await getNameFromAdvocate(
-                        caseModel.advocateId,
-                      );
+                      final advocateName = caseModel.advocateName;
 
-                      final nameResponse = await http.get(
-                        Uri.parse(
-                          '${BASE_URL.Urls().baseURL}user/search?userId=$userId',
-                        ),
-                        headers: {
-                          "content-type": "application/json",
-                          "Authorization": "Bearer $token",
-                        },
-                      );
-
-                      String? myName;
-
-                      if (nameResponse.statusCode == 200) {
-                        final body = jsonDecode(nameResponse.body);
-                        myName = body["name"] ?? "";
-                      }
+                      String? myName = advocateName;
 
                       print(
                         "userId :- $userId and case userId :- ${caseModel.userId}",

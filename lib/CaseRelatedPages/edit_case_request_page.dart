@@ -79,8 +79,8 @@ class _EditCaseRequestPageState extends State<EditCaseRequestPage> {
           loadedAdvocates.add(advocate);
 
           // 🔥 fetch advocate name via userId
-          final name = await getNameFromUser(advocate.userId);
-          loadedNames.add(name);
+          final name = advocate.name;
+          loadedNames.add(name!);
         }
 
         if (mounted) {
@@ -224,7 +224,9 @@ class _EditCaseRequestPageState extends State<EditCaseRequestPage> {
                   children: [
                     TextFormField(
                       controller: nameCtrl,
-                      decoration: const InputDecoration(labelText: "Case Name"),
+                      decoration: const InputDecoration(
+                        labelText: "Case Description",
+                      ),
                       validator: (v) =>
                           v == null || v.isEmpty ? "Required" : null,
                     ),
@@ -253,27 +255,10 @@ class _EditCaseRequestPageState extends State<EditCaseRequestPage> {
                     const SizedBox(height: 20),
 
                     if (requestedAdvocateId != null)
-                      FutureBuilder<String>(
-                        future: getAdvocateName(requestedAdvocateId),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return const Text("Loading advocate...");
-                          }
-                          if (!snapshot.hasData || snapshot.hasError) {
-                            return const SizedBox.shrink();
-                          }
-
-                          if (snapshot.data == null) {
-                            return Text("Requested Advocate :- no advocate");
-                          }
-
-                          return Text("Requested Advocate: ${snapshot.data}");
-                        },
+                      Text(
+                        "Requested Advocate: ${widget.caseRequest.requestAdvocateName}",
                       ),
                     const Divider(),
-
-
 
                     /// -------- EXISTING FILES --------
                     const Text(
