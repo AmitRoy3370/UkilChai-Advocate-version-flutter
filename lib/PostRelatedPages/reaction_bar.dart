@@ -186,7 +186,7 @@ class _ReactionBarState extends State<ReactionBar> {
                             ],
                           )
                               : null,
-                          trailing: isOwn
+                          trailing: isOwn && widget.canReact != null && widget.canReact == true
                               ? PopupMenuButton<String>(
                                   icon: const Icon(Icons.more_vert),
                                   onSelected: (value) {
