@@ -2,14 +2,14 @@ class PostReaction {
   final String id;
   final String userId;
   final String advocatePostId;
-  final String reaction;
-  final String? comment;
+  String? reaction;
+  String? comment;
 
   PostReaction({
     required this.id,
     required this.userId,
     required this.advocatePostId,
-    required this.reaction,
+    this.reaction,
     this.comment,
   });
 

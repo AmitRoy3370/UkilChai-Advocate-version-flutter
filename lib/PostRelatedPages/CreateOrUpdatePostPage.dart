@@ -17,7 +17,8 @@ import 'AdvocatePost.dart';
 
 class CreateOrUpdatePostPage extends StatefulWidget {
   final PostResponse? post;
-  const CreateOrUpdatePostPage({super.key, this.post});
+  final Function? refresh;
+  const CreateOrUpdatePostPage({super.key, this.post, this.refresh});
 
   @override
   State<CreateOrUpdatePostPage> createState() => _CreateOrUpdatePostPageState();
@@ -41,7 +42,9 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
     super.initState();
     if (isUpdate) {
       contentController.text = widget.post!.postContent;
-      selectedType = AdvocateSpecialityExt.fromApi(widget.post!.postType.apiValue);
+      selectedType = AdvocateSpecialityExt.fromApi(
+        widget.post!.postType.apiValue,
+      );
       if (widget.post!.attachmentId != null &&
           widget.post!.attachmentId!.isNotEmpty) {
         fileName = "Existing Attachment";
@@ -246,6 +249,7 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
             const SizedBox(height: 16),
             Text("Post speciality :- ${selectedType.label}"),
             const SizedBox(height: 20),
+
             // -------- ATTACHMENT SECTION --------
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,7 +259,13 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 10),
-                if (widget.post != null && widget.post!.attachmentId != null)
+
+                // পুরনো attachment দেখান (যদি থাকে এবং remove না করা হয় এবং নতুন ফাইল না থাকে)
+                if (isUpdate &&
+                    widget.post!.attachmentId != null &&
+                    widget.post!.attachmentId!.isNotEmpty &&
+                    !removeOldAttachment &&
+                    selectedFile == null)  // ✅ নতুন ফাইল না থাকলেই পুরনো দেখান
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -270,28 +280,28 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                widget.post!.attachmentId ?? "",
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
+                              Expanded(
+                                child: Text(
+                                  widget.post!.attachmentId ?? "",
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                overflow: TextOverflow.ellipsis,
                               ),
                               IconButton(
                                 icon: const Icon(Icons.download),
                                 onPressed: () async {
                                   SharedPreferences prefs =
-                                      await SharedPreferences.getInstance();
-                                  final token =
-                                      prefs.getString('jwt_token') ?? '';
+                                  await SharedPreferences.getInstance();
+                                  final token = prefs.getString('jwt_token') ?? '';
 
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
                                       builder: (context) => PostAttachmentView(
-                                        attachmentId:
-                                            widget.post!.attachmentId!,
+                                        attachmentId: widget.post!.attachmentId!,
                                         jwtToken: token,
                                       ),
                                     ),
@@ -302,7 +312,7 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.close),
+                          icon: const Icon(Icons.close, color: Colors.red),
                           onPressed: () {
                             setState(() {
                               selectedFile = null;
@@ -318,10 +328,65 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
                     ),
                   )
                 else
-                  ElevatedButton.icon(
-                    onPressed: pickFiles,
-                    icon: const Icon(Icons.attach_file),
-                    label: const Text("Attach File"),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: pickFiles,
+                              icon: const Icon(Icons.attach_file),
+                              label: const Text("Attach File"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // ✅ নতুন ফাইলের নাম দেখান
+                            if (selectedFile != null && fileName != null && fileName!.isNotEmpty)
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green[50],
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: Colors.green[200]!),
+                                  ),
+                                  child: Text(
+                                    fileName!,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.green[700],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      // ✅ নতুন ফাইল সিলেক্ট করলে remove বাটন দেখান
+                      if (selectedFile != null)
+                        IconButton(
+                          icon: const Icon(Icons.clear, color: Colors.red),
+                          onPressed: () {
+                            setState(() {
+                              selectedFile = null;
+                              fileName = null;
+                              fileExtension = null;
+                              fileBytes = null;
+                              fileSelected = false;
+                              // ✅ নতুন ফাইল রিমুভ করলে পুরনো attachment ফিরিয়ে আনুন
+                              if (isUpdate && widget.post!.attachmentId != null) {
+                                removeOldAttachment = false;
+                              }
+                            });
+                          },
+                          tooltip: 'Remove selected file',
+                        ),
+                    ],
                   ),
               ],
             ),
@@ -335,13 +400,12 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
                     return AlertDialog(
                       title: const Text("Submitting post"),
                       content: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const CircularProgressIndicator(),
-                            const SizedBox(height:10),
-                            Text(isUpdate ? "Updating..." : "Posting..."),
-
-                          ]
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 10),
+                          Text(isUpdate ? "Updating..." : "Posting..."),
+                        ],
                       ),
                     );
                   },
@@ -349,11 +413,11 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
 
                 await submitPost();
 
-                if(context.mounted) {
-
+                if (context.mounted) {
                   Navigator.pop(context);
-
                 }
+
+                widget.refresh?.call();
 
               },
 

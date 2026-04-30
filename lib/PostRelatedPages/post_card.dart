@@ -10,12 +10,14 @@ import './AdvocatePost.dart';
 import 'PostAttachmentViewer.dart';
 import 'reaction_bar.dart';
 
-class PostCard extends StatelessWidget {
+class PostCard extends StatefulWidget {
   final PostResponse post;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final Function? onReactionChanged;
+  final bool? canReact;
 
-  const PostCard({super.key, required this.post, this.onEdit, this.onDelete});
+  const PostCard({super.key, required this.post, this.onEdit, this.onDelete, this.onReactionChanged, this.canReact});
 
   // ---------------- GET USER NAME ----------------
   Future<String> getNameFromUser(String userId) async {
@@ -69,6 +71,17 @@ class PostCard extends StatelessWidget {
     return "";
   }
 
+
+
+  @override
+  State<StatefulWidget> createState() {
+
+    return _Post_Card_State();
+
+  }
+}
+
+class _Post_Card_State extends State<PostCard> {
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -82,19 +95,22 @@ class PostCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: Text(post.advocateName,style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
+                  child: Text(
+                    widget.post.advocateName,
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
                 ),
                 Row(
                   children: [
-                    if (onEdit != null)
+                    if (widget.onEdit != null)
                       IconButton(
                         icon: const Icon(Icons.edit),
-                        onPressed: onEdit,
+                        onPressed: widget.onEdit,
                       ),
-                    if (onDelete != null)
+                    if (widget.onDelete != null)
                       IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: onDelete,
+                        onPressed: widget.onDelete,
                       ),
                   ],
                 ),
@@ -103,24 +119,24 @@ class PostCard extends StatelessWidget {
 
             const SizedBox(height: 6),
             Text(
-              post.postType.apiValue,
+              widget.post.postType.apiValue,
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
-            Text(post.postContent),
+            Text(widget.post.postContent),
             const Divider(),
-            if (post.attachmentId != null)
+            if (widget.post.attachmentId != null)
               ElevatedButton(
                 onPressed: () async {
                   SharedPreferences prefs =
-                      await SharedPreferences.getInstance();
+                  await SharedPreferences.getInstance();
                   final token = prefs.getString('jwt_token') ?? '';
 
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => PostAttachmentView(
-                        attachmentId: post.attachmentId!,
+                        attachmentId: widget.post.attachmentId!,
                         jwtToken: token,
                       ),
                     ),
@@ -134,10 +150,41 @@ class PostCard extends StatelessWidget {
                   ],
                 ),
               ),
-            ReactionBar(postResponse: post),
+            ReactionBar(
+              postResponse: widget.post,
+              onReactionChanged: (reaction, action) {
+                setState(() {
+                  switch (action) {
+                    case 'add':
+                      widget.post.reactions.insert(0, reaction);
+                      break;
+                    case 'remove':
+                      widget.post.reactions.removeWhere((r) => r.id == reaction.id);
+                      break;
+                    case 'update':
+                      final index = widget.post.reactions.indexWhere((r) => r.id == reaction.id);
+                      if (index != -1) {
+                        widget.post.reactions[index] = reaction;
+                      }
+                      break;
+                    case 'replace':
+                      final index = widget.post.reactions.indexWhere((r) => r.id == reaction.id);
+                      if (index != -1) {
+                        widget.post.reactions[index] = reaction;
+                      }
+                      break;
+                  }
+                });
+
+                // ✅ Parent (PostFeedPage) কে notify করুন (চাইলে)
+                widget.onReactionChanged?.call(reaction, action);
+              },
+              canReact: widget.canReact ?? true,
+            ),
           ],
         ),
       ),
     );
   }
+
 }

@@ -679,7 +679,7 @@ class _QuestionCardState extends State<QuestionCard> {
             if (widget.question.answers.isNotEmpty)
               Column(
                 children: widget.question.answers
-                    .map((a) => AnswerTile(answer: a))
+                    .map((a) => AnswerTile(answer: a, onRefresh: widget.refreshMethod))
                     .toList(),
               ),
             if (widget.question.answers.isEmpty)

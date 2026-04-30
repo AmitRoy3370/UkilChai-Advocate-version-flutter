@@ -36,12 +36,13 @@ class _EditCasePageState extends State<EditCasePage> {
   final List<PlatformFile> files = [];
   late List<AdvocateDetailsModel> advocates = [];
   late List<String> nameOfAdvocates = [];
+  var nameOfAdvocatesFromId = {};
   bool loading = false;
   bool advocateLoading = true;
   late AdvocateSpeciality selectedType;
   late List<String> existingAttachments;
   final List<PlatformFile> newFiles = [];
-  var requestedAdvocateId;
+  var requestedAdvocateId, requestedAdvocateName;
 
   late final service = CaseService(widget.token!);
 
@@ -56,6 +57,12 @@ class _EditCasePageState extends State<EditCasePage> {
       setState(() {
         requestedAdvocateId = widget.acceptedCase.advocateId;
       });
+    }
+
+    if(widget.acceptedCase.advocateName.isNotEmpty) {
+
+      requestedAdvocateName = widget.acceptedCase.advocateName;
+
     }
 
     getTheAdvocatesDetais();
@@ -89,6 +96,7 @@ class _EditCasePageState extends State<EditCasePage> {
           // 🔥 fetch advocate name via userId
           final name = advocate.name;
           loadedNames.add(name!);
+          nameOfAdvocatesFromId[advocate.id] = name;
         }
 
         if (mounted) {
@@ -259,25 +267,15 @@ class _EditCasePageState extends State<EditCasePage> {
                         onChanged: (v) {
                           setState(() {
                             requestedAdvocateId = v;
+                            requestedAdvocateName = nameOfAdvocatesFromId[v];
+
                           });
                         },
                       ),
 
                     const SizedBox(height: 20),
 
-                    FutureBuilder<String>(
-                      future: getAdvocateName(requestedAdvocateId),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Text("Loading advocate...");
-                        }
-                        if (!snapshot.hasData || snapshot.hasError) {
-                          return const SizedBox.shrink();
-                        }
-                        return Text("Requested Advocate: ${snapshot.data}");
-                      },
-                    ),
+                    Text("Requested Advocate: ${requestedAdvocateName ?? ''}"),
                     const Divider(),
 
                     DropdownButtonFormField<String>(

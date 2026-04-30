@@ -39,21 +39,34 @@ class ReactionService {
       String? comment,
       ) async {
 
+    // ✅ Build request body - শুধু non-null fields পাঠান
+    final Map<String, dynamic> requestBody = {
+      "advocatePostId": postId,
+      "userId": userId,
+    };
+
+    if (reaction != null && reaction.isNotEmpty) {
+      requestBody["postReaction"] = reaction;
+    }
+
+    if (comment != null && comment.isNotEmpty) {
+      requestBody["comment"] = comment;
+    }
+
+    print("Request Body: $requestBody");
+
     final res = await http.post(
       Uri.parse("$_base/add"),
       headers: {
         "Authorization": "Bearer $token",
         "Content-Type": "application/json",
       },
-      body: jsonEncode({
-        "advocatePostId": postId,
-        "userId": userId,
-        "postReaction": reaction,
-        "comment": comment,
-      }),
+      body: jsonEncode(requestBody),
     );
 
-    if (res.statusCode == 200) {
+    print("reaction add body :- ${res.body} and status :- ${res.statusCode}");
+
+    if (res.statusCode == 201 || res.statusCode == 200) {
       return PostReaction.fromJson(jsonDecode(res.body));
     }
 
@@ -72,21 +85,33 @@ class ReactionService {
       String? comment,
       ) async {
 
+    // ✅ Build request body - শুধু non-null fields পাঠান
+    final Map<String, dynamic> requestBody = {
+      "advocatePostId": postId,
+      "userId": userId,
+    };
+
+    if (reaction != null && reaction.isNotEmpty) {
+      requestBody["postReaction"] = reaction;
+    }
+
+    if (comment != null && comment.isNotEmpty) {
+      requestBody["comment"] = comment;
+    }
+
+    print("Request Body: $requestBody");
+
+
     final res = await http.put(
       Uri.parse("$_base/update/$reactionId"),
       headers: {
         "Authorization": "Bearer $token",
         "Content-Type": "application/json",
       },
-      body: jsonEncode({
-        "userId": userId,
-        "postReaction": reaction,
-        "comment": comment,
-        "advocatePostId":postId
-      }),
+      body: jsonEncode(requestBody),
     );
 
-    if (res.statusCode == 200) {
+    if (res.statusCode == 201 || res.statusCode == 200) {
       return PostReaction.fromJson(jsonDecode(res.body));
     }
 
@@ -127,6 +152,23 @@ class ReactionService {
     }
 
     return [];
+  }
+
+  static Future<PostReactionResponse> getById(String id) async {
+
+    final res = await http.get(
+      Uri.parse("$_base/$id"),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    );
+
+    if (res.statusCode == 200) {
+      return PostReactionResponse.fromJson(jsonDecode(res.body));
+    }
+
+    throw Exception(res.body);
+
   }
 
 }

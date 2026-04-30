@@ -134,7 +134,6 @@ class AdvocateDetailsState extends State<AdvocateDetails> {
       }
 
       return [];
-
     }
     return null;
   }
@@ -383,7 +382,30 @@ class AdvocateDetailsState extends State<AdvocateDetails> {
                       width: 300,
                       child: Card(
                         child: SingleChildScrollView(
-                          child: PostCard(post: posts[index]),
+                          child: PostCard(
+                            post: posts[index],
+                            onReactionChanged: (reaction, action) {
+                              if (action == "add") {
+                                setState(() {
+                                  posts.add(reaction);
+                                });
+                              } else if (action == "update") {
+                                setState(() {
+                                  posts[posts.indexWhere(
+                                        (element) => element.id == reaction.id,
+                                      )] =
+                                      reaction;
+                                });
+                              } else if (action == "delete") {
+                                setState(() {
+                                  posts.removeWhere(
+                                    (element) => element.id == reaction.id,
+                                  );
+                                });
+                              }
+                            },
+                            canReact: false,
+                          ),
                         ),
                       ),
                     );

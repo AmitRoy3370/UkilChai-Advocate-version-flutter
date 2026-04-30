@@ -80,7 +80,7 @@ class PostResponse {
   Map<PostReactions, int> get reactionCounts {
     final Map<PostReactions, int> counts = {};
     for (var reaction in reactions) {
-      counts[reaction.postReaction] = (counts[reaction.postReaction] ?? 0) + 1;
+      counts[reaction.postReaction!] = (counts[reaction.postReaction] ?? 0) + 1;
     }
     return counts;
   }

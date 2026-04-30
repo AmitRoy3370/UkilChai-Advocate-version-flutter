@@ -2,15 +2,15 @@ import '../PostRelatedPages/post_reaction.dart';
 
 class PostReactionResponse {
   final String id;
-  final PostReactions postReaction;
-  final String? comment;
+  PostReactions? postReaction;
+  String? comment;
   final String userId;
   final String userName;
   final String advocatePostId;
 
   PostReactionResponse({
     required this.id,
-    required this.postReaction,
+    this.postReaction,
     this.comment,
     required this.userId,
     required this.userName,
@@ -33,7 +33,7 @@ class PostReactionResponse {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'postReaction': postReaction.value,
+      'postReaction': postReaction?.value,
       if (comment != null) 'comment': comment,
       'userId': userId,
       'userName': userName,
@@ -62,7 +62,7 @@ class PostReactionResponse {
 
   @override
   String toString() {
-    return 'PostReactionResponse(id: $id, postReaction: ${postReaction.label}, userId: $userId, advocatePostId: $advocatePostId)';
+    return 'PostReactionResponse(id: $id, postReaction: ${postReaction?.label}, userId: $userId, advocatePostId: $advocatePostId)';
   }
 
   @override
@@ -79,6 +79,13 @@ class PostReactionResponse {
 
   @override
   int get hashCode {
-    return Object.hash(id, postReaction, comment, userId, userName, advocatePostId);
+    return Object.hash(
+      id,
+      postReaction,
+      comment,
+      userId,
+      userName,
+      advocatePostId,
+    );
   }
 }
