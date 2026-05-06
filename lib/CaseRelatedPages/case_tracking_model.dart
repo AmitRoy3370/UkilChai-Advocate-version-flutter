@@ -4,13 +4,15 @@ class CaseTrackingStage {
   final String caseStage;   // exact enum value
   final int stageNumber;
   final DateTime? trackingTime;
+  final bool? visibility;
 
   CaseTrackingStage({
     this.id,
     required this.caseId,
     required this.caseStage,
     required this.stageNumber,
-    this.trackingTime
+    this.trackingTime,
+    this.visibility
   });
 
   factory CaseTrackingStage.fromJson(Map<String, dynamic> json) {
@@ -20,6 +22,8 @@ class CaseTrackingStage {
       caseStage: json['caseStage'],
       stageNumber: json['stageNumber'],
       trackingTime:json['trackingTime'] != null ? DateTime.parse(json['trackingTime']) : null,
+      visibility: json['visibility'] ?? true,
+
     );
   }
 }

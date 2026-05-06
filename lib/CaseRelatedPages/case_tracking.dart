@@ -365,7 +365,7 @@ class _CaseTrackingState extends State<CaseTracking> {
     throw Exception('Failed to load trackings');
   }
 
-  Future<bool> _addCaseTracking(String caseStage, DateTime selectedDateTime) async {
+  Future<bool> _addCaseTracking(String caseStage, DateTime selectedDateTime, bool? visibility) async {
     final userId =
         widget.advocateUserId ??
         (await SharedPreferences.getInstance()).getString('userId');
@@ -375,12 +375,12 @@ class _CaseTrackingState extends State<CaseTracking> {
         'Authorization': 'Bearer ${widget.token!}',
         'content-type': 'application/json',
       },
-      body: jsonEncode({"caseId": widget.caseId!, "caseStage": caseStage, "trackingTime": selectedDateTime.toUtc().toIso8601String()}),
+      body: jsonEncode({"caseId": widget.caseId!, "caseStage": caseStage, "trackingTime": selectedDateTime.toUtc().toIso8601String(), "visibility":visibility!}),
     );
     return response.statusCode == 200 || response.statusCode == 201;
   }
 
-  Future<bool> _updateCaseTracking(String id, String caseStage, DateTime selectedDateTime) async {
+  Future<bool> _updateCaseTracking(String id, String caseStage, DateTime selectedDateTime, bool? visibility) async {
     final userId =
         widget.advocateUserId ??
         (await SharedPreferences.getInstance()).getString('userId');
@@ -390,7 +390,7 @@ class _CaseTrackingState extends State<CaseTracking> {
         'Authorization': 'Bearer ${widget.token!}',
         'content-type': 'application/json',
       },
-      body: jsonEncode({"caseId": widget.caseId!, "caseStage": caseStage, "trackingTime": selectedDateTime.toUtc().toIso8601String()}),
+      body: jsonEncode({"caseId": widget.caseId!, "caseStage": caseStage, "trackingTime": selectedDateTime.toUtc().toIso8601String(), "visibility":visibility!}),
     );
     return response.statusCode == 200 || response.statusCode == 201;
   }
@@ -3372,6 +3372,7 @@ class _CaseTrackingState extends State<CaseTracking> {
 
   void _showCaseTrackingBottomSheet(CaseTrackingStage? existing) {
     final isUpdate = existing != null;
+    bool isVisible = existing?.visibility ?? true; // Default to true for new entries
     String? selectedStage = existing?.caseStage;
 
     DateTime selectedDateTime = existing?.trackingTime != null
@@ -3460,6 +3461,67 @@ class _CaseTrackingState extends State<CaseTracking> {
                       ),
                     ),
 
+                  // Visibility Switch Button
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade400),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              isVisible ? Icons.visibility : Icons.visibility_off,
+                              color: isVisible ? Colors.green : Colors.grey,
+                              size: 24,
+                            ),
+                            const SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Visibility",
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey.shade800,
+                                  ),
+                                ),
+                                Text(
+                                  isVisible
+                                      ? "Visible to clients"
+                                      : "Hidden from clients",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isVisible ? Colors.green : Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        Switch(
+                          value: isVisible,
+                          onChanged: (value) {
+                            setModalState(() {
+                              isVisible = value;
+                            });
+                          },
+                          activeColor: Colors.green,
+                          inactiveThumbColor: Colors.grey,
+                          activeTrackColor: Colors.green.shade200,
+                        ),
+                      ],
+                    ),
+                  ),
+
+
                     const SizedBox(height: 24),
                     Text(
                       isUpdate
@@ -3526,11 +3588,13 @@ class _CaseTrackingState extends State<CaseTracking> {
                                         ? await _updateCaseTracking(
                                             existing!.id!,
                                             selectedStage!,
-                                        selectedDateTime
+                                        selectedDateTime,
+                                        isVisible
                                           )
                                         : await _addCaseTracking(
                                             selectedStage!,
-                                            selectedDateTime
+                                            selectedDateTime,
+                                            isVisible
                                           );
 
                                     if (success) {
@@ -3648,7 +3712,8 @@ class _CaseTrackingState extends State<CaseTracking> {
                         color: Colors.grey.shade600,
                       ),
                     ),
-                    if(ct.trackingTime != null)
+                    if(ct.trackingTime != null &&
+                      (ct.visibility == null || ct.visibility == true))
                       Text(
                         "${ct.trackingTime}",
                         style: TextStyle(

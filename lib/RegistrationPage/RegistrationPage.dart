@@ -216,9 +216,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
           setState(() {
             _selectedPosition = pos;
             _selectedPlaceName = name;
-            locationTextController
-                    .text = /*"Place: $name, Lat: $lat, Lng: $lng"*/
-                _selectedPlaceName!;
+            locationTextController.text = _selectedPlaceName!;
             _updateMarkers();
           });
           mapController.move(pos, 15.0);
@@ -256,7 +254,13 @@ class _RegistrationPageState extends State<RegistrationPage> {
         return StatefulBuilder(
           builder: (context, dialogSetState) {
             return AlertDialog(
-              title: const Text("Select Specialist"),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: const Text(
+                "Select Specialist",
+                style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+              ),
               content: SizedBox(
                 width: double.maxFinite,
                 child: ListView(
@@ -284,7 +288,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text("Done"),
+                  child: const Text("Done", style: TextStyle(color: Colors.blue)),
                 ),
               ],
             );
@@ -320,7 +324,13 @@ class _RegistrationPageState extends State<RegistrationPage> {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             return AlertDialog(
-              title: const Text("Select Specialities"),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: const Text(
+                "Select Specialities",
+                style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+              ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -347,7 +357,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     Navigator.pop(ctx);
                     setState(() {});
                   },
-                  child: const Text("Done"),
+                  child: const Text("Done", style: TextStyle(color: Colors.blue)),
                 ),
               ],
             );
@@ -395,22 +405,27 @@ class _RegistrationPageState extends State<RegistrationPage> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Please enter userName")));
+        return;
       } else if (passwordController.text.isEmpty) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Please enter password")));
+        return;
       } else if (emailController.text.isEmpty) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Please enter email")));
+        return;
       } else if (phoneController.text.isEmpty) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Please enter phone")));
+        return;
       } else if (locationTextController.text.isEmpty) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Please enter location")));
+        return;
       }
 
       var request = http.MultipartRequest("POST", uri);
@@ -646,6 +661,28 @@ class _RegistrationPageState extends State<RegistrationPage> {
               content: Text("Advocate Join Request Sent Successfully"),
             ),
           );
+          
+          // Clear form after successful submission
+          setState(() {
+            showForm = false;
+          });
+          
+          nameController.clear();
+          passwordController.clear();
+          emailController.clear();
+          phoneController.clear();
+          locationTextController.clear();
+          experienceController.clear();
+          licenseKeyController.clear();
+          degrees.clear();
+          workingExperiences.clear();
+          selectedDistricts.clear();
+          pickedImage = null;
+          webImageBytes = null;
+          cvFile = null;
+          webCvBytes = null;
+          cvFileName = null;
+          
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text("Join Request Failed: $joinResponseBody")),
@@ -669,371 +706,920 @@ class _RegistrationPageState extends State<RegistrationPage> {
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      ).showSnackBar(SnackBar(content: Text('${e.toString()}')));
     }
+  }
+
+  Widget _buildOpenFormButton() {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          showForm = true;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        transform: Matrix4.identity()..scale(showForm ? 0.0 : 1.0),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Colors.blue, Colors.blueAccent],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(40),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blue.withOpacity(0.4),
+                blurRadius: 15,
+                offset: const Offset(0, 5),
+                spreadRadius: 2,
+              ),
+            ],
+            border: Border.all(
+              color: Colors.white.withOpacity(0.5),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TweenAnimationBuilder(
+                tween: Tween<double>(begin: 0, end: 1),
+                duration: const Duration(milliseconds: 1000),
+                builder: (context, value, child) {
+                  return Transform.scale(
+                    scale: 1 + (value * 0.1),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.gavel,
+                        color: Colors.blue,
+                        size: 20,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'অ্যাডভোকেট রেজিস্ট্রেশন',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.arrow_forward,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnimatedForm() {
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOutCubic,
+      bottom: showForm ? 0 : -MediaQuery.of(context).size.height,
+      left: 0,
+      right: 0,
+      height: MediaQuery.of(context).size.height * 0.85,
+      child: IgnorePointer(
+        ignoring: !showForm,
+        child: TweenAnimationBuilder(
+          tween: Tween<double>(begin: 0, end: showForm ? 1 : 0),
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeOutCubic,
+          builder: (context, value, child) {
+            return Transform.translate(
+              offset: Offset(0, (1 - value) * 100),
+              child: Opacity(
+                opacity: value,
+                child: child,
+              ),
+            );
+          },
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(30),
+                topRight: Radius.circular(30),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 20,
+                  offset: Offset(0, -5),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                GestureDetector(
+                  onVerticalDragUpdate: (details) {
+                    if (details.delta.dy > 10) {
+                      setState(() {
+                        showForm = false;
+                      });
+                    }
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 12),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Colors.blue, Colors.blueAccent],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(30),
+                      topRight: Radius.circular(30),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.gavel,
+                              color: Colors.blue,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'অ্যাডভোকেট রেজিস্ট্রেশন',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                'আপনার তথ্য পূরণ করুন',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => setState(() => showForm = false),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                      left: 20,
+                      right: 20,
+                      top: 20,
+                    ),
+                    child: Column(
+                      children: [
+                        _buildFormField(
+                          controller: nameController,
+                          label: "পূর্ণ নাম",
+                          icon: Icons.person_outline,
+                          hint: "আপনার পূর্ণ নাম লিখুন",
+                        ),
+                        const SizedBox(height: 16),
+                        _buildFormField(
+                          controller: emailController,
+                          label: "ইমেইল",
+                          icon: Icons.email_outlined,
+                          hint: "আপনার ইমেইল ঠিকানা",
+                          keyboardType: TextInputType.emailAddress,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildFormField(
+                          controller: phoneController,
+                          label: "মোবাইল নম্বর",
+                          icon: Icons.phone_outlined,
+                          hint: "০১XXXXXXXXX",
+                          keyboardType: TextInputType.phone,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildPasswordField(),
+                        const SizedBox(height: 16),
+                        _buildFormField(
+                          controller: locationTextController,
+                          label: "লোকেশন",
+                          icon: Icons.location_on_outlined,
+                          hint: "মানচিত্র থেকে সিলেক্ট করুন",
+                          readOnly: true,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildFormField(
+                          controller: experienceController,
+                          label: "অভিজ্ঞতা (বছর)",
+                          icon: Icons.work_outline,
+                          hint: "কত বছর অভিজ্ঞতা",
+                          keyboardType: TextInputType.number,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildFormField(
+                          controller: licenseKeyController,
+                          label: "লাইসেন্স কী",
+                          icon: Icons.key,
+                          hint: "আপনার লাইসেন্স কী লিখুন",
+                        ),
+                        const SizedBox(height: 20),
+                        _buildDegreeSection(),
+                        const SizedBox(height: 20),
+                        _buildWorkingExperienceSection(),
+                        const SizedBox(height: 20),
+                        _buildSpecialistSection(),
+                        const SizedBox(height: 20),
+                        _buildCvPicker(),
+                        const SizedBox(height: 20),
+                        _buildImagePicker(),
+                        const SizedBox(height: 30),
+                        _buildSubmitButton(),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    String? hint,
+    TextInputType keyboardType = TextInputType.text,
+    bool readOnly = false,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: TextField(
+        controller: controller,
+        readOnly: readOnly,
+        keyboardType: keyboardType,
+        inputFormatters: keyboardType == TextInputType.number
+            ? [FilteringTextInputFormatter.digitsOnly]
+            : null,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.blue),
+          hintText: hint,
+          hintStyle: TextStyle(color: Colors.grey[400]),
+          prefixIcon: Icon(icon, color: Colors.blue),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          filled: true,
+          fillColor: Colors.transparent,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 16,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPasswordField() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: TextField(
+        controller: passwordController,
+        obscureText: !_showPassword,
+        decoration: InputDecoration(
+          labelText: "পাসওয়ার্ড",
+          labelStyle: const TextStyle(color: Colors.blue),
+          hintText: "কমপক্ষে ৬ অক্ষর",
+          hintStyle: TextStyle(color: Colors.grey[400]),
+          prefixIcon: const Icon(Icons.lock_outline, color: Colors.blue),
+          suffixIcon: IconButton(
+            icon: Icon(
+              _showPassword ? Icons.visibility : Icons.visibility_off,
+              color: Colors.blue,
+            ),
+            onPressed: () => setState(() => _showPassword = !_showPassword),
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          filled: true,
+          fillColor: Colors.transparent,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 16,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDegreeSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "ডিগ্রী সমূহ",
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: TextField(
+                  controller: degreeController,
+                  decoration: InputDecoration(
+                    hintText: "ডিগ্রী যোগ করুন",
+                    hintStyle: TextStyle(color: Colors.grey[400]),
+                    prefixIcon: const Icon(Icons.school, color: Colors.blue),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Colors.blue, Colors.blueAccent],
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ElevatedButton(
+                onPressed: addDegree,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: const Text("যোগ করুন", style: TextStyle(color: Colors.white)),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (degrees.isNotEmpty)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: degrees.map((degree) {
+              return Chip(
+                label: Text(degree),
+                deleteIcon: const Icon(Icons.close, size: 18),
+                onDeleted: () => removeDegree(degree),
+                backgroundColor: Colors.blue.withOpacity(0.1),
+                deleteIconColor: Colors.blue,
+                labelStyle: const TextStyle(color: Colors.blue),
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildWorkingExperienceSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "কর্ম অভিজ্ঞতা",
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: TextField(
+                  controller: workingExperienceController,
+                  decoration: InputDecoration(
+                    hintText: "কর্ম অভিজ্ঞতা যোগ করুন",
+                    hintStyle: TextStyle(color: Colors.grey[400]),
+                    prefixIcon: const Icon(Icons.work_history, color: Colors.blue),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Colors.blue, Colors.blueAccent],
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ElevatedButton(
+                onPressed: addWorkingExperience,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: const Text("যোগ করুন", style: TextStyle(color: Colors.white)),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (workingExperiences.isNotEmpty)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: workingExperiences.map((exp) {
+              return Chip(
+                label: Text(exp),
+                deleteIcon: const Icon(Icons.close, size: 18),
+                onDeleted: () => removeWorkingExperience(exp),
+                backgroundColor: Colors.blue.withOpacity(0.1),
+                deleteIconColor: Colors.blue,
+                labelStyle: const TextStyle(color: Colors.blue),
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSpecialistSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "স্পেশালিস্ট এলাকা",
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: showDistrictDialog,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey[200]!),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.gavel, color: Colors.blue),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    selectedDistricts.isEmpty
+                        ? "স্পেশালিস্ট সিলেক্ট করুন"
+                        : "${selectedDistricts.length} টি স্পেশালিস্ট সিলেক্ট করা হয়েছে",
+                    style: TextStyle(
+                      color: selectedDistricts.isEmpty ? Colors.grey[600] : Colors.black87,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.arrow_drop_down, color: Colors.blue),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (selectedDistricts.isNotEmpty)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: selectedDistricts.map((d) {
+              return Chip(
+                label: Text(d.apiValue),
+                onDeleted: () {
+                  setState(() {
+                    selectedDistricts.remove(d);
+                  });
+                },
+                backgroundColor: Colors.blue.withOpacity(0.1),
+                deleteIconColor: Colors.blue,
+                labelStyle: const TextStyle(color: Colors.blue),
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCvPicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "সিভি (PDF)",
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: pickCv,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey[200]!),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.picture_as_pdf, color: Colors.red),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    cvFileName ?? "PDF ফাইল আপলোড করুন",
+                    style: TextStyle(
+                      color: cvFileName != null ? Colors.black87 : Colors.grey[600],
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    "ব্রাউজ",
+                    style: TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImagePicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "প্রোফাইল ছবি",
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: pickImage,
+          child: Container(
+            height: 120,
+            width: 120,
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: pickedImage == null && webImageBytes == null
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.camera_alt, size: 40, color: Colors.grey[400]),
+                      const SizedBox(height: 8),
+                      Text(
+                        "ছবি যোগ করুন",
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
+                  )
+                : kIsWeb
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.memory(
+                          webImageBytes!,
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.file(
+                          pickedImage!,
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: () async {
+          FocusScope.of(context).unfocus();
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      "রেজিস্ট্রেশন হচ্ছে...",
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.blue,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "দয়া করে অপেক্ষা করুন",
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+
+          await _submitForm();
+
+          if (mounted) {
+            Navigator.pop(context);
+          }
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: 5,
+        ),
+        child: const Text(
+          "রেজিস্ট্রেশন সম্পন্ন করুন",
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        title: const Text("Registration with Map"),
+        title: const Text("অ্যাডভোকেট রেজিস্ট্রেশন"),
         backgroundColor: Colors.blue,
+        elevation: 0,
       ),
       body: Stack(
         children: [
-          FlutterMap(
-            mapController: mapController,
-            options: const MapOptions(
-              initialCenter: lat_lng.LatLng(23.8103, 90.4125),
-              initialZoom: 13.0,
-            ),
-            children: [
-              TileLayer(
-                urlTemplate:
-                    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                subdomains: const ['a', 'b', 'c'],
-              ),
-              MarkerLayer(markers: _markers),
-            ],
+          // 🔥 FIXED: Map with proper size and interaction
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return SizedBox(
+                width: constraints.maxWidth,
+                height: constraints.maxHeight,
+                child: FlutterMap(
+                  mapController: mapController,
+                  options: MapOptions(
+                    initialCenter: lat_lng.LatLng(23.8103, 90.4125),
+                    initialZoom: 13.0,
+                    minZoom: 3.0,  // Minimum zoom level
+                    maxZoom: 18.0, // Maximum zoom level
+                    interactionOptions: const InteractionOptions(
+                      flags: InteractiveFlag.all, // Everything enabled
+                    ),
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      subdomains: const ['a', 'b', 'c'],
+                      userAgentPackageName: 'com.advocatechai.app',
+                    ),
+                    MarkerLayer(markers: _markers),
+                  ],
+                ),
+              );
+            },
           ),
+
+          // Gradient Overlay
+          IgnorePointer(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withOpacity(0.3),
+                    Colors.black.withOpacity(0.6),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Search Bar
           Positioned(
-            top: 10,
-            left: 10,
-            right: 10,
+            top: MediaQuery.of(context).padding.top + 10,
+            left: 16,
+            right: 16,
             child: Card(
-              elevation: 5,
+              elevation: 8,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(30),
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Row(
                   children: [
+                    const Icon(Icons.search, color: Colors.blue),
                     Expanded(
                       child: TextField(
                         controller: searchController,
                         decoration: const InputDecoration(
-                          hintText: "Search place...",
+                          hintText: "লোকেশন খুঁজুন...",
                           border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                         ),
+                        onSubmitted: (value) => searchPlace(),
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.search),
-                      onPressed: searchPlace,
+                    Container(
+                      margin: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.blue,
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.search, color: Colors.white),
+                        onPressed: searchPlace,
+                        iconSize: 20,
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
           ),
+
+          // My Location Button
           Positioned(
-            bottom: showForm ? 310 : 20,
-            left: 10,
-            child: Row(
-              children: [
-                const Text("Open Registration Form"),
-                Switch(
-                  value: showForm,
-                  onChanged: (val) {
-                    setState(() {
-                      showForm = val;
-                    });
-                  },
-                ),
-              ],
+            bottom: 20,
+            right: 16,
+            child: FloatingActionButton(
+              mini: true,
+              backgroundColor: Colors.white,
+              onPressed: () {
+                if (_devicePosition != null) {
+                  setState(() {
+                    _selectedPosition = _devicePosition;
+                    locationTextController.text = _selectedPlaceName ?? '';
+                    _updateMarkers();
+                  });
+                  mapController.move(_devicePosition!, 15.0);
+                }
+              },
+              child: const Icon(Icons.my_location, color: Colors.blue),
             ),
           ),
-          if (showForm)
+
+          // Open Form Button
+          if (!showForm)
             Positioned(
-              bottom: 0,
+              bottom: 20,
               left: 0,
               right: 0,
-              height: MediaQuery.of(context).size.height * 0.75,
-              child: Card(
-                margin: const EdgeInsets.all(10),
-                elevation: 6,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Stack(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(15),
-                      child: SingleChildScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-
-                          children: [
-                            const SizedBox(
-                              height: 20,
-                            ), // Space for close button
-                            TextField(
-                              controller: nameController,
-                              decoration: const InputDecoration(
-                                labelText: "userName",
-                              ),
-                            ),
-                            TextField(
-                              controller: passwordController,
-                              obscureText: !_showPassword,
-                              decoration: InputDecoration(
-                                labelText: "Password",
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _showPassword
-                                        ? Icons.visibility
-                                        : Icons.visibility_off,
-                                  ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _showPassword = !_showPassword;
-                                    });
-                                  },
-                                ),
-                              ),
-                            ),
-
-                            TextField(
-                              controller: emailController,
-                              decoration: const InputDecoration(
-                                labelText: "Email",
-                              ),
-                            ),
-                            TextField(
-                              controller: phoneController,
-                              decoration: const InputDecoration(
-                                labelText: "Phone",
-                              ),
-                            ),
-                            TextField(
-                              controller: locationTextController,
-                              readOnly: true,
-                              decoration: const InputDecoration(
-                                labelText: "Location Info",
-                              ),
-                            ),
-
-                            TextField(
-                              controller: experienceController,
-                              decoration: const InputDecoration(
-                                labelText: "Experience(year)",
-                              ),
-                              keyboardType: TextInputType.number,
-                              inputFormatters: <TextInputFormatter>[
-                                FilteringTextInputFormatter
-                                    .digitsOnly, // Only allows 0-9
-                              ],
-                            ),
-                            TextField(
-                              controller: licenseKeyController,
-                              decoration: const InputDecoration(
-                                labelText: "License Key",
-                              ),
-                            ),
-                            // -------- Degree Input Section --------
-                            const SizedBox(height: 10),
-
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: degreeController,
-                                    decoration: const InputDecoration(
-                                      labelText: "Add Degree",
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                ElevatedButton(
-                                  onPressed: addDegree,
-                                  child: const Text("Add"),
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 10),
-
-                            // Show added degrees as chips
-                            if (degrees.isNotEmpty)
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: degrees.map((degree) {
-                                  return Chip(
-                                    label: Text(degree),
-                                    deleteIcon: const Icon(Icons.close),
-                                    onDeleted: () => removeDegree(degree),
-                                  );
-                                }).toList(),
-                              ),
-
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: workingExperienceController,
-                                    decoration: const InputDecoration(
-                                      labelText: "Add Working Experience",
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                ElevatedButton(
-                                  onPressed: addWorkingExperience,
-                                  child: const Text("Add"),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-
-                            // Show added working experiences as chips
-                            if (workingExperiences.isNotEmpty)
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: workingExperiences.map((
-                                  workingExperience,
-                                ) {
-                                  return Chip(
-                                    label: Text(workingExperience),
-                                    deleteIcon: const Icon(Icons.close),
-                                    onDeleted: () => removeWorkingExperience(
-                                      workingExperience,
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            ElevatedButton(
-                              onPressed: showDistrictDialog,
-                              child: const Text("Select Specialist"),
-                            ),
-
-                            Wrap(
-                              children: selectedDistricts
-                                  .map(
-                                    (d) => Chip(
-                                      label: Text(d.apiValue),
-                                      onDeleted: () {
-                                        setState(() {
-                                          selectedDistricts.remove(d);
-                                        });
-                                      },
-                                    ),
-                                  )
-                                  .toList(),
-                            ),
-                            const SizedBox(height: 20),
-                            ElevatedButton.icon(
-                              onPressed: pickCv,
-                              icon: const Icon(Icons.upload_file),
-                              label: const Text("Upload CV (PDF)"),
-                            ),
-                            const SizedBox(height: 10),
-
-                            if (cvFileName != null && cvFileName!.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.picture_as_pdf,
-                                      color: Colors.red,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        cvFileName!,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            const SizedBox(height: 20),
-
-                            GestureDetector(
-                              onTap: pickImage,
-                              child: Container(
-                                height: 120,
-                                width: 120,
-                                decoration: BoxDecoration(border: Border.all()),
-                                child:
-                                    pickedImage == null && webImageBytes == null
-                                    ? const Icon(Icons.camera_alt, size: 50)
-                                    : kIsWeb
-                                    ? Image.memory(
-                                        webImageBytes!,
-                                        fit: BoxFit.cover,
-                                      )
-                                    : Image.file(
-                                        pickedImage!,
-                                        fit: BoxFit.cover,
-                                      ),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            ElevatedButton(
-                              onPressed: () async {
-                                showDialog(
-                                  context: context,
-                                  barrierDismissible: false,
-                                  builder: (BuildContext context) {
-                                    return AlertDialog(
-
-                                      content: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const CircularProgressIndicator(),
-                                          const SizedBox(height: 16),
-                                          Text("Sending request..."),
-                                        ],
-                                      ),
-                                    );
-                                  },
-                                );
-
-                                try {
-                                  await _submitForm();
-
-                                  if (context.mounted) {
-                                    Navigator.pop(context);
-                                  }
-                                } catch (e) {
-                                  if (context.mounted) {
-                                    Navigator.pop(context);
-                                  }
-                                }
-                              },
-                              child: const Text("Submit request"),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 0,
-                      right: 0,
-                      child: IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () {
-                          setState(() {
-                            showForm = false;
-                          });
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+              child: Center(
+                child: _buildOpenFormButton(),
               ),
             ),
+
+          // Animated Form
+          _buildAnimatedForm(),
         ],
       ),
     );

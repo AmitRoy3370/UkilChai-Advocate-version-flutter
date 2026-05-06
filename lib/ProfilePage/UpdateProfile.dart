@@ -13,6 +13,7 @@ import 'package:latlong2/latlong.dart' as lat_lng;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:advocatechaiadvocate/Utils/BaseURL.dart' as baseURL;
+import 'package:advocatechaiadvocate/Utils/BaseURL.dart' as BASEURL;
 import 'package:advocatechaiadvocate/Auth/AuthService.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:file_picker/file_picker.dart';
@@ -37,6 +38,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
   final TextEditingController locationTextController = TextEditingController();
 
   bool _showPassword = false, _showOldPassword = false;
+  
 
   lat_lng.LatLng? _devicePosition;
   lat_lng.LatLng? _selectedPosition;
@@ -57,6 +59,8 @@ class _UpdateProfileState extends State<UpdateProfile> {
 
   final TextEditingController experienceController = TextEditingController();
   final TextEditingController licenseKeyController = TextEditingController();
+  final TextEditingController degreeController = TextEditingController();
+  final TextEditingController workingExperienceController = TextEditingController();
 
   List<String> degrees = [];
   List<String> workingExperiences = [];
@@ -66,10 +70,21 @@ class _UpdateProfileState extends State<UpdateProfile> {
       .map((e) => e.name)
       .toList();
   bool loading = true;
+  bool isUpdating = false;
 
   final MapController mapController = MapController();
 
   Stream<Position>? _positionStream;
+
+  // Focus nodes
+  final FocusNode _oldNameFocus = FocusNode();
+  final FocusNode _nameFocus = FocusNode();
+  final FocusNode _oldPasswordFocus = FocusNode();
+  final FocusNode _newPasswordFocus = FocusNode();
+  final FocusNode _emailFocus = FocusNode();
+  final FocusNode _phoneFocus = FocusNode();
+  final FocusNode _experienceFocus = FocusNode();
+  final FocusNode _licenseFocus = FocusNode();
 
   get userIdValue => null;
 
@@ -82,8 +97,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
       return null;
     } else {
       final tempDir = await getTemporaryDirectory();
-      final tempPath =
-          '${tempDir.path}/profile.$extension'; // e.g., 'profile.jpg'
+      final tempPath = '${tempDir.path}/profile.$extension';
       final file = File(tempPath);
       await file.writeAsBytes(bytes);
       return file;
@@ -93,14 +107,10 @@ class _UpdateProfileState extends State<UpdateProfile> {
   Future<void> loadPreviousData() async {
     final token = await AuthService.getToken();
 
-    //print("I am now loading previous data...");
-
     if (token == null || token.isEmpty) {
       print("No token find at here...");
       return;
     }
-
-    //print("token received in loading previous data :- $token");
 
     final userId = await AuthService.getUserId();
 
@@ -112,23 +122,17 @@ class _UpdateProfileState extends State<UpdateProfile> {
       },
     );
 
-    /*print(
-      "search userId :- $userId and response :- ${response.body} and ${response.statusCode}",
-    );*/
-
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
 
       setState(() {
-        oldNameController.text = data["name"];
-
-        //passwordController.text = data["password"];
+        oldNameController.text = data["name"] ?? "";
+        nameController.text = data["name"] ?? "";
       });
 
       final profileImageId = data["profileImageId"];
       if (profileImageId != null) {
-        final profileImageURL =
-            "${baseURL.Urls().baseURL}user/download/$profileImageId";
+        final profileImageURL = "${baseURL.Urls().baseURL}user/download/$profileImageId";
         final profileImageResponse = await http.get(
           Uri.parse(profileImageURL),
           headers: {
@@ -136,215 +140,104 @@ class _UpdateProfileState extends State<UpdateProfile> {
             "Authorization": "Bearer $token",
           },
         );
-        if (profileImageResponse.statusCode == 200 &&
-            profileImageResponse.bodyBytes.isNotEmpty) {
+        if (profileImageResponse.statusCode == 200 && profileImageResponse.bodyBytes.isNotEmpty) {
           final bytes = profileImageResponse.bodyBytes;
-          bool isJpeg =
-              bytes.length > 4 &&
-              bytes[0] == 0xFF &&
-              bytes[1] == 0xD8; // JPEG check
-          bool isPng =
-              bytes.length > 4 &&
-              bytes[0] == 0x89 &&
-              bytes[1] == 0x50 &&
-              bytes[2] == 0x4E &&
-              bytes[3] == 0x47; // PNG check
+          bool isJpeg = bytes.length > 4 && bytes[0] == 0xFF && bytes[1] == 0xD8;
+          bool isPng = bytes.length > 4 &&
+              bytes[0] == 0x89 && bytes[1] == 0x50 &&
+              bytes[2] == 0x4E && bytes[3] == 0x47;
           bool isLikelyImage = isJpeg || isPng;
-          if (isLikelyImage) {
-            print("Valid image bytes detected");
-            final mimeType = isJpeg ? 'image/jpeg' : 'image/png';
-            //final xfile = File.fromUri(Uri.parse(profileImageURL));
-            if (mounted) {
-              try {
-                setState(() async {
-                  webImageBytes = bytes;
-                  final extension = isJpeg ? 'jpg' : 'png';
-                  pickedImage = await convertBytesToFile(
-                    bytes,
-                    extension: extension,
-                  );
-                  loading = false;
-                });
-              } catch (e) {
-                print(e.toString());
-              }
-            }
-          } else {
-            print("Bytes received but not a valid image format");
-            if (mounted) {
-              setState(() {
+          if (isLikelyImage && mounted) {
+            try {
+              setState(() async {
+                webImageBytes = bytes;
+                final extension = isJpeg ? 'jpg' : 'png';
+                pickedImage = await convertBytesToFile(bytes, extension: extension);
                 loading = false;
               });
+            } catch (e) {
+              print(e.toString());
+              if (mounted) setState(() => loading = false);
             }
+          } else {
+            if (mounted) setState(() => loading = false);
           }
         }
+      }
 
-        final locationURL =
-            "${baseURL.Urls().baseURL}userLocation/findByUserId/$userId";
+      final locationURL = "${baseURL.Urls().baseURL}userLocation/findByUserId/$userId";
+      final locationResponse = await http.get(
+        Uri.parse(locationURL),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      );
 
-        final locationResponse = await http.get(
-          Uri.parse(locationURL),
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer $token",
-          },
-        );
-
-        print(
-          "getted location response in update profile :- ${locationResponse.body}",
-        );
-
-        if (locationResponse.statusCode == 200) {
-          final locationResponseData = jsonDecode(locationResponse.body);
-
+      if (locationResponse.statusCode == 200) {
+        final locationResponseData = jsonDecode(locationResponse.body);
+        setState(() {
           locationPresent = true;
+          locationTextController.text = locationResponseData["locationName"] ?? "";
+          latitude = locationResponseData["lattitude"] ?? 0.0;
+          longitude = locationResponseData["longitude"] ?? 0.0;
+          _selectedPosition = lat_lng.LatLng(latitude, longitude);
+        });
+      }
 
-          setState(() {
-            locationTextController.text = locationResponseData["locationName"];
-            latitude = locationResponseData["lattitude"];
-            longitude = locationResponseData["longitude"];
-          });
-        } else {
-          final locationNameText = locationTextController.text;
-          final locationLatitude = latitude;
-          final locationLongitude = longitude;
+      final userContactInfoURL = "${baseURL.Urls().baseURL}user/contact-info/user?userId=$userId";
+      final userContactInfoResponse = await http.get(
+        Uri.parse(userContactInfoURL),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      );
 
-          final uri = Uri.parse(
-            "${baseURL.Urls().baseURL}userLocation/create?userId=$userId",
-          );
+      if (userContactInfoResponse.statusCode == 200) {
+        final userContactInfoResponseData = jsonDecode(userContactInfoResponse.body);
+        setState(() {
+          emailController.text = userContactInfoResponseData["email"] ?? "";
+          phoneController.text = userContactInfoResponseData["phone"] ?? "";
+        });
+      }
 
-          final response = await http.post(
-            uri,
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": "Bearer $token",
-            },
-            body: jsonEncode({
-              "userId": userId,
-              "locationName": locationNameText,
-              "lattitude": locationLatitude,
-              "longitude": locationLongitude,
-            }),
-          );
+      // ---------------- LOAD ADVOCATE DATA ----------------
+      final advocateUrl = "${baseURL.Urls().baseURL}advocate/findByUser/$userId";
+      final advocateResponse = await http.get(
+        Uri.parse(advocateUrl),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+        },
+      );
 
-          if (response.statusCode == 200 || response.statusCode == 201) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Location info add successfully")),
-            );
-            if (kDebugMode) {
-              print("Contact info add successfully: ${response.body}");
-            }
-          } else {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text((response.body))));
-          }
-        }
+      if (advocateResponse.statusCode == 200) {
+        final advocateData = jsonDecode(advocateResponse.body);
+        String? userIdFromAdvocate = advocateData["userId"];
 
-        final userContactInfoURL =
-            "${baseURL.Urls().baseURL}user/contact-info/user?userId=$userId";
-
-        final userContactInfoResponse = await http.get(
-          Uri.parse(userContactInfoURL),
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer $token",
-          },
+        // CHECK IF CV EXISTS
+        final cvCheckUrl = "${baseURL.Urls().baseURL}advocate/cv/$userIdFromAdvocate";
+        final cvCheckResponse = await http.get(
+          Uri.parse(cvCheckUrl),
+          headers: {"Authorization": "Bearer $token"},
         );
 
-        if (userContactInfoResponse.statusCode == 200) {
-          final userContactInfoResponseData = jsonDecode(
-            userContactInfoResponse.body,
-          );
-
+        if (cvCheckResponse.statusCode == 200) {
           setState(() {
-            emailController.text = userContactInfoResponseData["email"];
-            phoneController.text = userContactInfoResponseData["phone"];
-          });
-        } else {
-          var uri = Uri.parse(
-            "${baseURL.Urls().baseURL}user/contact-info/add?userId=$userId",
-          );
-
-          final response = await http.post(
-            uri,
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": "Bearer $token",
-            },
-            body: jsonEncode({
-              "userId": userId,
-              "email": emailController.text.trim(),
-              "phone": phoneController.text.trim(),
-            }),
-          );
-
-          if (response.statusCode == 200 || response.statusCode == 201) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Contact info add successfully")),
-            );
-            if (kDebugMode) {
-              print("Contact info add successfully: ${response.body}");
-            }
-          } else {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text((response.body))));
-          }
-        }
-
-        // ---------------- LOAD ADVOCATE DATA ----------------
-        final advocateUrl =
-            "${baseURL.Urls().baseURL}advocate/findByUser/$userId";
-
-        final advocateResponse = await http.get(
-          Uri.parse(advocateUrl),
-          headers: {
-            "Authorization": "Bearer $token",
-            "Content-Type": "application/json",
-          },
-        );
-
-        if (advocateResponse.statusCode == 200) {
-          final advocateData = jsonDecode(advocateResponse.body);
-
-          String? userId = advocateData["userId"];
-
-          // -------- CHECK IF CV EXISTS --------
-          final cvCheckUrl = "${baseURL.Urls().baseURL}advocate/cv/$userId";
-
-          final cvCheckResponse = await http.get(
-            Uri.parse(cvCheckUrl),
-            headers: {"Authorization": "Bearer $token"},
-          );
-
-          if (cvCheckResponse.statusCode == 200) {
-            setState(() {
-              webCvBytes = cvCheckResponse.bodyBytes;
-              cvFileName = "previous_cv.pdf";
-            });
-          }
-
-          setState(() {
-            advocateId = advocateData["id"];
-
-            experienceController.text =
-                advocateData["experience"]?.toString() ?? "";
-
-            licenseKeyController.text = advocateData["licenseKey"] ?? "";
-
-            degrees = List<String>.from(advocateData["degrees"] ?? []);
-            workingExperiences = List<String>.from(
-              advocateData["workingExperiences"] ?? [],
-            );
-
-            selectedSpecialities = Set<String>.from(
-              advocateData["advocateSpeciality"] ?? [],
-            );
+            webCvBytes = cvCheckResponse.bodyBytes;
+            cvFileName = "previous_cv.pdf";
           });
         }
-      } else {
-        print("Failed to load previous data: ${response.statusCode}");
+
+        setState(() {
+          advocateId = advocateData["id"];
+          experienceController.text = advocateData["experience"]?.toString() ?? "";
+          licenseKeyController.text = advocateData["licenseKey"] ?? "";
+          degrees = List<String>.from(advocateData["degrees"] ?? []);
+          workingExperiences = List<String>.from(advocateData["workingExperiences"] ?? []);
+          selectedSpecialities = Set<String>.from(advocateData["advocateSpeciality"] ?? []);
+        });
       }
     }
   }
@@ -358,49 +251,6 @@ class _UpdateProfileState extends State<UpdateProfile> {
     html.Url.revokeObjectUrl(url);
   }
 
-  Future<void> downloadCv() async {
-    final token = await AuthService.getToken();
-
-    if (token == null) return;
-
-    final userId = await AuthService.getUserId();
-
-    final url = Uri.parse("${baseURL.Urls().baseURL}advocate/cv/$advocateId");
-
-    final response = await http.get(
-      Uri.parse("${baseURL.Urls().baseURL}advocate/cv/$userId"),
-      headers: {"Authorization": "Bearer $token"},
-    );
-
-    if (response.statusCode != 200) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("No CV available")));
-      return;
-    }
-
-    final bytes = response.bodyBytes;
-
-    // 🌐 WEB
-    if (kIsWeb) {
-      final blob = html.Blob([bytes], 'application/pdf');
-      final url = html.Url.createObjectUrlFromBlob(blob);
-
-      html.AnchorElement(href: url)
-        ..setAttribute("download", "advocate_cv.pdf")
-        ..click();
-
-      html.Url.revokeObjectUrl(url);
-      return;
-    }
-
-    // 📱 MOBILE
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/advocate_cv.pdf');
-
-    await file.writeAsBytes(bytes, flush: true);
-    await OpenFilex.open(file.path);
-  }
 
   void showDistrictDialog() {
     showDialog(
@@ -409,7 +259,11 @@ class _UpdateProfileState extends State<UpdateProfile> {
         return StatefulBuilder(
           builder: (context, dialogSetState) {
             return AlertDialog(
-              title: const Text("Select Specialist"),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Text(
+                "Select Specialist",
+                style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+              ),
               content: SizedBox(
                 width: double.maxFinite,
                 child: ListView(
@@ -420,9 +274,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
                       onChanged: (value) {
                         dialogSetState(() {
                           if (value == true) {
-                            selectedDistricts.add(
-                              AdvocateSpecialityExt.fromApi(district),
-                            );
+                            selectedDistricts.add(AdvocateSpecialityExt.fromApi(district));
                           } else {
                             selectedDistricts.remove(district);
                           }
@@ -435,7 +287,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text("Done"),
+                  child: const Text("Done", style: TextStyle(color: Colors.blue)),
                 ),
               ],
             );
@@ -445,7 +297,6 @@ class _UpdateProfileState extends State<UpdateProfile> {
     );
   }
 
-  // Show speciality selection dialog
   void showSpecialityDialog() {
     showDialog(
       context: context,
@@ -453,7 +304,11 @@ class _UpdateProfileState extends State<UpdateProfile> {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             return AlertDialog(
-              title: const Text("Select Specialities"),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Text(
+                "Select Specialities",
+                style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+              ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -480,7 +335,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
                     Navigator.pop(ctx);
                     setState(() {});
                   },
-                  child: const Text("Done"),
+                  child: const Text("Done", style: TextStyle(color: Colors.blue)),
                 ),
               ],
             );
@@ -490,11 +345,66 @@ class _UpdateProfileState extends State<UpdateProfile> {
     );
   }
 
+  // Add degree
+  void addDegree() {
+    if (degreeController.text.trim().isNotEmpty) {
+      degrees.add(degreeController.text.trim());
+      degreeController.clear();
+      setState(() {});
+    }
+  }
+
+  // Add working experience
+  void addWorkingExperience() {
+    if (workingExperienceController.text.trim().isNotEmpty) {
+      workingExperiences.add(workingExperienceController.text.trim());
+      workingExperienceController.clear();
+      setState(() {});
+    }
+  }
+
+  // Remove degree
+  void removeDegree(String degree) {
+    degrees.remove(degree);
+    setState(() {});
+  }
+
+  // Remove working experience
+  void removeWorkingExperience(String exp) {
+    workingExperiences.remove(exp);
+    setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
     loadPreviousData();
     _startLocationUpdates();
+  }
+
+  @override
+  void dispose() {
+    searchController.dispose();
+    nameController.dispose();
+    oldNameController.dispose();
+    passwordController.dispose();
+    oldPasswordController.dispose();
+    emailController.dispose();
+    phoneController.dispose();
+    locationTextController.dispose();
+    experienceController.dispose();
+    licenseKeyController.dispose();
+    degreeController.dispose();
+    workingExperienceController.dispose();
+    _oldNameFocus.dispose();
+    _nameFocus.dispose();
+    _oldPasswordFocus.dispose();
+    _newPasswordFocus.dispose();
+    _emailFocus.dispose();
+    _phoneFocus.dispose();
+    _experienceFocus.dispose();
+    _licenseFocus.dispose();
+    super.dispose();
   }
 
   void _startLocationUpdates() async {
@@ -595,7 +505,6 @@ class _UpdateProfileState extends State<UpdateProfile> {
     }
   }
 
-  // Unified Reverse Geocoding (using Nominatim for all platforms)
   Future<String> getAddressFromLatLng(double lat, double lng) async {
     try {
       final url = Uri.parse(
@@ -612,16 +521,14 @@ class _UpdateProfileState extends State<UpdateProfile> {
     } catch (e) {
       if (kDebugMode) print('Geocoding error: $e');
     }
-    return 'Lat: $lat, Lng: $lng'; // Fallback
+    return 'Lat: $lat, Lng: $lng';
   }
 
-  // Search for place (unified Nominatim for all platforms)
   Future<void> searchPlace() async {
     String query = searchController.text.trim();
     if (query.isEmpty) return;
 
     lat_lng.LatLng? pos;
-    String locationText = query;
 
     try {
       final uri = Uri.parse(
@@ -633,8 +540,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
       );
 
       if (response.statusCode == 200) {
-        locationPresent = false;
-
+        setState(() => locationPresent = false);
         final data = jsonDecode(response.body);
         if (data.isNotEmpty) {
           double lat = double.parse(data[0]['lat']);
@@ -647,13 +553,10 @@ class _UpdateProfileState extends State<UpdateProfile> {
 
           pos = lat_lng.LatLng(lat, lng);
           String name = data[0]['display_name'];
-          //setState(() {
           _selectedPosition = pos;
           _selectedPlaceName = name;
-          locationTextController.text = /*"Place: $name, Lat: $lat, Lng: $lng"*/
-              _selectedPlaceName!;
+          locationTextController.text = _selectedPlaceName!;
           _updateMarkers();
-          // });
           mapController.move(pos, 15.0);
         }
       }
@@ -662,27 +565,58 @@ class _UpdateProfileState extends State<UpdateProfile> {
     }
 
     if (pos == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("No results found")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No results found")));
     }
   }
 
-  // Pick image
   Future<void> pickImage() async {
-    XFile? file = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (file != null) {
-      if (kIsWeb) {
-        webImageBytes = await file.readAsBytes();
-        pickedImage = File(file.path);
-      } else {
-        pickedImage = File(file.path);
-      }
-      setState(() {});
-    }
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Colors.blue),
+              title: const Text('গ্যালারি থেকে নির্বাচন করুন'),
+              onTap: () async {
+                Navigator.pop(context);
+                XFile? file = await ImagePicker().pickImage(source: ImageSource.gallery);
+                if (file != null) {
+                  if (kIsWeb) {
+                    webImageBytes = await file.readAsBytes();
+                  } else {
+                    pickedImage = File(file.path);
+                  }
+                  setState(() {});
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Colors.blue),
+              title: const Text('ক্যামেরা দিয়ে তুলুন'),
+              onTap: () async {
+                Navigator.pop(context);
+                XFile? file = await ImagePicker().pickImage(source: ImageSource.camera);
+                if (file != null) {
+                  if (kIsWeb) {
+                    webImageBytes = await file.readAsBytes();
+                  } else {
+                    pickedImage = File(file.path);
+                  }
+                  setState(() {});
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  // Pick CV PDF
   Future<void> pickCv() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -701,9 +635,12 @@ class _UpdateProfileState extends State<UpdateProfile> {
   }
 
   Future<void> _submitForm() async {
+    if (!_validateForm()) return;
+
+    setState(() => isUpdating = true);
+
     try {
       final logInUri = Uri.parse("${baseURL.Urls().baseURL}auth/login");
-
       final logInResponse = await http.post(
         logInUri,
         headers: {"Content-Type": "application/json"},
@@ -714,66 +651,23 @@ class _UpdateProfileState extends State<UpdateProfile> {
       );
 
       if (logInResponse.statusCode != 200) {
-        print("password data is not valid...");
-
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Invalid credential for old name or password....")));
-
+        _showSnackBar("পুরনো পাসওয়ার্ড সঠিক নয়", Colors.red);
+        setState(() => isUpdating = false);
         return;
       }
 
       final decoded = jsonDecode(logInResponse.body);
-
       String? token = decoded["token"];
       String? userId = decoded["userId"];
 
-      print("Updating userId :- $userId");
-
       final uri = Uri.parse("${baseURL.Urls().baseURL}user/update/$userId");
-
-      if (kDebugMode) {
-        //print("token :- $token and userId :- $userId");
-      }
-
-      if (nameController.text.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Please enter name")));
-      } else if (passwordController.text.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Please enter password")));
-      } else if (emailController.text.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Please enter email")));
-      } else if (phoneController.text.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Please enter phone")));
-      } else if (locationTextController.text.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Please enter location")));
-      }
-
       var request = http.MultipartRequest("PUT", uri);
       request.headers['Authorization'] = 'Bearer $token';
 
-      /*request.headers.addAll({
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      });*/
-
-      // -------- Text fields ----------
       request.fields["name"] = nameController.text.trim();
       request.fields["password"] = passwordController.text.trim();
 
-      final imageFindingUri = Uri.parse(
-        "${baseURL.Urls().baseURL}user/search?userId=$userId",
-      );
-
+      final imageFindingUri = Uri.parse("${baseURL.Urls().baseURL}user/search?userId=$userId");
       final imageFindingResponse = await http.get(
         imageFindingUri,
         headers: {
@@ -782,810 +676,1139 @@ class _UpdateProfileState extends State<UpdateProfile> {
         },
       );
 
-      print("image finding response in update profile :- ${imageFindingResponse.statusCode}");
-
       if (imageFindingResponse.statusCode == 200) {
         final imageFindingResponseData = jsonDecode(imageFindingResponse.body);
-
-        if (kDebugMode) {
-          print("imageFindingResponseData :- $imageFindingResponseData");
-        }
-
         String? profileImageId = imageFindingResponseData["profileImageId"];
-
-        // optional (send only if backend allows)
         if (profileImageId != null && profileImageId.isNotEmpty) {
           request.fields["profileImageId"] = profileImageId;
         }
-
-        if (kDebugMode) {
-          print(
-            "profileImageId in update profile section :- ${request.fields["profileImageId"]}",
-          );
-        }
       }
 
-      print("does it has web image byte :- ${webImageBytes != null}");
-
-      // -------- File upload ----------
       if (kIsWeb && webImageBytes != null) {
-        if (kIsWeb && webImageBytes != null) {
-          if (kDebugMode) {
-            print("added file in the request section.......");
-          }
-
-          request.files.add(
-            http.MultipartFile.fromBytes(
-              'file',
-              webImageBytes!,
-              filename: '${nameController.text.trim()}.png',
-              contentType: http.MediaType('image', 'png'),
-              // 🔥 VERY IMPORTANT
-            ),
-          );
-
-          print(
-            "webImageBytes in update profile section :- ${webImageBytes!.length}",
-          );
-          print(
-            "file :- ${request.files.isNotEmpty}  content type :- ${request.files.elementAt(0).contentType}  filename :- ${request.files.elementAt(0).filename}",
-          );
-        }
-
-        /*request.files.add(
-          await http.MultipartFile.fromPath("file", pickedImage!.path),
-        );*/
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'file',
+            webImageBytes!,
+            filename: '${nameController.text.trim()}.png',
+            contentType: http.MediaType('image', 'png'),
+          ),
+        );
       } else if (!kIsWeb && pickedImage != null) {
         request.files.add(
           await http.MultipartFile.fromPath("file", pickedImage!.path),
         );
       }
 
-      if (kDebugMode) {
-        //print("added file :- ${request.files.toString()}");
-      }
-
-      if (kDebugMode) {
-        print("request body :- ${request.fields}");
-      }
-
-      if (kDebugMode) {
-        //print("request :- ${request.toString()}");
-      }
-
-      print("Sending user update request...");
-
-      // -------- Send request ----------
       final response = await request.send();
-
-      print(
-        "updating user response :- ${response.statusCode} ${response.reasonPhrase} ${response.request}",
-      );
-
       final responseBody = await response.stream.bytesToString();
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final decoded = jsonDecode(responseBody);
-
-        print("updating user's response :- $decoded");
-
-        // ✅ JWT token from backend
-        //final String token = decoded["token"];
-        // final String userId = decoded["userId"];
-
         final sharedPreferences = await SharedPreferences.getInstance();
-        final String? token = sharedPreferences.getString("jwt_token");
-        final String? userId = sharedPreferences.getString("userId");
-
-        if (kDebugMode) {
-          print("token in update profile :- $token and userId update profile :- $userId");
-        }
-
-        print("received token in update profile :- $token");
-
-        // -------- Save token (App + Web) ----------
-        /*final prefs = await SharedPreferences.getInstance();
-        await prefs.setString("jwt_token", token!);
-        await prefs.setString("userId", userId!);*/
+        final String? tokenFromPrefs = sharedPreferences.getString("jwt_token");
+        final String? userIdFromPrefs = sharedPreferences.getString("userId");
 
         AuthService.saveToken(token!);
         AuthService.saveUserId(userId!);
 
-        final sharedPreferences1 = await SharedPreferences.getInstance();
-        final _token = sharedPreferences1.getString("jwt_token");
+        // Update Contact Info
+        await _updateContactInfo(userId!, tokenFromPrefs!);
+        
+        // Update Location Info
+        await _updateLocationInfo(userId!, tokenFromPrefs);
 
-        print("received token in update profile second layer :- $_token");
-
-        if (_token == null || token.isEmpty) {
-          print("No token found. User not logged in.");
-          return;
-        }
-
-        String contactInfoFindingURI =
-            "${baseURL.Urls().baseURL}user/contact-info/user?userId=$userId";
-
-        final contactInfoFindingUri = Uri.parse(contactInfoFindingURI);
-
-        final responseForContactInfoFinding = await http.get(
-          contactInfoFindingUri,
-          headers: {
-            "Authorization": "Bearer $_token", // Key: Use 'Bearer ' prefix
-            "Content-Type":
-                "application/json", // If JSON body; adjust as needed
-          },
-        );
-
-        print("contact info finding response :- ${responseForContactInfoFinding.statusCode}");
-
-        if (responseForContactInfoFinding.statusCode != 200) {
-          final contactInfoUri = Uri.parse(
-            "${baseURL.Urls().baseURL}user/contact-info/add?userId=$userId",
-          );
-
-          final responseForContactInfo = await http.post(
-            contactInfoUri,
-            headers: {
-              "Authorization": "Bearer $_token", // Key: Use 'Bearer ' prefix
-              "Content-Type": "application/json",
-            },
-            body: jsonEncode({
-              "userId": userId,
-              "email": emailController.text.trim(),
-              "phone": phoneController.text.trim(),
-            }),
-          );
-
-          if (responseForContactInfo.statusCode == 200 ||
-              responseForContactInfo.statusCode == 201) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Contact info add successfully")),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Contact info not added.....")),
-            );
-          }
-        } else {
-          var contactInfoResponseBody = jsonDecode(
-            responseForContactInfoFinding.body,
-          );
-
-          String contactInfoID = contactInfoResponseBody["id"];
-
-          String contactInfoUri =
-              "${baseURL.Urls().baseURL}user/contact-info/update?userId=$userId&contactInfoId=$contactInfoID";
-
-          final url = Uri.parse(contactInfoUri);
-
-          final responseForContactInfo = await http.put(
-            url,
-            headers: {
-              "Authorization": "Bearer $_token", // Key: Use 'Bearer ' prefix
-              "Content-Type":
-                  "application/json", // If JSON body; adjust as needed
-            },
-            body: jsonEncode({
-              "userId": userId,
-              "email": emailController.text.trim(),
-              "phone": phoneController.text.trim(),
-            }),
-          );
-
-          if (responseForContactInfo.statusCode == 200 ||
-              responseForContactInfo.statusCode == 201) {
-            if (kDebugMode) {
-              print("Contact info added successfully");
-            }
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Contact info add successfully")),
-            );
-            if (kDebugMode) {
-              print(
-                "Contact info add successfully: ${responseForContactInfo.body}",
-              );
-            }
-          } else {
-            if (kDebugMode) {
-              print("Contact info add failed");
-            }
-            if (kDebugMode) {
-              print("Contact info add failed: ${responseForContactInfo.body}");
-            }
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(responseForContactInfo.body)),
-            );
-          }
-        }
-
-        String locationFindURL =
-            "${baseURL.Urls().baseURL}userLocation/findByUserId/$userId";
-
-        final locationFindUri = Uri.parse(locationFindURL);
-
-        final responseForLocationFinding = await http.get(
-          locationFindUri,
-          headers: {
-            "Authorization": "Bearer $_token", // Key: Use 'Bearer ' prefix
-            "Content-Type":
-                "application/json", // If JSON body; adjust as needed
-          },
-        );
-
-        if (responseForLocationFinding.statusCode != 200) {
-          final String locationUrl =
-              "${baseURL.Urls().baseURL}userLocation/add";
-
-          final loaction = Uri.parse(locationUrl);
-
-          final sharedPreferences1 = await SharedPreferences.getInstance();
-          final token1 = sharedPreferences1.getString("jwt_token");
-
-          if (token1 == null || token.isEmpty) {
-            //print("No token found. User not logged in.");
-            return;
-          }
-
-          //print("latitude :- $lattitude longitude :- $longititude");
-
-          final responseForContactInfo1 = await http.post(
-            loaction,
-            headers: {
-              "Authorization": "Bearer $token1", // Key: Use 'Bearer ' prefix
-              "Content-Type":
-                  "application/json", // If JSON body; adjust as needed
-            },
-            body: jsonEncode({
-              "userId": userId,
-              "locationName": locationTextController.text.trim(),
-              "lattitude": latitude,
-              "longitude": longitude,
-            }),
-          );
-
-          print("contact info response in update profile :- ${responseForContactInfo1.statusCode}");
-
-          if (responseForContactInfo1.statusCode == 200 ||
-              responseForContactInfo1.statusCode == 201) {
-            //print("Contact info added successfully");
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Location info add successfully")),
-            );
-            if (kDebugMode) {
-              //print(
-              // "Contact info add successfully: ${responseForContactInfo1.body}",
-              // );
-            }
-          } else {
-            // print("location info add failed ${responseForContactInfo1.body}");
-            if (kDebugMode) {
-              //print("Location info add failed: ${responseForContactInfo1.body}");
-            }
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Failed to add location...")),
-            );
-          }
-        } else {
-          print("location update in update profile :- ${responseForLocationFinding.body}");
-
-          var contactInfoResponseBody1 = jsonDecode(
-            responseForLocationFinding.body,
-          );
-
-          if (kDebugMode) {
-            print("contactInfoResponseBody1 :- $contactInfoResponseBody1");
-          }
-
-          final locationDecoded = jsonDecode(responseForLocationFinding.body);
-
-          if (kDebugMode) {
-            print("locationDecoded :- $locationDecoded");
-          }
-
-          String locationInfoId = locationDecoded["id"];
-
-          final String locationUrl =
-              "${baseURL.Urls().baseURL}userLocation/update/$locationInfoId?userId=$userId";
-
-          final loaction = Uri.parse(locationUrl);
-
-          final sharedPreferences11 = await SharedPreferences.getInstance();
-          final token1 = sharedPreferences11.getString("jwt_token");
-
-          if (token1 == null || token.isEmpty) {
-            print("No token found. User not logged in.");
-            return;
-          }
-
-          print("latitude :- $latitude longitude :- $longitude");
-
-          final responseForContactInfo1 = await http.put(
-            loaction,
-            headers: {
-              "Authorization": "Bearer $token1", // Key: Use 'Bearer ' prefix
-              "Content-Type":
-                  "application/json", // If JSON body; adjust as needed
-            },
-            body: jsonEncode({
-              "userId": userId,
-              "locationName": locationTextController.text.trim(),
-              "lattitude": latitude,
-              "longitude": longitude,
-            }),
-          );
-
-          if (responseForContactInfo1.statusCode == 200 ||
-              responseForContactInfo1.statusCode == 201) {
-            print("Contact info added successfully");
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Location info add successfully")),
-            );
-            if (kDebugMode) {
-              print(
-                "Contact info add successfully: ${responseForContactInfo1.body}",
-              );
-            }
-          } else {
-            print("location info add failed ${responseForContactInfo1.body}");
-            if (kDebugMode) {
-              print(
-                "Location info add failed: ${responseForContactInfo1.body}",
-              );
-            }
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Failed to add location...")),
-            );
-          }
-        }
-
-        // ---------------- UPDATE ADVOCATE ----------------
-
+        // Update Advocate Info
         if (advocateId != null) {
-          final updateAdvocateUrl = Uri.parse(
-            "${baseURL.Urls().baseURL}advocate/update/$advocateId/$userId",
-          );
-
-          var advocateRequest = http.MultipartRequest("PUT", updateAdvocateUrl);
-
-          advocateRequest.headers["Authorization"] = "Bearer $_token";
-
-          advocateRequest.fields["userId"] = userId!;
-          advocateRequest.fields["experience"] = experienceController.text
-              .trim();
-          advocateRequest.fields["licenseKey"] = licenseKeyController.text
-              .trim();
-
-          advocateRequest.fields["degrees"] = jsonEncode(degrees);
-
-          advocateRequest.fields["workingExperiences"] = jsonEncode(
-            workingExperiences,
-          );
-
-          advocateRequest.fields["advocateSpeciality"] = jsonEncode(
-            selectedSpecialities.toList(),
-          );
-
-          // ---------- CV Upload ----------
-          if (kIsWeb && webCvBytes != null) {
-            advocateRequest.files.add(
-              http.MultipartFile.fromBytes(
-                "file",
-                webCvBytes!,
-                filename: cvFileName ?? "cv.pdf",
-                contentType: http.MediaType("application", "pdf"),
-              ),
-            );
-          } else if (!kIsWeb && cvFile != null) {
-            advocateRequest.files.add(
-              await http.MultipartFile.fromPath(
-                "file",
-                cvFile!.path,
-                contentType: http.MediaType("application", "pdf"),
-              ),
-            );
-          }
-
-          final advocateResponse = await advocateRequest.send();
-
-          if (advocateResponse.statusCode == 200 ||
-              advocateResponse.statusCode == 201) {
-            print("Advocate updated successfully");
-          } else {
-            print("Advocate update failed");
-          }
+          await _updateAdvocateInfo(userId!, tokenFromPrefs);
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Registration Successful")),
-        );
+        _showSnackBar("প্রোফাইল আপডেট সফল হয়েছে! 🎉", Colors.green);
 
-        /*Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const SeeMyProfile(),
-          )
-        );*/
-
-        if (kDebugMode) {
-          // print("JWT TOKEN => $token");
-        }
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const SeeMyProfile()),
+            );
+          }
+        });
       } else {
-        if (kDebugMode) {
-          print("Register failed: $responseBody");
-        }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Registration failed")));
+        _showSnackBar("আপডেট ব্যর্থ হয়েছে: ${response.statusCode}", Colors.red);
       }
     } catch (e) {
-      if (kDebugMode) {
-        print("Error: $e");
-      }
+      _showSnackBar("একটি ত্রুটি ঘটেছে: $e", Colors.red);
+    } finally {
+      setState(() => isUpdating = false);
+    }
+  }
+
+  bool _validateForm() {
+    if (nameController.text.isEmpty) {
+      _showSnackBar("নতুন নাম লিখুন", Colors.orange);
+      return false;
+    }
+    if (oldPasswordController.text.isEmpty) {
+      _showSnackBar("পুরনো পাসওয়ার্ড লিখুন", Colors.orange);
+      return false;
+    }
+    if (passwordController.text.isEmpty) {
+      _showSnackBar("নতুন পাসওয়ার্ড লিখুন", Colors.orange);
+      return false;
+    }
+    if (locationTextController.text.isEmpty) {
+      _showSnackBar("লোকেশন সিলেক্ট করুন", Colors.orange);
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _updateContactInfo(String userId, String token) async {
+    final contactInfoUri = Uri.parse("${baseURL.Urls().baseURL}user/contact-info/user?userId=$userId");
+    final response = await http.get(
+      contactInfoUri,
+      headers: {
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      String contactInfoId = data["id"];
+      final updateUri = Uri.parse("${baseURL.Urls().baseURL}user/contact-info/update?userId=$userId&contactInfoId=$contactInfoId");
+      await http.put(
+        updateUri,
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({
+          "userId": userId,
+          "email": emailController.text.isNotEmpty ? emailController.text.trim() : null,
+          "phone": phoneController.text.isNotEmpty ? phoneController.text.trim() : null,
+        }),
+      );
+    } else {
+      final addUri = Uri.parse("${baseURL.Urls().baseURL}user/contact-info/add?userId=$userId");
+      await http.post(
+        addUri,
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({
+          "userId": userId,
+          "email": emailController.text.isNotEmpty ? emailController.text.trim() : null,
+          "phone": phoneController.text.isNotEmpty ? phoneController.text.trim() : null,
+        }),
+      );
+    }
+  }
+
+  Future<void> _updateLocationInfo(String userId, String token) async {
+    final locationUri = Uri.parse("${baseURL.Urls().baseURL}userLocation/findByUserId/$userId");
+    final response = await http.get(
+      locationUri,
+      headers: {
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      String locationInfoId = data["id"];
+      final updateUri = Uri.parse("${baseURL.Urls().baseURL}userLocation/update/$locationInfoId?userId=$userId");
+      await http.put(
+        updateUri,
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({
+          "userId": userId,
+          "locationName": locationTextController.text.trim(),
+          "lattitude": latitude,
+          "longitude": longitude,
+        }),
+      );
+    } else {
+      final addUri = Uri.parse("${baseURL.Urls().baseURL}userLocation/add");
+      await http.post(
+        addUri,
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({
+          "userId": userId,
+          "locationName": locationTextController.text.trim(),
+          "lattitude": latitude,
+          "longitude": longitude,
+        }),
+      );
+    }
+  }
+
+  Future<void> _updateAdvocateInfo(String userId, String token) async {
+    final updateAdvocateUrl = Uri.parse("${baseURL.Urls().baseURL}advocate/update/$advocateId/$userId");
+    var advocateRequest = http.MultipartRequest("PUT", updateAdvocateUrl);
+    advocateRequest.headers["Authorization"] = "Bearer $token";
+
+    advocateRequest.fields["userId"] = userId;
+    advocateRequest.fields["experience"] = experienceController.text.trim().isEmpty ? "0" : experienceController.text.trim();
+    advocateRequest.fields["licenseKey"] = licenseKeyController.text.trim();
+    advocateRequest.fields["degrees"] = jsonEncode(degrees);
+    advocateRequest.fields["workingExperiences"] = jsonEncode(workingExperiences);
+    advocateRequest.fields["advocateSpeciality"] = jsonEncode(selectedSpecialities.toList());
+
+    if (kIsWeb && webCvBytes != null) {
+      advocateRequest.files.add(
+        http.MultipartFile.fromBytes(
+          "file",
+          webCvBytes!,
+          filename: cvFileName ?? "cv.pdf",
+          contentType: http.MediaType("application", "pdf"),
+        ),
+      );
+    } else if (!kIsWeb && cvFile != null) {
+      advocateRequest.files.add(
+        await http.MultipartFile.fromPath("file", cvFile!.path),
+      );
+    }
+
+    final advocateResponse = await advocateRequest.send();
+    if (advocateResponse.statusCode == 200 || advocateResponse.statusCode == 201) {
+      print("Advocate updated successfully");
+    } else {
+      print("Advocate update failed");
+    }
+  }
+
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(10),
+      ),
+    );
+  }
+
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.blue)),
+            const SizedBox(height: 16),
+            Text("আপডেট হচ্ছে...", style: TextStyle(fontSize: 16, color: Colors.blue)),
+            const SizedBox(height: 8),
+            Text("দয়া করে অপেক্ষা করুন", style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==================== UI COMPONENTS ====================
+
+  Widget _buildOpenFormButton() {
+    return GestureDetector(
+      onTap: () => setState(() => showForm = true),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Colors.blue, Colors.blueAccent],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(40),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blue.withOpacity(0.4),
+                blurRadius: 15,
+                offset: const Offset(0, 5),
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.gavel, color: Colors.blue, size: 20),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'অ্যাডভোকেট প্রোফাইল আপডেট',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.arrow_forward, color: Colors.white, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnimatedForm() {
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOutCubic,
+      bottom: showForm ? 0 : -MediaQuery.of(context).size.height,
+      left: 0,
+      right: 0,
+      height: MediaQuery.of(context).size.height * 0.85,
+      child: IgnorePointer(
+        ignoring: !showForm,
+        child: TweenAnimationBuilder(
+          tween: Tween<double>(begin: 0, end: showForm ? 1 : 0),
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeOutCubic,
+          builder: (context, value, child) {
+            return Transform.translate(
+              offset: Offset(0, (1 - value) * 100),
+              child: Opacity(opacity: value, child: child),
+            );
+          },
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(30),
+                topRight: Radius.circular(30),
+              ),
+              boxShadow: [
+                BoxShadow(color: Colors.black26, blurRadius: 20, offset: Offset(0, -5)),
+              ],
+            ),
+            child: Column(
+              children: [
+                _buildDragHandle(),
+                _buildFormHeader(),
+                Expanded(child: _buildFormContent()),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDragHandle() {
+    return GestureDetector(
+      onVerticalDragUpdate: (details) {
+        if (details.delta.dy > 10) setState(() => showForm = false);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(top: 12),
+        width: 40,
+        height: 4,
+        decoration: BoxDecoration(
+          color: Colors.grey[300],
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormHeader() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Colors.blue, Colors.blueAccent],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(30),
+          topRight: Radius.circular(30),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                child: const Icon(Icons.gavel, color: Colors.blue, size: 24),
+              ),
+              const SizedBox(width: 12),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('অ্যাডভোকেট প্রোফাইল আপডেট', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text('আপনার তথ্য হালনাগাদ করুন', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                ],
+              ),
+            ],
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, color: Colors.white),
+            onPressed: () => setState(() => showForm = false),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormContent() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        left: 20,
+        right: 20,
+        top: 20,
+      ),
+      child: Column(
+        children: [
+          _buildProfileImage(),
+          const SizedBox(height: 24),
+          _buildTextField(
+            controller: oldNameController,
+            label: "পুরনো নাম",
+            icon: Icons.person_outline,
+            readOnly: true,
+            focusNode: _oldNameFocus,
+          ),
+          const SizedBox(height: 16),
+          _buildTextField(
+            controller: nameController,
+            label: "নতুন নাম",
+            icon: Icons.person,
+            hint: "আপনার নতুন নাম লিখুন",
+            focusNode: _nameFocus,
+            nextFocus: _oldPasswordFocus,
+          ),
+          const SizedBox(height: 16),
+          _buildPasswordField(
+            controller: oldPasswordController,
+            label: "পুরনো পাসওয়ার্ড",
+            isVisible: _showOldPassword,
+            onToggle: () => setState(() => _showOldPassword = !_showOldPassword),
+            focusNode: _oldPasswordFocus,
+            nextFocus: _newPasswordFocus,
+          ),
+          const SizedBox(height: 16),
+          _buildPasswordField(
+            controller: passwordController,
+            label: "নতুন পাসওয়ার্ড",
+            isVisible: _showPassword,
+            onToggle: () => setState(() => _showPassword = !_showPassword),
+            focusNode: _newPasswordFocus,
+            nextFocus: _emailFocus,
+          ),
+          const SizedBox(height: 16),
+          _buildTextField(
+            controller: emailController,
+            label: "ইমেইল",
+            icon: Icons.email_outlined,
+            keyboardType: TextInputType.emailAddress,
+            focusNode: _emailFocus,
+            nextFocus: _phoneFocus,
+          ),
+          const SizedBox(height: 16),
+          _buildTextField(
+            controller: phoneController,
+            label: "মোবাইল নম্বর",
+            icon: Icons.phone_outlined,
+            keyboardType: TextInputType.phone,
+            focusNode: _phoneFocus,
+            nextFocus: _experienceFocus,
+          ),
+          const SizedBox(height: 16),
+          _buildTextField(
+            controller: locationTextController,
+            label: "লোকেশন",
+            icon: Icons.location_on_outlined,
+            readOnly: true,
+            onTap: () => _showSnackBar("মানচিত্রে ট্যাপ করে লোকেশন সিলেক্ট করুন", Colors.blue),
+          ),
+          const SizedBox(height: 16),
+          _buildTextField(
+            controller: experienceController,
+            label: "অভিজ্ঞতা (বছর)",
+            icon: Icons.work_outline,
+            hint: "কত বছর অভিজ্ঞতা",
+            keyboardType: TextInputType.number,
+            focusNode: _experienceFocus,
+            nextFocus: _licenseFocus,
+          ),
+          const SizedBox(height: 16),
+          _buildTextField(
+            controller: licenseKeyController,
+            label: "লাইসেন্স কী",
+            icon: Icons.key,
+            hint: "আপনার লাইসেন্স কী লিখুন",
+            focusNode: _licenseFocus,
+          ),
+          const SizedBox(height: 20),
+          _buildDegreeSection(),
+          const SizedBox(height: 20),
+          _buildWorkingExperienceSection(),
+          const SizedBox(height: 20),
+          _buildSpecialistSection(),
+          if (cvFileName != null)
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.picture_as_pdf,
+                            color: Colors.red,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              cvFileName!,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.download),
+                            onPressed: downloadCv,
+                          ),
+                        ],
+                      ),
+                    ),
+
+          const SizedBox(height: 20),
+          _buildCvSection(),
+          const SizedBox(height: 30),
+          _buildSubmitButton(),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileImage() {
+    return Center(
+      child: GestureDetector(
+        onTap: pickImage,
+        child: Container(
+          width: 110,
+          height: 110,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(colors: [Colors.blue, Colors.blueAccent]),
+            boxShadow: [
+              BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5)),
+            ],
+          ),
+          child: ClipOval(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (pickedImage != null && !kIsWeb)
+                  Image.file(pickedImage!, fit: BoxFit.cover)
+                else if (webImageBytes != null && kIsWeb)
+                  Image.memory(webImageBytes!, fit: BoxFit.cover)
+                else
+                  Container(
+                    color: Colors.white,
+                    child: const Icon(Icons.gavel, size: 50, color: Colors.blue),
+                  ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  left: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [Colors.blue, Colors.blueAccent]),
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(55),
+                        bottomRight: Radius.circular(55),
+                      ),
+                    ),
+                    child: const Icon(Icons.camera_alt, color: Colors.white, size: 18),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    String? hint,
+    TextInputType keyboardType = TextInputType.text,
+    bool readOnly = false,
+    VoidCallback? onTap,
+    FocusNode? focusNode,
+    FocusNode? nextFocus,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: TextField(
+        controller: controller,
+        readOnly: readOnly,
+        keyboardType: keyboardType,
+        focusNode: focusNode,
+        onTap: onTap,
+        textInputAction: nextFocus != null ? TextInputAction.next : TextInputAction.done,
+        onEditingComplete: () {
+          if (nextFocus != null) {
+            FocusScope.of(context).requestFocus(nextFocus);
+          } else {
+            FocusScope.of(context).unfocus();
+          }
+        },
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.blue),
+          hintText: hint,
+          hintStyle: TextStyle(color: Colors.grey[400]),
+          prefixIcon: Icon(icon, color: Colors.blue),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          filled: true,
+          fillColor: Colors.transparent,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        ),
+      ),
+    );
+  }
+
+ Future<void> downloadCv() async {
+    final token = await AuthService.getToken();
+
+    if (token == null) return;
+
+    final userId = await AuthService.getUserId();
+
+    final url = Uri.parse("${BASEURL.Urls().baseURL}advocate/cv/$userId");
+
+    final response = await http.get(
+      Uri.parse("${BASEURL.Urls().baseURL}advocate/cv/$userId"),
+      headers: {"Authorization": "Bearer $token"},
+    );
+
+    if (response.statusCode != 200) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      ).showSnackBar(const SnackBar(content: Text("No CV available")));
+      return;
     }
+
+    final bytes = response.bodyBytes;
+
+    // 🌐 WEB
+    if (kIsWeb) {
+      final blob = html.Blob([bytes], 'application/pdf');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+
+      html.AnchorElement(href: url)
+        ..setAttribute("download", "advocate_cv.pdf")
+        ..click();
+
+      html.Url.revokeObjectUrl(url);
+      return;
+    }
+
+    // 📱 MOBILE
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/advocate_cv.pdf');
+
+    await file.writeAsBytes(bytes, flush: true);
+    await OpenFilex.open(file.path);
+  }
+
+
+  Widget _buildPasswordField({
+    required TextEditingController controller,
+    required String label,
+    required bool isVisible,
+    required VoidCallback onToggle,
+    FocusNode? focusNode,
+    FocusNode? nextFocus,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: !isVisible,
+        focusNode: focusNode,
+        textInputAction: nextFocus != null ? TextInputAction.next : TextInputAction.done,
+        onEditingComplete: () {
+          if (nextFocus != null) {
+            FocusScope.of(context).requestFocus(nextFocus);
+          } else {
+            FocusScope.of(context).unfocus();
+          }
+        },
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.blue),
+          prefixIcon: const Icon(Icons.lock_outline, color: Colors.blue),
+          suffixIcon: IconButton(
+            icon: Icon(isVisible ? Icons.visibility : Icons.visibility_off, color: Colors.blue),
+            onPressed: onToggle,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          filled: true,
+          fillColor: Colors.transparent,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDegreeSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "ডিগ্রী সমূহ",
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.blue),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: TextField(
+                  controller: degreeController,
+                  decoration: InputDecoration(
+                    hintText: "ডিগ্রী যোগ করুন",
+                    hintStyle: TextStyle(color: Colors.grey[400]),
+                    prefixIcon: const Icon(Icons.school, color: Colors.blue),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Colors.blue, Colors.blueAccent]),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ElevatedButton(
+                onPressed: addDegree,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                child: const Text("যোগ করুন", style: TextStyle(color: Colors.white)),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (degrees.isNotEmpty)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: degrees.map((degree) {
+              return Chip(
+                label: Text(degree),
+                deleteIcon: const Icon(Icons.close, size: 18),
+                onDeleted: () => removeDegree(degree),
+                backgroundColor: Colors.blue.withOpacity(0.1),
+                deleteIconColor: Colors.blue,
+                labelStyle: const TextStyle(color: Colors.blue),
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildWorkingExperienceSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "কর্ম অভিজ্ঞতা",
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.blue),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: TextField(
+                  controller: workingExperienceController,
+                  decoration: InputDecoration(
+                    hintText: "কর্ম অভিজ্ঞতা যোগ করুন",
+                    hintStyle: TextStyle(color: Colors.grey[400]),
+                    prefixIcon: const Icon(Icons.work_history, color: Colors.blue),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Colors.blue, Colors.blueAccent]),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ElevatedButton(
+                onPressed: addWorkingExperience,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                child: const Text("যোগ করুন", style: TextStyle(color: Colors.white)),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (workingExperiences.isNotEmpty)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: workingExperiences.map((exp) {
+              return Chip(
+                label: Text(exp),
+                deleteIcon: const Icon(Icons.close, size: 18),
+                onDeleted: () => removeWorkingExperience(exp),
+                backgroundColor: Colors.blue.withOpacity(0.1),
+                deleteIconColor: Colors.blue,
+                labelStyle: const TextStyle(color: Colors.blue),
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSpecialistSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "স্পেশালিস্ট এলাকা",
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.blue),
+        ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: showSpecialityDialog,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey[200]!),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.gavel, color: Colors.blue),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    selectedSpecialities.isEmpty
+                        ? "স্পেশালিস্ট সিলেক্ট করুন"
+                        : "${selectedSpecialities.length} টি স্পেশালিস্ট সিলেক্ট করা হয়েছে",
+                    style: TextStyle(
+                      color: selectedSpecialities.isEmpty ? Colors.grey[600] : Colors.black87,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.arrow_drop_down, color: Colors.blue),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (selectedSpecialities.isNotEmpty)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: selectedSpecialities.map((d) {
+              return Chip(
+                label: Text(d),
+                onDeleted: () {
+                  setState(() {
+                    selectedSpecialities.remove(d);
+                  });
+                },
+                backgroundColor: Colors.blue.withOpacity(0.1),
+                deleteIconColor: Colors.blue,
+                labelStyle: const TextStyle(color: Colors.blue),
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCvSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "সিভি (PDF)",
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.blue),
+        ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: pickCv,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey[200]!),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.picture_as_pdf, color: Colors.red),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    cvFileName ?? "PDF ফাইল আপলোড করুন",
+                    style: TextStyle(
+                      color: cvFileName != null ? Colors.black87 : Colors.grey[600],
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (cvFileName != null)
+                  IconButton(
+                    icon: const Icon(Icons.download, color: Colors.blue),
+                    onPressed: downloadCv,
+                    constraints: const BoxConstraints(),
+                    padding: EdgeInsets.zero,
+                    iconSize: 20,
+                  ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    "ব্রাউজ",
+                    style: TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: isUpdating ? null : () async {
+          FocusScope.of(context).unfocus();
+          _showLoadingDialog();
+          await _submitForm();
+          if (mounted) Navigator.pop(context);
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          elevation: 5,
+        ),
+        child: isUpdating
+            ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : const Text('আপডেট করুন', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        title: const Text("Registration with Map"),
+        title: const Text("অ্যাডভোকেট প্রোফাইল আপডেট"),
         backgroundColor: Colors.blue,
+        elevation: 0,
+        centerTitle: true,
       ),
       body: Stack(
         children: [
-          FlutterMap(
-            mapController: mapController,
-            options: const MapOptions(
-              initialCenter: lat_lng.LatLng(23.8103, 90.4125),
-              initialZoom: 13.0,
-            ),
-            children: [
-              TileLayer(
-                urlTemplate:
-                    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                subdomains: const ['a', 'b', 'c'],
-              ),
-              MarkerLayer(markers: _markers),
-            ],
+          // Map
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return SizedBox(
+                width: constraints.maxWidth,
+                height: constraints.maxHeight,
+                child: FlutterMap(
+                  mapController: mapController,
+                  options: MapOptions(
+                    initialCenter: lat_lng.LatLng(23.8103, 90.4125),
+                    initialZoom: 13.0,
+                    minZoom: 3.0,
+                    maxZoom: 18.0,
+                    interactionOptions: const InteractionOptions(
+                      flags: InteractiveFlag.all,
+                    ),
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      subdomains: const ['a', 'b', 'c'],
+                    ),
+                    MarkerLayer(markers: _markers),
+                  ],
+                ),
+              );
+            },
           ),
-          Positioned(
-            top: 10,
-            left: 10,
-            right: 10,
-            child: Card(
-              elevation: 5,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+
+          // Gradient Overlay
+          IgnorePointer(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Colors.black.withOpacity(0.3), Colors.black.withOpacity(0.6)],
+                ),
               ),
+            ),
+          ),
+
+          // Search Bar
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 10,
+            left: 16,
+            right: 16,
+            child: Card(
+              elevation: 8,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Row(
                   children: [
+                    const Icon(Icons.search, color: Colors.blue),
                     Expanded(
                       child: TextField(
                         controller: searchController,
                         decoration: const InputDecoration(
-                          hintText: "Search place...",
+                          hintText: "লোকেশন খুঁজুন...",
                           border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                         ),
+                        onSubmitted: (value) => searchPlace(),
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.search),
-                      onPressed: searchPlace,
+                    Container(
+                      margin: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(30)),
+                      child: IconButton(
+                        icon: const Icon(Icons.search, color: Colors.white),
+                        onPressed: searchPlace,
+                        iconSize: 20,
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
           ),
+
+          // My Location Button
           Positioned(
-            bottom: showForm ? 310 : 20,
-            left: 10,
-            child: Row(
-              children: [
-                const Text("Open Registration Form"),
-                Switch(
-                  value: showForm,
-                  onChanged: (val) {
-                    setState(() {
-                      showForm = val;
-                    });
-                  },
-                ),
-              ],
+            bottom: 20,
+            right: 16,
+            child: FloatingActionButton(
+              mini: true,
+              backgroundColor: Colors.white,
+              onPressed: () {
+                if (_devicePosition != null) {
+                  setState(() {
+                    _selectedPosition = _devicePosition;
+                    locationTextController.text = _selectedPlaceName ?? '';
+                    _updateMarkers();
+                  });
+                  mapController.move(_devicePosition!, 15.0);
+                }
+              },
+              child: const Icon(Icons.my_location, color: Colors.blue),
             ),
           ),
-          if (showForm)
+
+          // Open Form Button
+          if (!showForm)
             Positioned(
-              bottom: 0,
+              bottom: 20,
               left: 0,
               right: 0,
-              height: MediaQuery.of(context).size.height * 0.75,
-              child: Card(
-                margin: const EdgeInsets.all(10),
-                elevation: 6,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Stack(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(15),
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(
-                              height: 20,
-                            ), // Space for close button
-                            TextField(
-                              readOnly: true,
-                              controller: oldNameController,
-                              decoration: const InputDecoration(
-                                labelText: "Old Name",
-                              ),
-                            ),
-                            TextField(
-                              controller: nameController,
-                              decoration: const InputDecoration(
-                                labelText: "New Name",
-                              ),
-                            ),
-                            TextField(
-                              controller: oldPasswordController,
-                              obscureText: !_showOldPassword,
-                              decoration: InputDecoration(
-                                labelText: "Old Password",
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _showOldPassword
-                                        ? Icons.visibility
-                                        : Icons.visibility_off,
-                                  ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _showOldPassword = !_showOldPassword;
-                                    });
-                                  },
-                                ),
-                              ),
-                            ),
-                            TextField(
-                              controller: passwordController,
-                              obscureText: !_showPassword,
-                              decoration: InputDecoration(
-                                labelText: "New Password",
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _showPassword
-                                        ? Icons.visibility
-                                        : Icons.visibility_off,
-                                  ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _showPassword = !_showPassword;
-                                    });
-                                  },
-                                ),
-                              ),
-                            ),
-
-                            TextField(
-                              controller: emailController,
-                              decoration: const InputDecoration(
-                                labelText: "Email",
-                              ),
-                            ),
-                            TextField(
-                              controller: phoneController,
-                              decoration: const InputDecoration(
-                                labelText: "Phone",
-                              ),
-                            ),
-                            TextField(
-                              controller: locationTextController,
-                              readOnly: true,
-                              decoration: const InputDecoration(
-                                labelText: "Location Info",
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            GestureDetector(
-                              onTap: pickImage,
-                              child: Container(
-                                height: 120,
-                                width: 120,
-                                decoration: BoxDecoration(border: Border.all()),
-                                child:
-                                    pickedImage == null && webImageBytes == null
-                                    ? const Icon(Icons.camera_alt, size: 50)
-                                    : kIsWeb
-                                    ? Image.memory(
-                                        webImageBytes!,
-                                        fit: BoxFit.cover,
-                                      )
-                                    : Image.file(
-                                        pickedImage!,
-                                        fit: BoxFit.cover,
-                                      ),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            TextField(
-                              controller: experienceController,
-                              decoration: const InputDecoration(
-                                labelText: "Experience (Years)",
-                              ),
-                            ),
-
-                            TextField(
-                              controller: licenseKeyController,
-                              decoration: const InputDecoration(
-                                labelText: "License Key",
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            const SizedBox(height: 10),
-                            const Text("Degrees"),
-
-                            Wrap(
-                              spacing: 8,
-                              children: degrees.map((degree) {
-                                return Chip(
-                                  label: Text(degree),
-                                  onDeleted: () {
-                                    setState(() {
-                                      degrees.remove(degree);
-                                    });
-                                  },
-                                );
-                              }).toList(),
-                            ),
-                            const SizedBox(height: 10),
-                            const Text("Working Experiences"),
-
-                            Wrap(
-                              spacing: 8,
-                              children: workingExperiences.map((work) {
-                                return Chip(
-                                  label: Text(work),
-                                  onDeleted: () {
-                                    setState(() {
-                                      workingExperiences.remove(work);
-                                    });
-                                  },
-                                );
-                              }).toList(),
-                            ),
-                            const SizedBox(height: 20),
-                            ElevatedButton(
-                              onPressed: showSpecialityDialog,
-                              child: const Text("Select Specialist"),
-                            ),
-
-                            Wrap(
-                              children: selectedSpecialities
-                                  .map(
-                                    (d) => Chip(
-                                      label: Text(d),
-                                      onDeleted: () {
-                                        setState(() {
-                                          selectedSpecialities.remove(d);
-                                        });
-                                      },
-                                    ),
-                                  )
-                                  .toList(),
-                            ),
-                            const SizedBox(height: 20),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                ElevatedButton.icon(
-                                  onPressed: pickCv,
-                                  icon: const Icon(Icons.upload_file),
-                                  label: const Text("Upload New CV (PDF)"),
-                                ),
-
-                                const SizedBox(height: 10),
-
-                                if (cvFileName != null)
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.grey),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.picture_as_pdf,
-                                          color: Colors.red,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            cvFileName!,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.download),
-                                          onPressed: downloadCv,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-                            ElevatedButton(
-                              onPressed: () async {
-
-                                try {
-
-                                  showDialog(
-                                      context: context,
-                                      barrierDismissible: false,
-                                      builder: (BuildContext context) {
-
-                                        return Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const CircularProgressIndicator(),
-                                            const SizedBox(height: 10),
-                                            const Text("Please wait..."),
-                                        ]
-                                        );
-
-                                      }
-                                  );
-
-                                  await _submitForm();
-
-                                  if(context.mounted) {
-
-                                    Navigator.pop(context);
-
-                                  }
-
-                                } catch(e) {
-
-                                  if(context.mounted) {
-
-                                    Navigator.pop(context);
-
-                                  }
-
-                                }
-
-                              },
-                              child: const Text("Submit Registration"),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 0,
-                      right: 0,
-                      child: IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () {
-                          setState(() {
-                            showForm = false;
-                          });
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              child: Center(child: _buildOpenFormButton()),
             ),
+
+          // Animated Form
+          _buildAnimatedForm(),
         ],
       ),
     );
