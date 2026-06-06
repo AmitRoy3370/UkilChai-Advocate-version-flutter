@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:advocatechaiadvocate/Utils/BaseURL.dart' as baseURL;
+import '../PageTransition.dart';  // Add this import
+
 import 'package:advocatechaiadvocate/Auth/AuthService.dart';
 
 import '../AdvocatePages/AdvocateDetails.dart';
@@ -26,6 +28,16 @@ class AdvocateList extends StatelessWidget {
     }
     return null;
   }
+
+Future<void> _navigateToDetails(BuildContext context, AdvocateDetailsModel advocate) async {
+  NavigationHelper.push(
+    context,
+    AdvocateDetails(advocateDetailsModel: advocate),
+    transitionType: await AnimatedRoute.getRandomSafeAnimation(),
+    duration: const Duration(milliseconds: 600),
+    curve: Curves.bounceOut,
+  );
+}
 
   Future<List<AdvocateDetailsModel>> getAdvocateList() async {
     final token = await AuthService.getToken();
@@ -205,11 +217,11 @@ class AdvocateList extends StatelessWidget {
       title,
       items.isEmpty
           ? [
-        const Text(
-          "No data available",
-          style: TextStyle(color: Colors.black),
-        ),
-      ]
+              const Text(
+                "No data available",
+                style: TextStyle(color: Colors.black),
+              ),
+            ]
           : items.map((e) => _row(Icons.check_circle, e)).toList(),
     );
   }
@@ -298,13 +310,16 @@ class AdvocateList extends StatelessWidget {
 
                 return GestureDetector(
                   onTap: () {
-                    Navigator.push(
+                    /*Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) =>
                             AdvocateDetails(advocateDetailsModel: advocate),
                       ),
-                    );
+                    );*/
+
+                    _navigateToDetails(context, advocate);
+
                   },
                   child: Card(
                     elevation: 3,

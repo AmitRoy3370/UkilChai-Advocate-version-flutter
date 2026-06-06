@@ -1,10 +1,12 @@
 import 'package:advocatechaiadvocate/PostRelatedPages/post_response.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import './AdvocatePost.dart';
 import './PostService.dart';
 import './post_card.dart';
 import 'CreateOrUpdatePostPage.dart';
+import '../main.dart'; // Import for homePageKey
 
 class PostFeedPage extends StatefulWidget {
   const PostFeedPage({super.key});
@@ -16,111 +18,164 @@ class PostFeedPage extends StatefulWidget {
 class _PostFeedPageState extends State<PostFeedPage> {
   String? advocateId;
 
-  // ✅ FutureBuilder ব্যবহারের জন্য Future তৈরি করুন
   Future<List<PostResponse>> getPosts() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('jwt_token') ?? '';
     advocateId = prefs.getString('advocateId') ?? '';
 
     final data = await PostService.fetchAllPosts(token);
-    // রিভার্স অর্ডার করুন (নতুন পোস্ট আগে দেখাবে)
     return data.reversed.toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Advocate Posts")),
-      body: FutureBuilder<List<PostResponse>>(
-        future: getPosts(),
-        builder: (context, snapshot) {
-          // লোডিং স্টেট
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          // Error স্টেট
-          if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text('Error: ${snapshot.error}'),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      setState(() {}); // Rebuild করে আবার FutureBuilder কল হবে
-                    },
-                    child: const Text('Try Again'),
+    return WillPopScope(
+      onWillPop: () async {
+        // Navigate to home page on back press
+        _navigateToHomePage();
+        return false; // Prevent default back behavior
+      },
+      child: Scaffold(
+        backgroundColor: Colors.grey[50],
+        appBar: AppBar(
+          title: Text(
+            "Advocate Posts",
+            style: GoogleFonts.inter(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          backgroundColor: Colors.white,
+          elevation: 0,
+          centerTitle: false,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back, color: Colors.grey[800]),
+            onPressed: () {
+              // Navigate to home page on back button press
+              _navigateToHomePage();
+            },
+          ),
+        ),
+        body: RefreshIndicator(
+          onRefresh: () async {
+            setState(() {});
+          },
+          color: Colors.green,
+          child: FutureBuilder<List<PostResponse>>(
+            future: getPosts(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(color: Colors.green),
+                      SizedBox(height: 16),
+                      Text('Loading posts...', style: TextStyle(color: Colors.grey)),
+                    ],
                   ),
-                ],
-              ),
-            );
-          }
+                );
+              }
 
-          // Data স্টেট
-          final posts = snapshot.data ?? [];
+              if (snapshot.hasError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Error: ${snapshot.error}',
+                        style: GoogleFonts.inter(color: Colors.grey[600]),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () => setState(() {}),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('Try Again'),
+                      ),
+                    ],
+                  ),
+                );
+              }
 
-          if (posts.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.post_add, size: 48, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text('No posts available'),
-                ],
-              ),
-            );
-          }
+              final posts = snapshot.data ?? [];
 
-          return ListView.builder(
-            itemCount: posts.length,
-            itemBuilder: (_, index) {
-              final post = posts[index];
-              final isOwner = post.advocateId == advocateId;
+              if (posts.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.post_add, size: 64, color: Colors.grey[400]),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No posts available',
+                        style: GoogleFonts.inter(
+                          fontSize: 18,
+                          color: Colors.grey[500],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _createPost,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Create First Post'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
 
-              return PostCard(
-                post: post,
-                onEdit: isOwner ? () => _editPost(post, index) : null,
-                onDelete: isOwner ? () => _deletePost(post, index) : null,
-                // ✅ onReactionChanged - PostCard এ callback পাঠান
-                onReactionChanged: (reaction, action) {
-                  // Reaction update handle করার জন্য
-                  // PostFeedPage এ state update প্রয়োজন নেই,
-                  // কারণ PostCard ই নিজের reactions update করবে
-                  // কিন্তু如果需要 refresh posts, তাহলে:
-                  _refreshPostAtIndex(index);
+              return ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: posts.length,
+                itemBuilder: (_, index) {
+                  final post = posts[index];
+                  final isOwner = post.advocateId == advocateId;
+
+                  return PostCard(
+                    post: post,
+                    onEdit: isOwner ? () => _editPost(post, index) : null,
+                    onDelete: isOwner ? () => _deletePost(post, index) : null,
+                    onReactionChanged: (reaction, action) {
+                      setState(() {});
+                    },
+                    canReact: true,
+                  );
                 },
-                canReact: true,
               );
             },
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _createPost,
-        child: const Icon(Icons.add),
+          ),
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: _createPost,
+          backgroundColor: Colors.green,
+          child: const Icon(Icons.add, color: Colors.white),
+        ),
       ),
     );
   }
 
-  // ✅ PostCard এ reactions update হলে সেই specific post টি refresh করার method
+  void _navigateToHomePage() {
+    // Use pushAndRemoveUntil to clear the navigation stack and go to home
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const MyHomePage(title: 'উকিল চাই')),
+      (route) => false,
+    );
+  }
+
   Future<void> _refreshPostAtIndex(int index) async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('jwt_token') ?? '';
-
-    final allPosts = await PostService.fetchAllPosts(token);
-    final updatedPosts = allPosts.reversed.toList();
-
-    if (index < updatedPosts.length) {
-      setState(() {
-        // পুরো লিস্ট না রিলোড করে শুধু specific post টি আপডেট করুন
-        // কিন্তু FutureBuilder পুরো thing re-run করবে anyway
-      });
-    }
+    setState(() {});
   }
 
   Future<void> _editPost(PostResponse post, int index) async {
@@ -131,7 +186,7 @@ class _PostFeedPageState extends State<PostFeedPage> {
       },)),
     );
     if (result == true) {
-      setState(() {}); // FutureBuilder re-run করবে
+      setState(() {});
     }
   }
 
@@ -144,12 +199,12 @@ class _PostFeedPageState extends State<PostFeedPage> {
 
     if (response == 200) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Post deleted successfully")),
+        const SnackBar(content: Text("Post deleted successfully"), backgroundColor: Colors.green),
       );
-      setState(() {}); // FutureBuilder re-run করবে
+      setState(() {});
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to delete post")),
+        const SnackBar(content: Text("Failed to delete post"), backgroundColor: Colors.red),
       );
     }
   }
@@ -158,11 +213,11 @@ class _PostFeedPageState extends State<PostFeedPage> {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => CreateOrUpdatePostPage(refresh: () {
-      setState(() {});
+        setState(() {});
       },)),
     );
     if (result == true) {
-      setState(() {}); // FutureBuilder re-run করবে
+      setState(() {});
     }
   }
 }

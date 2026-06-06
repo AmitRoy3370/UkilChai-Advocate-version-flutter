@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
-
+import 'dart:math';
 import 'package:advocatechaiadvocate/QuestionPages/question_response.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
@@ -40,7 +41,7 @@ class _QuestionCardState extends State<QuestionCard> {
   bool isMyQuestion = false;
   bool isAdvocate = false;
 
-  PlatformFile? selectedFile; // Unified for web/mobile
+  PlatformFile? selectedFile;
   String? fileName;
   String? fileExtension;
 
@@ -52,7 +53,7 @@ class _QuestionCardState extends State<QuestionCard> {
   Future<void> pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: false,
-      withData: true, // Crucial for web
+      withData: true,
       type: FileType.any,
     );
 
@@ -65,8 +66,6 @@ class _QuestionCardState extends State<QuestionCard> {
       fileName = file.name;
       fileExtension = file.extension;
     });
-
-    print("file name :- $fileName");
   }
 
   @override
@@ -88,7 +87,6 @@ class _QuestionCardState extends State<QuestionCard> {
 
   String _getExtensionFromContentType(String? contentType) {
     if (contentType == null) return ".bin";
-
     if (contentType.contains("pdf")) return ".pdf";
     if (contentType.contains("jpeg")) return ".jpeg";
     if (contentType.contains("jpg")) return ".jpg";
@@ -96,94 +94,63 @@ class _QuestionCardState extends State<QuestionCard> {
     if (contentType.contains("word")) return ".docx";
     if (contentType.contains("excel")) return ".xlsx";
     if (contentType.contains("text")) return ".txt";
-
     return ".bin";
   }
 
   Future<void> openAttachment(BuildContext context, String attachmentId) async {
     try {
-      final url =
-          "${baseURL.Urls().baseURL}questions/downloadQuestionContent?attachmentId=$attachmentId";
-
+      final url = "${baseURL.Urls().baseURL}questions/downloadQuestionContent?attachmentId=$attachmentId";
       final token = await AuthService.getToken();
-
       final response = await http.get(
         Uri.parse(url),
         headers: {"Authorization": "Bearer $token"},
       );
 
       if (response.statusCode != 200) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Download failed")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Download failed")),
+        );
         return;
       }
 
-      // 🔹 Extract filename from header
       String fileName = "attachment";
       final disposition = response.headers['content-disposition'];
       if (disposition != null) {
         final match = RegExp(r'filename="([^"]+)"').firstMatch(disposition);
-        if (match != null) {
-          fileName = match.group(1)!;
-        }
+        if (match != null) fileName = match.group(1)!;
       }
 
-      // 🔹 Get content type
-      final contentType =
-          response.headers['content-type'] ?? "application/octet-stream";
+      final contentType = response.headers['content-type'] ?? "application/octet-stream";
+      if (!fileName.contains(".")) fileName += _getExtensionFromContentType(contentType);
 
-      // 🔹 Add extension if missing
-      if (!fileName.contains(".")) {
-        fileName += _getExtensionFromContentType(contentType);
-      }
-
-      // ==========================================
-      // 🌐 WEB
-      // ==========================================
       if (kIsWeb) {
         final blob = html.Blob([response.bodyBytes], contentType);
         final url = html.Url.createObjectUrlFromBlob(blob);
-
-        final anchor = html.AnchorElement(href: url)
-          ..setAttribute("download", fileName)
-          ..click();
-
+        final anchor = html.AnchorElement(href: url)..setAttribute("download", fileName)..click();
         html.Url.revokeObjectUrl(url);
         return;
       }
 
-      // ==========================================
-      // 📱 MOBILE
-      // ==========================================
       final dir = await getApplicationDocumentsDirectory();
       final filePath = "${dir.path}/$fileName";
-
       final file = File(filePath);
       await file.writeAsBytes(response.bodyBytes);
-
       await OpenFilex.open(filePath);
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Attachment error: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Attachment error: $e")),
+      );
     }
   }
 
   Future<String> getNameFromUser(String userId) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('jwt_token') ?? '';
-
     final url = "${BASE_URL.Urls().baseURL}user/search?userId=$userId";
-
     final response = await http.get(
       Uri.parse(url),
-      headers: {
-        "content-type": "application/json",
-        "Authorization": "Bearer $token",
-      },
+      headers: {"content-type": "application/json", "Authorization": "Bearer $token"},
     );
-
     if (response.statusCode == 200) {
       final body = jsonDecode(response.body);
       return body["name"] ?? "";
@@ -195,33 +162,20 @@ class _QuestionCardState extends State<QuestionCard> {
     if (extension == null) return null;
     extension = extension.toLowerCase();
     switch (extension) {
-      case 'jpg':
-      case 'jpeg':
-        return 'image/jpeg';
-      case 'png':
-        return 'image/png';
-      case 'pdf':
-        return 'application/pdf';
-      case 'mp4':
-        return 'video/mp4';
-      case 'mp3':
-        return 'audio/mpeg';
-      case 'wav':
-        return 'audio/wav';
-      case 'doc':
-        return 'application/msword';
-      case 'docx':
-        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      case 'txt':
-        return 'text/plain';
-      case 'json':
-        return 'application/json';
-      default:
-        return 'application/octet-stream';
+      case 'jpg': case 'jpeg': return 'image/jpeg';
+      case 'png': return 'image/png';
+      case 'pdf': return 'application/pdf';
+      case 'mp4': return 'video/mp4';
+      case 'mp3': return 'audio/mpeg';
+      case 'wav': return 'audio/wav';
+      case 'doc': return 'application/msword';
+      case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'txt': return 'text/plain';
+      case 'json': return 'application/json';
+      default: return 'application/octet-stream';
     }
   }
 
-  // ==================== ANSWER QUESTION METHOD ====================
   Future<void> answerQuestion() async {
     if (answerController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -230,19 +184,22 @@ class _QuestionCardState extends State<QuestionCard> {
       return;
     }
 
-    // Show loading dialog
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text("Posting Answer"),
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 10),
-              Text("Posting your answer..."),
+              const CircularProgressIndicator(color: Colors.green),
+              const SizedBox(height: 16),
+              Text(
+                "Posting your answer...",
+                style: GoogleFonts.inter(color: Colors.grey[600]),
+              ),
             ],
           ),
         );
@@ -310,17 +267,17 @@ class _QuestionCardState extends State<QuestionCard> {
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
 
-      // Close loading dialog
-      if (context.mounted) {
-        Navigator.pop(context);
-      }
+      if (context.mounted) Navigator.pop(context);
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Answer posted successfully!")),
+          SnackBar(
+            content: Text("Answer posted successfully!", style: GoogleFonts.inter()),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
 
-        // Clear the answer form
         answerController.clear();
         setState(() {
           answerFile = null;
@@ -328,22 +285,25 @@ class _QuestionCardState extends State<QuestionCard> {
           answerFileExtension = null;
         });
 
-        // Refresh the page to show new answer
         widget.refreshMethod();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Failed to post answer: ${response.statusCode}"),
+            content: Text("Failed to post answer: ${response.statusCode}", style: GoogleFonts.inter()),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
     } catch (e) {
-      if (context.mounted) {
-        Navigator.pop(context); // Close loading dialog if still open
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error posting answer: $e")));
+      if (context.mounted) Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error posting answer: $e", style: GoogleFonts.inter()),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -366,191 +326,201 @@ class _QuestionCardState extends State<QuestionCard> {
   }
 
   void showEditDialog() {
-    TextEditingController messageController = TextEditingController(
-      text: widget.question.message,
-    );
-
+    TextEditingController messageController = TextEditingController(text: widget.question.message);
     String selectedType = widget.question.questionType.apiValue;
+    
+    selectedFile = null;
+    fileName = null;
+    fileExtension = null;
 
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text("Edit Question"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: messageController,
-                decoration: const InputDecoration(labelText: "Message"),
-              ),
-
-              const SizedBox(height: 10),
-
-              DropdownButtonFormField<String>(
-                value: selectedType,
-                items: AdvocateSpeciality.values.map((e) {
-                  return DropdownMenuItem(value: e.name, child: Text(e.label));
-                }).toList(),
-                onChanged: (v) {
-                  selectedType = v!;
-                },
-              ),
-              ElevatedButton.icon(
-                onPressed: pickFile,
-                icon: const Icon(Icons.attach_file),
-                label: const Text("Choose Attachment"),
-              ),
-
-              if (fileName != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    fileName!,
-                    style: const TextStyle(color: Colors.green),
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Text("Edit Question", style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: messageController,
+                    maxLines: 3,
+                    style: GoogleFonts.inter(),
+                    decoration: InputDecoration(
+                      labelText: "Message",
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
                   ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: selectedType,
+                    items: AdvocateSpeciality.values.map((e) {
+                      return DropdownMenuItem(value: e.name, child: Text(e.label));
+                    }).toList(),
+                    onChanged: (v) => selectedType = v!,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      await pickFile();
+                      setDialogState(() {});
+                    },
+                    icon: const Icon(Icons.attach_file),
+                    label: const Text("Choose Attachment"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  if (fileName != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(fileName!, style: GoogleFonts.inter(color: Colors.green)),
+                    ),
+                  if (widget.question.attachmentId != null && widget.question.attachmentId!.isNotEmpty && selectedFile == null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        "Current attachment will be replaced if you choose a new one",
+                        style: GoogleFonts.inter(fontSize: 11, color: Colors.orange),
+                      ),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancel"),
                 ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
-
-            ElevatedButton(
-              onPressed: () async {
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (BuildContext context) {
-                    return AlertDialog(
-                      title: Text("Updating question...."),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(),
-                          const SizedBox(height: 10),
-                          Text("In process...."),
-                        ],
-                      ),
+                ElevatedButton(
+                  onPressed: () async {
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (BuildContext context) {
+                        return AlertDialog(
+                          backgroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          title: Text("Updating question...", style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const CircularProgressIndicator(color: Colors.green),
+                              const SizedBox(height: 10),
+                              Text("Please wait...", style: GoogleFonts.inter()),
+                            ],
+                          ),
+                        );
+                      },
                     );
+
+                    try {
+                      SharedPreferences prefs = await SharedPreferences.getInstance();
+                      final token = prefs.getString('jwt_token') ?? '';
+
+                      final uri = Uri.parse("${baseURL.Urls().baseURL}questions/update");
+                      var request = http.MultipartRequest("PUT", uri);
+                      request.headers["Authorization"] = "Bearer $token";
+
+                      request.fields["userId"] = widget.question.userId;
+                      request.fields["usersId"] = widget.question.userId;
+                      request.fields["message"] = messageController.text.trim();
+                      request.fields["questionType"] = selectedType;
+                      request.fields["questionId"] = widget.question.id!;
+                      
+                      if (widget.question.attachmentId != null && widget.question.attachmentId!.isNotEmpty && selectedFile == null) {
+                        request.fields["attachmentId"] = widget.question.attachmentId!;
+                      } else {
+                        request.fields["attachmentId"] = "";
+                      }
+
+                      if (selectedFile != null) {
+                        final mimeTypeStr = getMimeType(fileExtension);
+                        http.MediaType? contentType = mimeTypeStr != null
+                            ? http.MediaType.parse(mimeTypeStr)
+                            : null;
+
+                        if (kIsWeb) {
+                          if (selectedFile!.bytes != null) {
+                            request.files.add(
+                              http.MultipartFile.fromBytes(
+                                "file",
+                                selectedFile!.bytes!,
+                                filename: selectedFile!.name,
+                                contentType: contentType,
+                              ),
+                            );
+                          }
+                        } else {
+                          if (selectedFile!.path != null) {
+                            request.files.add(
+                              await http.MultipartFile.fromPath(
+                                "file",
+                                selectedFile!.path!,
+                                filename: selectedFile!.name,
+                                contentType: contentType,
+                              ),
+                            );
+                          } else if (selectedFile!.bytes != null) {
+                            request.files.add(
+                              http.MultipartFile.fromBytes(
+                                "file",
+                                selectedFile!.bytes!,
+                                filename: selectedFile!.name,
+                                contentType: contentType,
+                              ),
+                            );
+                          }
+                        }
+                      }
+
+                      final streamedResponse = await request.send();
+                      final response = await http.Response.fromStream(streamedResponse);
+
+                      if (context.mounted) Navigator.pop(context);
+                      if (context.mounted) Navigator.pop(context);
+
+                      if (response.statusCode == 200 || response.statusCode == 201) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text("Question updated successfully", style: GoogleFonts.inter()),
+                            backgroundColor: Colors.green,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                        widget.refreshMethod();
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text("Failed: ${response.body}", style: GoogleFonts.inter()),
+                            backgroundColor: Colors.red,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) Navigator.pop(context);
+                      if (context.mounted) Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text("Update failed: $e", style: GoogleFonts.inter()),
+                          backgroundColor: Colors.red,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
                   },
-                );
-
-                try {
-                  SharedPreferences prefs =
-                      await SharedPreferences.getInstance();
-                  final token = prefs.getString('jwt_token') ?? '';
-
-                  final uri = Uri.parse(
-                    "${baseURL.Urls().baseURL}questions/update",
-                  ); // From your backend endpoint
-
-                  var request = http.MultipartRequest("PUT", uri);
-                  request.headers["Authorization"] = "Bearer $token";
-
-                  request.fields["userId"] = widget
-                      .question
-                      .userId; // Assuming usersId is a typo or same as userId; adjust if needed
-                  request.fields["usersId"] = widget
-                      .question
-                      .userId; // If backend requires both, set accordingly
-                  request.fields["message"] = messageController.text.trim();
-                  request.fields["questionType"] = selectedType;
-                  request.fields["questionId"] = widget.question.id!;
-                  if (widget.question.attachmentId != null) {
-                    request.fields["attachmentId"] =
-                        widget.question.attachmentId!;
-                  } else {
-                    request.fields["attachmentId"] = "";
-                  }
-
-                  if (selectedFile != null) {
-                    final mimeTypeStr = getMimeType(fileExtension);
-                    http.MediaType? contentType = mimeTypeStr != null
-                        ? http.MediaType.parse(mimeTypeStr)
-                        : null;
-
-                    if (kIsWeb) {
-                      // Web: use bytes
-                      if (selectedFile!.bytes != null) {
-                        request.files.add(
-                          http.MultipartFile.fromBytes(
-                            "file",
-                            selectedFile!.bytes!,
-                            filename: selectedFile!
-                                .name, // Critical: sets originalFilename in backend
-                            contentType: contentType, // Sets proper MIME
-                          ),
-                        );
-                      }
-                    } else {
-                      // Mobile: prefer path, fallback to bytes
-                      if (selectedFile!.path != null) {
-                        request.files.add(
-                          await http.MultipartFile.fromPath(
-                            "file",
-                            selectedFile!.path!,
-                            filename: selectedFile!.name, // Critical
-                            contentType: contentType,
-                          ),
-                        );
-                      } else if (selectedFile!.bytes != null) {
-                        request.files.add(
-                          http.MultipartFile.fromBytes(
-                            "file",
-                            selectedFile!.bytes!,
-                            filename: selectedFile!.name,
-                            contentType: contentType,
-                          ),
-                        );
-                      }
-                    }
-                  }
-
-                  final streamedResponse = await request.send();
-                  final response = await http.Response.fromStream(
-                    streamedResponse,
-                  );
-
-                  if (response.statusCode == 200 ||
-                      response.statusCode == 201) {
-                    if (context.mounted)
-                      Navigator.pop(context); // close loading
-
-                    if (context.mounted)
-                      Navigator.pop(context); // close edit dialog
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Question updated successfully"),
-                      ),
-                    );
-
-                    widget.refreshMethod();
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Failed: ${response.body}")),
-                    );
-
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                    }
-                  }
-                } catch (e) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text("Update failed: $e")));
-
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                  }
-                }
-              },
-              child: const Text("Update"),
-            ),
-          ],
+                  child: const Text("Update"),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -558,215 +528,317 @@ class _QuestionCardState extends State<QuestionCard> {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: Colors.white,
-      margin: const EdgeInsets.only(bottom: 14),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: SingleChildScrollView( child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    final bool hasAttachment = widget.question.attachmentId != null && 
+                               widget.question.attachmentId!.isNotEmpty && 
+                               widget.question.attachmentId != "null" &&
+                               widget.question.attachmentId != "attachmentId";
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  widget.question.questionType.apiValue,
-                  style: const TextStyle(color: Colors.green),
-                ),
-                if (isMyQuestion)
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert),
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(value: "edit", child: Text("Edit")),
-                      const PopupMenuItem(
-                        value: "delete",
-                        child: Text("Delete"),
+                // Header Row
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.green.shade600, Colors.green.shade400],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                    ],
-                    onSelected: (value) async {
-                      if (value == "edit") {
-                        showEditDialog();
-                      }
-
-                      if (value == "delete") {
-                        showDialog(
-                          context: context,
-                          barrierDismissible: false,
-                          builder: (BuildContext context) {
-                            return AlertDialog(
-                              title: Text("Deleting question...."),
-                              content: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  CircularProgressIndicator(),
-                                  const SizedBox(height: 10),
-                                  Text("In process...."),
-                                ],
-                              ),
+                      child: Text(
+                        widget.question.questionType.label,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    if (isMyQuestion)
+                      PopupMenuButton<String>(
+                        icon: Icon(Icons.more_vert, color: Colors.grey[600]),
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(value: "edit", child: Text("Edit")),
+                          const PopupMenuItem(value: "delete", child: Text("Delete")),
+                        ],
+                        onSelected: (value) async {
+                          if (value == "edit") {
+                            showEditDialog();
+                          }
+                          if (value == "delete") {
+                            showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (BuildContext context) {
+                                return AlertDialog(
+                                  backgroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  title: Text("Deleting question...", style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+                                  content: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const CircularProgressIndicator(color: Colors.red),
+                                      const SizedBox(height: 10),
+                                      Text("Please wait...", style: GoogleFonts.inter()),
+                                    ],
+                                  ),
+                                );
+                              },
                             );
-                          },
-                        );
 
-                        final res = await QuestionService.deleteQuestion(
-                          questionId: widget.question.id!,
-                          userId: currentUserId,
-                        );
-                        if (res) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Question deleted successfully"),
-                            ),
-                          );
-
-                          setState(() {
-                            isMyQuestion = false;
-                          });
-
-                          widget.refreshMethod.call();
-
-                          if (context.mounted) {
-                            Navigator.pop(context);
+                            final res = await QuestionService.deleteQuestion(
+                              questionId: widget.question.id!,
+                              userId: currentUserId,
+                            );
+                            
+                            if (context.mounted) Navigator.pop(context);
+                            
+                            if (res) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text("Question deleted successfully", style: GoogleFonts.inter()),
+                                  backgroundColor: Colors.green,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                              widget.refreshMethod();
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text("Failed to delete question", style: GoogleFonts.inter()),
+                                  backgroundColor: Colors.red,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
                           }
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Failed to delete question"),
-                            ),
-                          );
-
-                          if (context.mounted) {
-                            Navigator.pop(context);
-                          }
-                        }
-                      }
-                    },
-                  ),
-              ],
-            ),
-
-            const SizedBox(height: 6),
-            Text(
-              widget.question.userName,
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              widget.question.message,
-              style: const TextStyle(color: Colors.black),
-            ),
-
-            if (widget.question.attachmentId != null)
-              InkWell(
-                onTap: () =>
-                    openAttachment(context, widget.question.attachmentId!),
-                child: const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text(
-                    "View Attachment",
-                    style: TextStyle(
-                      color: Colors.green,
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
+                        },
+                      ),
+                  ],
                 ),
-              ),
+                const SizedBox(height: 12),
 
-            const Divider(color: Colors.grey),
-
-            /// ================= ANSWERS =================
-            if (widget.question.answers.isNotEmpty) Text("Answers"),
-            if (widget.question.answers.isNotEmpty)
-              Column(
-                children: widget.question.answers
-                    .map((a) => AnswerTile(answer: a, onRefresh: widget.refreshMethod))
-                    .toList(),
-              ),
-            if (widget.question.answers.isEmpty)
-              Text("No answers yet", style: TextStyle(color: Colors.grey)),
-
-            /*FutureBuilder<List<AnswerModel>>(
-              future: AnswerService.getByQuestion(widget.question.id!),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Text(
-                    "Loading answers...",
-                    style: TextStyle(color: Colors.grey),
-                  );
-                }
-
-                final answers = snapshot.data!;
-                if (answers.isEmpty) {
-                  return const Text(
-                    "No answers yet",
-                    style: TextStyle(color: Colors.grey),
-                  );
-                }
-
-                return Column(
-                  children: answers.map((a) => AnswerTile(answer: a)).toList(),
-                );
-              },
-            ),*/
-            const Divider(color: Colors.grey),
-
-            /// ================= ANSWER INPUT SECTION =================
-            if (isAdvocate) ...[
-              const Divider(color: Colors.grey),
-              const Text(
-                "Your Answer",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: answerController,
-                decoration: const InputDecoration(
-                  hintText: "Write your answer here...",
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.all(12),
-                ),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: pickAnswerFile,
-                    icon: const Icon(Icons.attach_file, size: 18),
-                    label: const Text("Attach File"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey[200],
-                      foregroundColor: Colors.black,
+                // User Name
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: Colors.green.withOpacity(0.1),
+                      child: Text(
+                        widget.question.userName.isNotEmpty ? widget.question.userName[0].toUpperCase() : "U",
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                        ),
+                      ),
                     ),
-                  ),
-                  if (answerFileName != null) ...[
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        answerFileName!,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12),
+                        widget.question.userName,
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[800],
+                        ),
                       ),
                     ),
                   ],
-                ],
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: answerQuestion,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text("Post Answer"),
                 ),
-              ),
-            ],
-          ],
+                const SizedBox(height: 12),
+
+                // Question Message
+                Text(
+                  widget.question.message,
+                  style: GoogleFonts.inter(
+                    fontSize: 15,
+                    color: Colors.grey[700],
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Attachment Button
+                if (hasAttachment)
+                  InkWell(
+                    onTap: () => openAttachment(context, widget.question.attachmentId!),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.attach_file, size: 16, color: Colors.green),
+                          const SizedBox(width: 6),
+                          Text(
+                            "View Attachment",
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.green,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(Icons.open_in_new, size: 14, color: Colors.green),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                const Divider(color: Colors.grey, height: 24),
+
+                // Answers Section
+                Row(
+                  children: [
+                    Icon(Icons.chat_bubble_outline, size: 16, color: Colors.grey[500]),
+                    const SizedBox(width: 6),
+                    Text(
+                      widget.question.answers.isEmpty ? "No answers yet" : "Answers (${widget.question.answers.length})",
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+
+                if (widget.question.answers.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                      child: Text(
+                        "Be the first to answer this question",
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  Column(
+                    children: widget.question.answers.map((a) => AnswerTile(answer: a, onRefresh: widget.refreshMethod)).toList(),
+                  ),
+
+                const Divider(color: Colors.grey, height: 24),
+
+                // Answer Input Section (for advocates only)
+                if (isAdvocate) ...[
+                  Text(
+                    "Your Answer",
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: TextField(
+                      controller: answerController,
+                      maxLines: 3,
+                      style: GoogleFonts.inter(fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: "Write your answer here...",
+                        hintStyle: GoogleFonts.inter(color: Colors.grey[400]),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.all(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: pickAnswerFile,
+                        icon: const Icon(Icons.attach_file, size: 18),
+                        label: const Text("Attach File"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[100],
+                          foregroundColor: Colors.grey[700],
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                      if (answerFileName != null) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            answerFileName!,
+                            style: GoogleFonts.inter(fontSize: 12, color: Colors.green),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: answerQuestion,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        "Post Answer",
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
-      ),
       ),
     );
   }

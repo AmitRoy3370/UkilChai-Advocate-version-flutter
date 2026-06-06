@@ -4,16 +4,15 @@ import 'dart:typed_data';
 import 'package:advocatechaiadvocate/PostRelatedPages/post_response.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart'; // Add this import for MediaType
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import '../PostRelatedPages/PostAttachmentViewer.dart';
-
 import '../Utils/AdvocateSpeciality.dart';
 import '../Utils/BaseURL.dart' as baseURL;
 import 'AdvocatePost.dart';
-// import 'PostAttachmentViewer.dart'; // Uncomment if needed
 
 class CreateOrUpdatePostPage extends StatefulWidget {
   final PostResponse? post;
@@ -30,7 +29,7 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
 
   AdvocateSpeciality selectedType = AdvocateSpeciality.CRIMINAL_LAWYER;
 
-  PlatformFile? selectedFile; // Unified for single file
+  PlatformFile? selectedFile;
   String? fileName;
   String? fileExtension;
   Uint8List? fileBytes;
@@ -45,8 +44,7 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
       selectedType = AdvocateSpecialityExt.fromApi(
         widget.post!.postType.apiValue,
       );
-      if (widget.post!.attachmentId != null &&
-          widget.post!.attachmentId!.isNotEmpty) {
+      if (hasExistingAttachment) {
         fileName = "Existing Attachment";
       }
     }
@@ -84,8 +82,7 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
 
   Future<void> pickFiles() async {
     final result = await FilePicker.platform.pickFiles(
-      allowMultiple:
-          false, // Changed to false since backend expects single "file"
+      allowMultiple: false,
       withData: true,
       type: FileType.any,
     );
@@ -97,89 +94,122 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
         fileExtension = selectedFile!.extension;
         fileBytes = selectedFile!.bytes;
         fileSelected = true;
-        if (isUpdate) removeOldAttachment = false; // New file will replace
+        if (isUpdate) {
+          removeOldAttachment = false;
+        }
       });
     }
   }
+Future<void> submitPost() async {
+  final prefs = await SharedPreferences.getInstance();
+  final token = prefs.getString("jwt_token") ?? "";
+  final userId = prefs.getString("userId") ?? "";
+  final advocateId = prefs.getString("advocateId") ?? "";
 
-  Future<void> submitPost() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString("jwt_token") ?? "";
-    final userId = prefs.getString("userId") ?? "";
-    final advocateId = prefs.getString("advocateId") ?? "";
+  final uri = isUpdate
+      ? Uri.parse(
+          "${baseURL.Urls().baseURL}advocate/posts/update/${widget.post!.id}/$userId",
+        )
+      : Uri.parse("${baseURL.Urls().baseURL}advocate/posts/upload/$userId");
 
-    final uri = isUpdate
-        ? Uri.parse(
-            "${baseURL.Urls().baseURL}advocate/posts/update/${widget.post!.id}/$userId",
-          )
-        : Uri.parse("${baseURL.Urls().baseURL}advocate/posts/upload/$userId");
+  var request = http.MultipartRequest(isUpdate ? "PUT" : "POST", uri);
+  request.headers["Authorization"] = "Bearer $token";
 
-    var request = http.MultipartRequest(isUpdate ? "PUT" : "POST", uri);
-    request.headers["Authorization"] = "Bearer $token";
+  request.fields["advocateId"] = advocateId;
+  request.fields["postContent"] = contentController.text.trim();
+  request.fields["postType"] = selectedType.apiValue;
 
-    request.fields["advocateId"] = advocateId;
-    request.fields["postContent"] = contentController.text.trim();
-    request.fields["postType"] = selectedType.apiValue;
-
-    if (isUpdate) {
-      if (removeOldAttachment) {
-        request.fields["attachmentId"] = "";
-      } else {
-        request.fields["attachmentId"] = widget.post!.attachmentId ?? "";
-      }
-    }
-
+  // ALWAYS send attachmentId for update requests
+  if (isUpdate) {
+    String? attachmentIdValue;
+    
     if (selectedFile != null) {
-      final mimeTypeStr = getMimeType(fileExtension);
-      print("mimetype of the file is :- $mimeTypeStr");
+      // When uploading new file, send the existing attachmentId if it exists, otherwise send empty string
+      attachmentIdValue = hasExistingAttachment ? widget.post!.attachmentId! : "";
+    } else if (removeOldAttachment) {
+      // Removing attachment
+      //attachmentIdValue = "";
+    } else if (hasExistingAttachment) {
+      // Keeping existing attachment
+      attachmentIdValue = widget.post!.attachmentId!;
+    } else {
+      // No attachment
+      //attachmentIdValue = "";
+    }
+    
+    if(attachmentIdValue != null) {
 
-      MediaType? contentType = mimeTypeStr != null
-          ? MediaType.parse(mimeTypeStr)
-          : null;
+        request.fields["attachmentId"] = attachmentIdValue!;
+        print("Sending attachmentId: $attachmentIdValue");
 
-      if (kIsWeb) {
-        if (selectedFile!.bytes != null) {
-          request.files.add(
-            http.MultipartFile.fromBytes(
-              "file",
-              selectedFile!.bytes!,
-              filename: selectedFile!.name,
-              contentType: contentType,
-            ),
-          );
-        }
+    }
+
+  }
+
+  // Add file if selected
+  if (selectedFile != null) {
+    final mimeTypeStr = getMimeType(fileExtension);
+    MediaType? contentType = mimeTypeStr != null
+        ? MediaType.parse(mimeTypeStr)
+        : null;
+
+    List<int> fileBytesToSend;
+    if (kIsWeb) {
+      fileBytesToSend = selectedFile!.bytes!;
+    } else {
+      if (selectedFile!.path != null) {
+        final file = File(selectedFile!.path!);
+        fileBytesToSend = await file.readAsBytes();
+      } else if (selectedFile!.bytes != null) {
+        fileBytesToSend = selectedFile!.bytes!;
       } else {
-        if (selectedFile!.path != null) {
-          request.files.add(
-            await http.MultipartFile.fromPath(
-              'file',
-              selectedFile!.path!,
-              filename: selectedFile!.name,
-              contentType: contentType,
-            ),
-          );
-        } else if (selectedFile!.bytes != null) {
-          request.files.add(
-            http.MultipartFile.fromBytes(
-              "file",
-              selectedFile!.bytes!,
-              filename: selectedFile!.name,
-              contentType: contentType,
-            ),
-          );
-        }
+        fileBytesToSend = [];
       }
     }
 
-    final response = await request.send();
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        "file",
+        fileBytesToSend,
+        filename: selectedFile!.name,
+        contentType: contentType,
+      ),
+    );
+    print("Adding file: ${selectedFile!.name}, size: ${selectedFile!.size}");
+  }
 
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      Navigator.pop(context);
-    } else {
-      final body = await response.stream.bytesToString();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(body)));
+  print("isUpdate: $isUpdate");
+  print("Has selectedFile: ${selectedFile != null}");
+  print("Fields: ${request.fields}");
+  print("Has file in request: ${request.files.isNotEmpty}");
+
+  final response = await request.send();
+  final responseBody = await response.stream.bytesToString();
+
+  print("Status: ${response.statusCode}");
+  print("Body: $responseBody");
+
+  if (response.statusCode == 200 || response.statusCode == 201) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isUpdate ? "Post updated successfully!" : "Post created successfully!"),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pop(context, true);
+    }
+  } else {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Failed: $responseBody"), 
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
+}
 
   void showSpecialityDialog() {
     showDialog(
@@ -188,23 +218,26 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             return AlertDialog(
-              title: const Text("Select Specialities"),
+              title: Text(
+                "Select Speciality",
+                style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+              ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: AdvocateSpeciality.values.map((e) {
-                    return CheckboxListTile(
-                      title: Text(e.label),
-                      value: selectedType.apiValue == e.apiValue,
+                    return RadioListTile<AdvocateSpeciality>(
+                      title: Text(e.label, style: GoogleFonts.inter()),
+                      value: e,
+                      groupValue: selectedType,
                       onChanged: (val) {
                         setStateDialog(() {
-                          if (val!) {
-                            selectedType = e;
-                          } else {
-                            selectedType = AdvocateSpeciality.CRIMINAL_LAWYER;
+                          if (val != null) {
+                            selectedType = val;
                           }
                         });
                       },
+                      activeColor: Colors.green,
                     );
                   }).toList(),
                 ),
@@ -215,7 +248,7 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
                     Navigator.pop(ctx);
                     setState(() {});
                   },
-                  child: const Text("Done"),
+                  child: Text("Done", style: GoogleFonts.inter(color: Colors.green)),
                 ),
               ],
             );
@@ -225,203 +258,400 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
     );
   }
 
+  // Check if attachment exists
+  bool get hasExistingAttachment {
+    if (!isUpdate) return false;
+    final attachmentId = widget.post!.attachmentId;
+    return attachmentId != null &&
+        attachmentId.isNotEmpty &&
+        attachmentId != "null" &&
+        attachmentId != "attachmentId";
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(isUpdate ? "Update Post" : "Create Post")),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        title: Text(
+          isUpdate ? "Update Post" : "Create New Post",
+          style: GoogleFonts.inter(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[800],
+          ),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: false,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: Colors.grey[800]),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TextField(
-              controller: contentController,
-              maxLines: 5,
-              decoration: const InputDecoration(
-                labelText: "Post Content",
-                border: OutlineInputBorder(),
+            // Post Content Field
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: TextField(
+                controller: contentController,
+                maxLines: 8,
+                style: GoogleFonts.inter(fontSize: 16, height: 1.5),
+                decoration: InputDecoration(
+                  hintText: "What's on your mind?",
+                  hintStyle: GoogleFonts.inter(color: Colors.grey[400]),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.all(16),
+                ),
               ),
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: showSpecialityDialog,
-              child: const Text("Select Specialist"),
-            ),
-            const SizedBox(height: 16),
-            Text("Post speciality :- ${selectedType.label}"),
             const SizedBox(height: 20),
 
-            // -------- ATTACHMENT SECTION --------
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Attachment",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 10),
-
-                // পুরনো attachment দেখান (যদি থাকে এবং remove না করা হয় এবং নতুন ফাইল না থাকে)
-                if (isUpdate &&
-                    widget.post!.attachmentId != null &&
-                    widget.post!.attachmentId!.isNotEmpty &&
-                    !removeOldAttachment &&
-                    selectedFile == null)  // ✅ নতুন ফাইল না থাকলেই পুরনো দেখান
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
+            // Speciality Selection
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
                     child: Row(
                       children: [
-                        const Icon(Icons.insert_drive_file),
-                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Colors.green.shade400, Colors.green.shade600],
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.local_offer, color: Colors.white, size: 18),
+                        ),
+                        const SizedBox(width: 12),
                         Expanded(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  widget.post!.attachmentId ?? "",
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
+                              Text(
+                                "Legal Speciality",
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey[600],
                                 ),
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.download),
-                                onPressed: () async {
-                                  SharedPreferences prefs =
-                                  await SharedPreferences.getInstance();
-                                  final token = prefs.getString('jwt_token') ?? '';
-
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => PostAttachmentView(
-                                        attachmentId: widget.post!.attachmentId!,
-                                        jwtToken: token,
-                                      ),
-                                    ),
-                                  );
-                                },
+                              const SizedBox(height: 4),
+                              Text(
+                                selectedType.label,
+                                style: GoogleFonts.inter(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green.shade700,
+                                ),
                               ),
                             ],
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.red),
-                          onPressed: () {
-                            setState(() {
-                              selectedFile = null;
-                              fileName = null;
-                              fileExtension = null;
-                              fileBytes = null;
-                              fileSelected = false;
-                              if (isUpdate) removeOldAttachment = true;
-                            });
-                          },
+                        TextButton.icon(
+                          onPressed: showSpecialityDialog,
+                          icon: const Icon(Icons.edit, size: 18),
+                          label: const Text("Change"),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.green,
+                          ),
                         ),
                       ],
                     ),
-                  )
-                else
-                  Row(
-                    children: [
-                      Expanded(
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Attachment Section
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Colors.blue.shade400, Colors.blue.shade600],
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.attach_file, color: Colors.white, size: 18),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          "Attachment (Optional)",
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Show existing attachment
+                    if (hasExistingAttachment && !removeOldAttachment && selectedFile == null)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
                         child: Row(
                           children: [
-                            ElevatedButton.icon(
-                              onPressed: pickFiles,
-                              icon: const Icon(Icons.attach_file),
-                              label: const Text("Attach File"),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                                foregroundColor: Colors.white,
+                            Icon(Icons.insert_drive_file, color: Colors.green.shade700),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "Current Attachment",
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      color: Colors.green.shade600,
+                                    ),
+                                  ),
+                                  Text(
+                                    "File attached to this post",
+                                    style: GoogleFonts.inter(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey[800],
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            // ✅ নতুন ফাইলের নাম দেখান
-                            if (selectedFile != null && fileName != null && fileName!.isNotEmpty)
-                              Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green[50],
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: Colors.green[200]!),
-                                  ),
-                                  child: Text(
-                                    fileName!,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.green[700],
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ),
+                            IconButton(
+                              icon: Icon(Icons.close, color: Colors.red.shade400, size: 20),
+                              onPressed: () {
+                                setState(() {
+                                  removeOldAttachment = true;
+                                  selectedFile = null;
+                                  fileName = null;
+                                });
+                              },
+                            ),
                           ],
                         ),
                       ),
-                      // ✅ নতুন ফাইল সিলেক্ট করলে remove বাটন দেখান
-                      if (selectedFile != null)
-                        IconButton(
-                          icon: const Icon(Icons.clear, color: Colors.red),
-                          onPressed: () {
-                            setState(() {
-                              selectedFile = null;
-                              fileName = null;
-                              fileExtension = null;
-                              fileBytes = null;
-                              fileSelected = false;
-                              // ✅ নতুন ফাইল রিমুভ করলে পুরনো attachment ফিরিয়ে আনুন
-                              if (isUpdate && widget.post!.attachmentId != null) {
-                                removeOldAttachment = false;
-                              }
-                            });
-                          },
-                          tooltip: 'Remove selected file',
+
+                    // Show selected new file
+                    if (selectedFile != null && fileName != null && fileName!.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.shade200),
                         ),
-                    ],
-                  ),
-              ],
+                        child: Row(
+                          children: [
+                            Icon(Icons.insert_drive_file, color: Colors.blue.shade700),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "New Attachment",
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      color: Colors.blue.shade600,
+                                    ),
+                                  ),
+                                  Text(
+                                    fileName!,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey[800],
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.close, color: Colors.red.shade400, size: 20),
+                              onPressed: () {
+                                setState(() {
+                                  selectedFile = null;
+                                  fileName = null;
+                                  fileExtension = null;
+                                  fileBytes = null;
+                                  fileSelected = false;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // Add file button
+                    if (selectedFile == null && 
+                        (!hasExistingAttachment || removeOldAttachment || !isUpdate))
+                      Center(
+                        child: ElevatedButton.icon(
+                          onPressed: pickFiles,
+                          icon: const Icon(Icons.cloud_upload),
+                          label: const Text("Choose File"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey[100],
+                            foregroundColor: Colors.grey[700],
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: Colors.grey[300]!),
+                            ),
+                          ),
+                        ),
+                      ),
+                    
+                    // Show info text
+                    if (selectedFile == null && 
+                        isUpdate && 
+                        !hasExistingAttachment && 
+                        !removeOldAttachment)
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Center(
+                          child: Text(
+                            "No attachment currently attached to this post",
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              color: Colors.grey[500],
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () async {
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (BuildContext context) {
-                    return AlertDialog(
-                      title: const Text("Submitting post"),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const CircularProgressIndicator(),
-                          const SizedBox(height: 10),
-                          Text(isUpdate ? "Updating..." : "Posting..."),
-                        ],
+
+            const SizedBox(height: 30),
+
+            // Submit Button
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: () async {
+                  if (contentController.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Please enter post content"),
+                        backgroundColor: Colors.orange,
                       ),
                     );
-                  },
-                );
+                    return;
+                  }
 
-                await submitPost();
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (BuildContext context) {
+                      return AlertDialog(
+                        backgroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(color: Colors.green),
+                            const SizedBox(height: 16),
+                            Text(
+                              isUpdate ? "Updating post..." : "Creating post...",
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
 
-                if (context.mounted) {
-                  Navigator.pop(context);
-                }
+                  await submitPost();
+                  widget.refresh?.call();
 
-                widget.refresh?.call();
-
-              },
-
-              child: Text(isUpdate ? "Update" : "Post"),
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 0,
+                ),
+                child: Text(
+                  isUpdate ? "Update Post" : "Publish Post",
+                  style: GoogleFonts.inter(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             ),
           ],
         ),

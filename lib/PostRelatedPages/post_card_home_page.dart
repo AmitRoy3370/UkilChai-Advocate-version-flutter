@@ -76,7 +76,19 @@ class PostCardHomePage extends StatelessWidget {
         child: SingleChildScrollView( child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(post.advocateName, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
+            /*FutureBuilder<String>(
+              future: getNameFromAdvocate(post.advocateId),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Text("Loading...");
+                }
+                if (!snapshot.hasData || snapshot.hasError) {
+                  return const SizedBox.shrink();
+                }
+                return Text(snapshot.data!);
+              },
+            ),*/
+            Text(post.advocateName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),),
             const SizedBox(height: 6),
             Text(
               post.postType.apiValue,
