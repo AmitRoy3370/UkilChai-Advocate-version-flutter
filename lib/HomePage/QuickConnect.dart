@@ -11,7 +11,7 @@ import '../CaseRelatedPages/MyCasesPage.dart';
 import '../QuestionPages/AskQuestionPage.dart';
 import '../Utils/BaseURL.dart' as BASE_URL;
 import './QuickCard.dart';
-import '../AdvocatePages/AdvocateFilterPage.dart';
+import '../AdvocatePages/advocate_home_page_pageview.dart';
 import '../PageTransition.dart';
 
 class QuickConnect extends StatelessWidget {
@@ -84,7 +84,7 @@ class QuickConnect extends StatelessWidget {
               gradient: const LinearGradient(
                 colors: [Color(0xFF1A237E), Color(0xFF283593)], // Deep Navy - Trust & Authority
               ),
-              onTap: () => _navigateWithTransition(context, const AdvocateFilterPage()),
+              onTap: () => _navigateWithTransition(context, const AdvocateHomePage()),
             ),
             QuickCard(
               icon: Icons.chat_bubble_outline,

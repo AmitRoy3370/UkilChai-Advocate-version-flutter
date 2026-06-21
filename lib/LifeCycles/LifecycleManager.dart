@@ -1,13 +1,13 @@
+// lib/LifeCycles/LifecycleManager.dart
 import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:async';
-import 'dart:js' as js;  // ← এটা নতুন যোগ করো!
 import 'package:flutter/cupertino.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-
-import '../ChatRelatedPages/user_active_service.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../Utils/BaseURL.dart' as BASE_URL;
+import 'PresenceSocketService.dart';
 
 class LifecycleManager extends StatefulWidget {
   final Widget child;
@@ -22,305 +22,172 @@ class _LifecycleManagerState extends State<LifecycleManager>
   String? userId;
   String? token;
   String? activeRecordId;
-  bool _isActive = false;
   bool _hasInitialized = false;
-  Timer? _inactiveTimer;
+  Timer? _heartbeatTimer;
+  DateTime? _lastHeartbeatTime;
+  bool _isActive = false;
+  PresenceSocketService? _socketService;
 
   @override
   void initState() {
     super.initState();
-    print("🔵 LifecycleManager initState");
     WidgetsBinding.instance.addObserver(this);
-    loadUser();
+    _loadUserData();
   }
 
-  Future<void> loadUser() async {
-    print("📂 loadUser started");
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _heartbeatTimer?.cancel();
+    _setUserOffline(); // অ্যাপ ডিসপোজ হওয়ার সময় অফলাইন সেট করুন
+    _socketService?.disconnect();
+    super.dispose();
+  }
+
+  // ইউজার ডাটা লোড করুন
+  Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     userId = prefs.getString("userId");
     token = prefs.getString("jwt_token");
     activeRecordId = prefs.getString("active_record_id");
 
-    print("📂 loadUser - userId: $userId, token: ${token != null}, activeRecordId: $activeRecordId");
-
     if (userId != null && token != null && !_hasInitialized) {
       _hasInitialized = true;
-      print("📂 loadUser - calling setUserActive(true)");
-
-      await setUserActive(true);
-
-      print("📂 loadUser - setting up web close listener with delay");
-      setupWebCloseListener();
-    } else {
-      print("📂 loadUser - conditions not met: userId=$userId, token=${token!=null}, _hasInitialized=$_hasInitialized");
+      _isActive = true;
+      
+      // WebSocket সংযোগ করুন
+      _socketService = PresenceSocketService();
+      _socketService?.connect(userId!);
+      
+      // Heartbeat শুরু করুন
+      _startHeartbeat();
+      _setupWebCloseListener();
+      print('✅ LifecycleManager initialized for user: $userId');
     }
   }
 
-  // ================== ওয়েব ক্লোজের জন্য KEEPALIVE FETCH (সবচেয়ে শক্তিশালী) ==================
-  void _sendInactiveKeepalive() {
-    print("🚨 _sendInactiveKeepalive called - Browser closing!");
+  // ✅ Heartbeat - প্রতি ২০ সেকেন্ডে (শুধুমাত্র এখানেই থাকবে)
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
 
-    if (!_hasInitialized || userId == null || token == null) {
-      print("🚨 Not sending - not initialized");
-      return;
-    }
+    _heartbeatTimer = Timer.periodic(
+      const Duration(seconds: 20), // ২০ সেকেন্ড
+      (timer) async {
+        if (!_hasInitialized || userId == null || token == null) {
+          return;
+        }
+        await _sendHeartbeat();
+      },
+    );
 
-    String url = "${BASE_URL.Urls().baseURL}user-active/add";
-    String method = 'POST';
-    final body = jsonEncode({"userId": userId, "active": false});
+    print('💓 Heartbeat started (every 20 seconds)');
+  }
 
-    if (activeRecordId != null) {
-      url = "${BASE_URL.Urls().baseURL}user-active/update/$activeRecordId/$userId";
-      method = 'PUT';
-      print("📡 Using UPDATE with keepalive (PUT)");
-    } else {
-      print("📡 Using ADD with keepalive (POST)");
-    }
+  // ✅ Heartbeat API Call
+  Future<void> _sendHeartbeat() async {
+    if (userId == null || token == null) return;
 
     try {
-      final options = js.JsObject.jsify({
-        'method': method,
-        'headers': {
+      final url = Uri.parse("${BASE_URL.Urls().baseURL}user-active/heartbeat/$userId");
+      
+      final response = await http.put(
+        url,
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        'body': body,
-        'keepalive': true,  // ← এটাই ম্যাজিক!
-      });
+      );
 
-      js.context['fetch'].apply([url, options]);
-      print("✅ Keepalive fetch sent successfully for $method!");
+      if (response.statusCode == 200) {
+        _lastHeartbeatTime = DateTime.now();
+        // print("💓 Heartbeat sent at ${_lastHeartbeatTime?.toLocal()}");
+      } else {
+        print("❌ Heartbeat failed: ${response.statusCode}");
+      }
     } catch (e) {
-      print("❌ Keepalive fetch failed: $e → fallback to sync");
-      _sendInactiveSync();  // পুরানো fallback
+      print("❌ Heartbeat error: $e");
     }
   }
 
-  Future<void> _performSetUserActive(bool active, String uid, String? t) async {
-    print("🔄 _performSetUserActive - active: $active, uid: $uid");
+  // ✅ ইউজারকে অফলাইন সেট করুন
+  Future<void> _setUserOffline() async {
+    if (userId == null || token == null) return;
+    
     try {
-      final response = await http.get(
-        Uri.parse("${BASE_URL.Urls().baseURL}user-active/user/$uid"),
+      final url = Uri.parse("${BASE_URL.Urls().baseURL}user-active/offline/$userId");
+      
+      final response = await http.put(
+        url,
         headers: {
-          'content-type': 'application/json',
-          'Authorization': 'Bearer $t',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
         },
       );
 
-      print("🔄 GET user-active response: ${response.statusCode}");
-
-      String? recordId;
-
       if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        recordId = body["id"].toString();
-        print("🔄 Found existing record with id: $recordId");
-
-        print("🔄 Calling updateUserActive with active=$active");
-        await UserActiveService.updateUserActive(recordId, uid, active, t);
+        print('✅ User set to OFFLINE successfully');
       } else {
-        print("🔄 No existing record, calling addUserActive with active=$active");
-        await UserActiveService.addUserActive(uid, active, t);
-
-        // Fetch the newly created record
-        final newResp = await http.get(
-          Uri.parse("${BASE_URL.Urls().baseURL}user-active/user/$uid"),
-          headers: {
-            'content-type': 'application/json',
-            'Authorization': 'Bearer $t',
-          },
-        );
-        if (newResp.statusCode == 200) {
-          recordId = jsonDecode(newResp.body)["id"].toString();
-          print("🔄 New record created with id: $recordId");
-        }
-      }
-
-      // Save the record ID
-      if (recordId != null) {
-        activeRecordId = recordId;
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('active_record_id', recordId);
-        print("🔄 Saved activeRecordId to prefs: $recordId");
+        print('❌ Failed to set offline: ${response.statusCode}');
       }
     } catch (e) {
-      print("🔄 _performSetUserActive error: $e");
+      print('❌ Error setting offline: $e');
     }
   }
 
-  // ================== NORMAL SET ACTIVE ==================
-  Future<void> setUserActive(bool active) async {
-    print("🎯 setUserActive called with active=$active, current _isActive=$_isActive");
-
-    // Don't do anything if state hasn't changed
-    if (_isActive == active) {
-      print("🎯 State already $active, skipping");
-      return;
-    }
-
-    print("🎯 Changing active state from $_isActive to $active");
-    _isActive = active;
-
-    try {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      String? t = token ?? prefs.getString('jwt_token');
-      String? uid = userId ?? prefs.getString('userId');
-
-      if (uid == null || t == null) {
-        print("🎯 uid or token is null, returning");
-        return;
-      }
-
-      // Cancel any pending timer
-      _inactiveTimer?.cancel();
-
-      if (!active) {
-        print("🎯 Setting inactive timer");
-        _inactiveTimer = Timer(const Duration(milliseconds: 500), () async {
-          print("🎯 Inactive timer fired");
-          await _performSetUserActive(false, uid, t);
-        });
-      } else {
-        print("🎯 Calling _performSetUserActive immediately for active=true");
-        await _performSetUserActive(true, uid, t);
-      }
-    } catch (e) {
-      print("🎯 setUserActive error: $e");
-    }
-  }
-
-  // ================== WEB CLOSE HANDLING ==================
-  void setupWebCloseListener() {
-    print("🔔 setupWebCloseListener started (keepalive ready)");
-
+  // ✅ Web Close Listener
+  void _setupWebCloseListener() {
     html.window.onBeforeUnload.listen((event) {
-      print("🔔 onBeforeUnload → sending keepalive");
-      _sendInactiveKeepalive();
-    });
-
-    html.window.onPageHide.listen((event) {
-      print("🔔 onPageHide → sending keepalive");
-      _sendInactiveKeepalive();
+      print('🔄 Web page closing');
+      _setUserOffline(); // পেজ ক্লোজ হলে অফলাইন সেট করুন
+      _heartbeatTimer?.cancel();
+      _socketService?.disconnect();
     });
 
     html.document.onVisibilityChange.listen((event) {
-      if (_hasInitialized && html.document.visibilityState == 'hidden') {
-        print("🔔 Visibility hidden → keepalive");
-        Future.delayed(const Duration(milliseconds: 300), _sendInactiveKeepalive);
+      if (_hasInitialized) {
+        if (html.document.visibilityState == 'hidden') {
+          print('👻 Page hidden - stopping heartbeat');
+          _heartbeatTimer?.cancel();
+        } else if (html.document.visibilityState == 'visible') {
+          print('👀 Page visible - starting heartbeat');
+          _startHeartbeat();
+        }
       }
     });
-
-    print("🔔 setupWebCloseListener completed");
   }
 
-  void _sendInactiveBeacon() {
-    print("📡 _sendInactiveBeacon called");
-    print("📡 _hasInitialized: $_hasInitialized, userId: $userId, token: ${token != null}");
-
-    // Don't send if we're not properly initialized
-    if (!_hasInitialized || userId == null || token == null) {
-      print("📡 Not sending beacon - not properly initialized");
-      return;
-    }
-
-    print("🚨 Browser closing → sending inactive beacon...");
-
-    try {
-      String url;
-      final body = jsonEncode({"userId": userId, "active": false});
-
-      if (activeRecordId != null) {
-        url = "${BASE_URL.Urls().baseURL}user-active/update/$activeRecordId/$userId";
-        print("📡 Using UPDATE URL: $url");
-      } else {
-        url = "${BASE_URL.Urls().baseURL}user-active/add";
-        print("📡 Using ADD URL: $url");
-      }
-
-      print("📡 Beacon body: $body");
-
-      // Create a blob with the data
-      final blob = html.Blob([body], 'application/json');
-
-      // Use sendBeacon for reliable sending even when page closes
-      bool success = html.window.navigator.sendBeacon(url, blob);
-
-      if (success) {
-        print("✅ Beacon sent successfully");
-      } else {
-        print("❌ Beacon failed, trying sync request");
-        _sendInactiveSync();
-      }
-    } catch (e) {
-      print("❌ Beacon error: $e, trying sync request");
-      _sendInactiveSync();
-    }
-  }
-
-  void _sendInactiveSync() {
-    print("📠 _sendInactiveSync called");
-
-    if (!_hasInitialized || userId == null || token == null) {
-      print("📠 Not sending sync - not properly initialized");
-      return;
-    }
-
-    try {
-      String url;
-      final body = jsonEncode({"userId": userId, "active": false});
-
-      if (activeRecordId != null) {
-        url = "${BASE_URL.Urls().baseURL}user-active/update/$activeRecordId/$userId";
-      } else {
-        url = "${BASE_URL.Urls().baseURL}user-active/add";
-      }
-
-      print("📠 Sync request to: $url");
-      print("📠 Sync body: $body");
-
-      final request = html.HttpRequest();
-      request.open('POST', url, async: false);
-      request.setRequestHeader('Content-Type', 'application/json');
-      request.setRequestHeader('Authorization', 'Bearer $token');
-      request.send(body);
-
-      print("✅ Sync inactive request sent, status: ${request.status}");
-    } catch (e) {
-      print("❌ Sync request failed: $e");
-    }
-  }
-
-  @override
-  void dispose() {
-    print("🗑️ LifecycleManager dispose");
-    WidgetsBinding.instance.removeObserver(this);
-    _inactiveTimer?.cancel();
-
-    if (_hasInitialized && userId != null && token != null) {
-      print("🗑️ Dispose → sending keepalive inactive");
-      _sendInactiveKeepalive();
-    }
-
-    super.dispose();
-  }
-
+  // ✅ App Lifecycle Management
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    print("🔄 didChangeAppLifecycleState: $state");
+    if (!_hasInitialized || userId == null || token == null) return;
 
-    if (!_hasInitialized || userId == null || token == null) {
-      print("🔄 Lifecycle change ignored - not initialized");
-      return;
-    }
+    switch (state) {
+      case AppLifecycleState.resumed:
+        print('▶️ App Resumed - Starting heartbeat');
+        _startHeartbeat();
+        // পুনরায় WebSocket সংযোগ
+        if (_socketService != null) {
+          _socketService?.connect(userId!);
+        }
+        break;
 
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached ||
-        state == AppLifecycleState.inactive) {
-      print("📴 App paused/detached/inactive → inactive");
-      setUserActive(false);
-    } else if (state == AppLifecycleState.resumed) {
-      print("✅ App resumed → active");
-      setUserActive(true);
+      case AppLifecycleState.paused:
+        print('⏸️ App Paused - Stopping heartbeat');
+        _heartbeatTimer?.cancel();
+        break;
+
+      case AppLifecycleState.detached:
+        print('🔴 App Detached - Setting user offline');
+        _heartbeatTimer?.cancel();
+        _setUserOffline(); // অ্যাপ ডিটাচ হলে অফলাইন সেট করুন
+        _socketService?.disconnect();
+        break;
+
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+        print('🌙 App Inactive - Stopping heartbeat');
+        _heartbeatTimer?.cancel();
+        break;
     }
   }
 

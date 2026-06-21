@@ -36,6 +36,75 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
   bool _showPassword = false;
 
+  // ✅ District selection
+  String? _selectedDistrict;
+  final List<String> _districts = [
+    'Bagerhat',
+    'Bandarban',
+    'Barguna',
+    'Barisal',
+    'Bhola',
+    'Bogra',
+    'Brahmanbaria',
+    'Chandpur',
+    'Chapai Nawabganj',
+    'Chittagong',
+    'Chuadanga',
+    'Comilla',
+    "Cox's Bazar",
+    'Dhaka',
+    'Dinajpur',
+    'Faridpur',
+    'Feni',
+    'Gaibandha',
+    'Gazipur',
+    'Gopalganj',
+    'Habiganj',
+    'Jamalpur',
+    'Jessore',
+    'Jhalokati',
+    'Jhenaidah',
+    'Joypurhat',
+    'Khagrachari',
+    'Khulna',
+    'Kishoreganj',
+    'Kurigram',
+    'Kushtia',
+    'Lakshmipur',
+    'Lalmonirhat',
+    'Madaripur',
+    'Magura',
+    'Manikganj',
+    'Meherpur',
+    'Moulvibazar',
+    'Munshiganj',
+    'Mymensingh',
+    'Naogaon',
+    'Narail',
+    'Narayanganj',
+    'Narsingdi',
+    'Natore',
+    'Netrokona',
+    'Nilphamari',
+    'Noakhali',
+    'Pabna',
+    'Panchagarh',
+    'Patuakhali',
+    'Pirojpur',
+    'Rajbari',
+    'Rajshahi',
+    'Rangamati',
+    'Rangpur',
+    'Satkhira',
+    'Shariatpur',
+    'Sherpur',
+    'Sirajganj',
+    'Sunamganj',
+    'Sylhet',
+    'Tangail',
+    'Thakurgaon'
+  ];
+
   lat_lng.LatLng? _devicePosition;
   lat_lng.LatLng? _selectedPosition;
   String? _selectedPlaceName;
@@ -400,6 +469,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
   Future<void> _submitForm() async {
     try {
       final uri = Uri.parse("${baseURL.Urls().baseURL}auth/register");
+      //final updateUri = Uri.parse("${baseURL.Urls().baseURL}user/update/${logInResponse.userId}");
 
       if (nameController.text.isEmpty) {
         ScaffoldMessenger.of(
@@ -426,19 +496,40 @@ class _RegistrationPageState extends State<RegistrationPage> {
           context,
         ).showSnackBar(const SnackBar(content: Text("Please enter location")));
         return;
+      } else if (_selectedDistrict == null || _selectedDistrict!.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Please select your district")));
+        return;
       }
 
-      var request = http.MultipartRequest("POST", uri);
+      String loginURL = "${baseURL.Urls().baseURL}auth/login";
+      Uri uri1 = Uri.parse(loginURL);
+
+      var logInResponse = await http.post(
+        uri1,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"userName": nameController.text, "password": passwordController.text}),
+       );
+
+      var request = (logInResponse.statusCode == 200 || logInResponse.statusCode == 201) ? http.MultipartRequest("PUT", Uri.parse("${baseURL.Urls().baseURL}user/update/${jsonDecode(logInResponse.body)['userId'].toString()}")) :  http.MultipartRequest("POST", uri);
 
       // -------- Text fields ----------
       request.fields["name"] = nameController.text.trim();
       request.fields["password"] = passwordController.text.trim();
+      
+      if((logInResponse.statusCode == 200 || logInResponse.statusCode == 201)) {
+
+        request.headers["Authorization"] = "Bearer ${jsonDecode(logInResponse.body)['token'].toString()}";
+
+      } 
 
       // optional (send only if backend allows)
       request.fields["profileImageId"] = "profileImageId";
 
       if (kDebugMode) {
         print("profileImageId :- ${request.fields["profileImageId"]}");
+        print("district :- ${request.fields["district"]}");
       }
 
       // -------- File upload ----------
@@ -449,14 +540,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
               'file',
               webImageBytes!,
               filename: '${nameController.text.trim()}.png',
-              contentType: http.MediaType('image', 'png'), // 🔥 VERY IMPORTANT
+              contentType: http.MediaType('image', 'png'),
             ),
           );
         }
-
-        /*request.files.add(
-          await http.MultipartFile.fromPath("file", pickedImage!.path),
-        );*/
       } else if (!kIsWeb && pickedImage != null) {
         request.files.add(
           await http.MultipartFile.fromPath("file", pickedImage!.path),
@@ -465,13 +552,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
       if (kDebugMode) {
         print("added file :- ${request.files.toString()}");
-      }
-
-      if (kDebugMode) {
         print("request body :- ${request.fields}");
-      }
-
-      if (kDebugMode) {
         print("request :- ${request.toString()}");
       }
 
@@ -484,12 +565,16 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
       final responseBody = await response.stream.bytesToString();
 
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Registration status code :- ${response.statusCode} ")));
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         final decoded = jsonDecode(responseBody);
 
         // ✅ JWT token from backend
-        final String token = decoded["token"];
-        final String userId = decoded["userId"];
+        final String token = (logInResponse.statusCode == 200 || logInResponse.statusCode == 201) ? jsonDecode(logInResponse.body)['token'].toString() : decoded["token"];
+        final String userId = (logInResponse.statusCode == 200 || logInResponse.statusCode == 201) ? jsonDecode(logInResponse.body)['userId'].toString() : decoded['id'];
 
         print("received token :- $token");
 
@@ -514,9 +599,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
         final responseForContactInfo = await http.post(
           url,
           headers: {
-            "Authorization": "Bearer $_token", // Key: Use 'Bearer ' prefix
-            "Content-Type":
-                "application/json", // If JSON body; adjust as needed
+            "Authorization": "Bearer $_token",
+            "Content-Type": "application/json",
           },
           body: jsonEncode({
             "userId": userId,
@@ -567,9 +651,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
         final responseForContactInfo1 = await http.post(
           loaction,
           headers: {
-            "Authorization": "Bearer $token1", // Key: Use 'Bearer ' prefix
-            "Content-Type":
-                "application/json", // If JSON body; adjust as needed
+            "Authorization": "Bearer $token1",
+            "Content-Type": "application/json",
           },
           body: jsonEncode({
             "userId": userId,
@@ -618,6 +701,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
             ? "0"
             : experienceController.text.trim();
         joinRequest.fields["licenseKey"] = licenseKeyController.text.trim();
+        joinRequest.fields["district"] = _selectedDistrict!; // ✅ District added
 
         // Convert Enum list to String list
         List<String> specialityList = selectedDistricts
@@ -677,6 +761,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
           degrees.clear();
           workingExperiences.clear();
           selectedDistricts.clear();
+          _selectedDistrict = null;
           pickedImage = null;
           webImageBytes = null;
           cvFile = null;
@@ -958,6 +1043,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
                           readOnly: true,
                         ),
                         const SizedBox(height: 16),
+                        
+                        // ✅ District Dropdown Section
+                        _buildDistrictDropdown(),
+                        const SizedBox(height: 16),
+                        
                         _buildFormField(
                           controller: experienceController,
                           label: "অভিজ্ঞতা (বছর)",
@@ -994,6 +1084,81 @@ class _RegistrationPageState extends State<RegistrationPage> {
           ),
         ),
       ),
+    );
+  }
+
+  // ✅ District Dropdown Widget
+  Widget _buildDistrictDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "জেলা",
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey[200]!),
+          ),
+          child: DropdownButtonFormField<String>(
+            value: _selectedDistrict,
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.location_city, color: Colors.blue),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            ),
+            hint: Text(
+              "আপনার জেলা নির্বাচন করুন",
+              style: TextStyle(color: Colors.grey[400]),
+            ),
+            isExpanded: true,
+            icon: const Icon(Icons.arrow_drop_down, color: Colors.blue),
+            iconSize: 30,
+            dropdownColor: Colors.white,
+            style: const TextStyle(color: Colors.black87, fontSize: 16),
+            items: _districts.map((String district) {
+              return DropdownMenuItem<String>(
+                value: district,
+                child: Text(district),
+              );
+            }).toList(),
+            onChanged: (String? newValue) {
+              setState(() {
+                _selectedDistrict = newValue;
+              });
+            },
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'দয়া করে একটি জেলা নির্বাচন করুন';
+              }
+              return null;
+            },
+          ),
+        ),
+        // ✅ Selected district display chip
+        if (_selectedDistrict != null && _selectedDistrict!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Chip(
+              label: Text(_selectedDistrict!),
+              backgroundColor: Colors.blue.withOpacity(0.1),
+              labelStyle: const TextStyle(color: Colors.blue),
+              deleteIcon: const Icon(Icons.close, size: 18),
+              onDeleted: () {
+                setState(() {
+                  _selectedDistrict = null;
+                });
+              },
+            ),
+          ),
+      ],
     );
   }
 
@@ -1495,7 +1660,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
       ),
       body: Stack(
         children: [
-          // 🔥 FIXED: Map with proper size and interaction
+          // Map
           LayoutBuilder(
             builder: (context, constraints) {
               return SizedBox(
@@ -1506,10 +1671,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   options: MapOptions(
                     initialCenter: lat_lng.LatLng(23.8103, 90.4125),
                     initialZoom: 13.0,
-                    minZoom: 3.0,  // Minimum zoom level
-                    maxZoom: 18.0, // Maximum zoom level
+                    minZoom: 3.0,
+                    maxZoom: 18.0,
                     interactionOptions: const InteractionOptions(
-                      flags: InteractiveFlag.all, // Everything enabled
+                      flags: InteractiveFlag.all,
                     ),
                   ),
                   children: [

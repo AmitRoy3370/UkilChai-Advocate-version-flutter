@@ -5,6 +5,7 @@ import 'package:advocatechaiadvocate/Utils/BaseURL.dart' as baseURL;
 
 class AuthService {
   static const String tokenKey = "jwt_token";
+  static const String advocateKey = "advocateId";
 
   static ValueNotifier<String?> userIdNotifier = ValueNotifier(null);
 
@@ -27,6 +28,13 @@ class AuthService {
   static Future<String?> getUserId() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString("userId");
+  }
+
+  static Future<String?> getAdvocateId() async {
+
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(advocateKey);
+
   }
 
   static Future<bool> isLoggedIn() async {

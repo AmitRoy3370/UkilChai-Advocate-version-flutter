@@ -13,6 +13,7 @@ class AdvocateDetailsModel {
 
   String? licenseKey;
   String? cvHexKey;
+  String? district;
 
   List<String> degrees;
   List<String> workingExperiences;
@@ -43,6 +44,7 @@ class AdvocateDetailsModel {
       this.locationName,
       this.lattitude,
       this.longitude,
+      this.district,
       );
 
   AdvocateDetailsModel.defaultConstructor()
@@ -84,7 +86,7 @@ class AdvocateDetailsModel {
       json['phone']?.toString(),
 
       json['locationName']?.toString(),
-
+      
       json['lattitude'] != null
           ? double.tryParse(json['lattitude'].toString())
           : null,
@@ -92,6 +94,9 @@ class AdvocateDetailsModel {
       json['longitude'] != null
           ? double.tryParse(json['longitude'].toString())
           : null,
+      json['district'] != null ? json['district'] : '',
+
+
     );
   }
 }

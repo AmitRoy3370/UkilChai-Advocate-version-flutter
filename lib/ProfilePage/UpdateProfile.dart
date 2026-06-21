@@ -39,6 +39,22 @@ class _UpdateProfileState extends State<UpdateProfile> {
 
   bool _showPassword = false, _showOldPassword = false;
   
+  // ✅ District selection
+  String? _selectedDistrict;
+  final List<String> _districts = [
+    'Bagerhat', 'Bandarban', 'Barguna', 'Barisal', 'Bhola', 'Bogra',
+    'Brahmanbaria', 'Chandpur', 'Chapai Nawabganj', 'Chittagong', 'Chuadanga',
+    'Comilla', "Cox's Bazar", 'Dhaka', 'Dinajpur', 'Faridpur', 'Feni',
+    'Gaibandha', 'Gazipur', 'Gopalganj', 'Habiganj', 'Jamalpur', 'Jessore',
+    'Jhalokati', 'Jhenaidah', 'Joypurhat', 'Khagrachari', 'Khulna',
+    'Kishoreganj', 'Kurigram', 'Kushtia', 'Lakshmipur', 'Lalmonirhat',
+    'Madaripur', 'Magura', 'Manikganj', 'Meherpur', 'Moulvibazar',
+    'Munshiganj', 'Mymensingh', 'Naogaon', 'Narail', 'Narayanganj',
+    'Narsingdi', 'Natore', 'Netrokona', 'Nilphamari', 'Noakhali', 'Pabna',
+    'Panchagarh', 'Patuakhali', 'Pirojpur', 'Rajbari', 'Rajshahi',
+    'Rangamati', 'Rangpur', 'Satkhira', 'Shariatpur', 'Sherpur',
+    'Sirajganj', 'Sunamganj', 'Sylhet', 'Tangail', 'Thakurgaon'
+  ];
 
   lat_lng.LatLng? _devicePosition;
   lat_lng.LatLng? _selectedPosition;
@@ -53,7 +69,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
 
   File? cvFile;
   Uint8List? webCvBytes;
-  String? cvFileName;
+  String? cvFileName, selectedDistrict;
 
   String? advocateId;
 
@@ -128,6 +144,8 @@ class _UpdateProfileState extends State<UpdateProfile> {
       setState(() {
         oldNameController.text = data["name"] ?? "";
         nameController.text = data["name"] ?? "";
+        // ✅ Load district from user data
+        _selectedDistrict = data["district"] ?? "";
       });
 
       final profileImageId = data["profileImageId"];
@@ -250,7 +268,6 @@ class _UpdateProfileState extends State<UpdateProfile> {
       ..click();
     html.Url.revokeObjectUrl(url);
   }
-
 
   void showDistrictDialog() {
     showDialog(
@@ -666,6 +683,11 @@ class _UpdateProfileState extends State<UpdateProfile> {
 
       request.fields["name"] = nameController.text.trim();
       request.fields["password"] = passwordController.text.trim();
+      
+      // ✅ Add district to update
+      if (_selectedDistrict != null && _selectedDistrict!.isNotEmpty) {
+        request.fields["district"] = _selectedDistrict!;
+      }
 
       final imageFindingUri = Uri.parse("${baseURL.Urls().baseURL}user/search?userId=$userId");
       final imageFindingResponse = await http.get(
@@ -756,6 +778,10 @@ class _UpdateProfileState extends State<UpdateProfile> {
     }
     if (locationTextController.text.isEmpty) {
       _showSnackBar("লোকেশন সিলেক্ট করুন", Colors.orange);
+      return false;
+    }
+    if (_selectedDistrict == null || _selectedDistrict!.isEmpty) {
+      _showSnackBar("দয়া করে একটি জেলা নির্বাচন করুন", Colors.orange);
       return false;
     }
     return true;
@@ -860,6 +886,10 @@ class _UpdateProfileState extends State<UpdateProfile> {
     advocateRequest.fields["degrees"] = jsonEncode(degrees);
     advocateRequest.fields["workingExperiences"] = jsonEncode(workingExperiences);
     advocateRequest.fields["advocateSpeciality"] = jsonEncode(selectedSpecialities.toList());
+
+    if(selectedDistrict != null) {
+        advocateRequest.fields["district"] = jsonEncode(selectedDistrict);
+    }
 
     if (kIsWeb && webCvBytes != null) {
       advocateRequest.files.add(
@@ -1148,6 +1178,11 @@ class _UpdateProfileState extends State<UpdateProfile> {
             onTap: () => _showSnackBar("মানচিত্রে ট্যাপ করে লোকেশন সিলেক্ট করুন", Colors.blue),
           ),
           const SizedBox(height: 16),
+          
+          // ✅ District Dropdown Section
+          _buildDistrictDropdown(),
+          const SizedBox(height: 16),
+          
           _buildTextField(
             controller: experienceController,
             label: "অভিজ্ঞতা (বছর)",
@@ -1206,6 +1241,78 @@ class _UpdateProfileState extends State<UpdateProfile> {
           const SizedBox(height: 20),
         ],
       ),
+    );
+  }
+
+  // ✅ District Dropdown Widget
+  Widget _buildDistrictDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "জেলা",
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey[200]!),
+          ),
+          child: DropdownButtonFormField<String>(
+            value: _selectedDistrict != null && _selectedDistrict!.isNotEmpty 
+                ? _selectedDistrict 
+                : null,
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.location_city, color: Colors.blue),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            ),
+            hint: Text(
+              "আপনার জেলা নির্বাচন করুন",
+              style: TextStyle(color: Colors.grey[400]),
+            ),
+            isExpanded: true,
+            icon: const Icon(Icons.arrow_drop_down, color: Colors.blue),
+            iconSize: 30,
+            dropdownColor: Colors.white,
+            style: const TextStyle(color: Colors.black87, fontSize: 16),
+            items: _districts.map((String district) {
+              return DropdownMenuItem<String>(
+                value: district,
+                child: Text(district),
+              );
+            }).toList(),
+            onChanged: (String? newValue) {
+              setState(() {
+                _selectedDistrict = newValue;
+                selectedDistrict = _selectedDistrict;
+              });
+            },
+          ),
+        ),
+        // ✅ Selected district display chip
+        if (_selectedDistrict != null && _selectedDistrict!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Chip(
+              label: Text(_selectedDistrict!),
+              backgroundColor: Colors.blue.withOpacity(0.1),
+              labelStyle: const TextStyle(color: Colors.blue),
+              deleteIcon: const Icon(Icons.close, size: 18),
+              onDeleted: () {
+                setState(() {
+                  _selectedDistrict = null;
+                });
+              },
+            ),
+          ),
+      ],
     );
   }
 
@@ -1352,7 +1459,6 @@ class _UpdateProfileState extends State<UpdateProfile> {
     await file.writeAsBytes(bytes, flush: true);
     await OpenFilex.open(file.path);
   }
-
 
   Widget _buildPasswordField({
     required TextEditingController controller,

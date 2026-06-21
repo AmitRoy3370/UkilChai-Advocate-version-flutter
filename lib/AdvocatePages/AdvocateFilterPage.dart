@@ -193,6 +193,7 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
         String? locationName = advocateDecoded["locationName"];
         double? lat = advocateDecoded["lattitude"];
         double? lng = advocateDecoded["longitude"];
+        String? district = advocateDecoded['district'];
 
         final model = AdvocateDetailsModel.defaultConstructor()
           ..id = advocateDecoded["id"]?.toString()
@@ -217,7 +218,8 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
           ..longitude = lng != null ? double.tryParse(lng.toString()) : null
           ..contactInfoId = advocateDecoded['contactInfoId']?.toString()
           ..locationId = advocateDecoded['locationId']?.toString()
-          ..cvHexKey = advocateDecoded['cvHexKey']?.toString();
+          ..cvHexKey = advocateDecoded['cvHexKey']?.toString()
+          ..district = advocateDecoded['district'];
 
         list.add(model);
 
@@ -284,7 +286,8 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
           ..longitude = lng != null ? double.tryParse(lng.toString()) : null
           ..contactInfoId = advocateDecoded['contactInfoId']?.toString()
           ..locationId = advocateDecoded['locationId']?.toString()
-          ..cvHexKey = advocateDecoded['cvHexKey']?.toString();
+          ..cvHexKey = advocateDecoded['cvHexKey']?.toString()
+          ..district = advocateDecoded['district'];
 
         models.add(model);
       }
@@ -311,7 +314,7 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
       final token = prefs.getString('jwt_token') ?? '';
 
       final response = await http.get(
-        Uri.parse("${BASE_URL.Urls().baseURL}advocate/location/$location"),
+        Uri.parse("${BASE_URL.Urls().baseURL}advocate/find/district/$location"),
         headers: {"Authorization": "Bearer $token", "content-type": "application/json"},
       );
 
@@ -355,7 +358,8 @@ class _AdvocateFilterPageState extends State<AdvocateFilterPage> {
           ..longitude = lng != null ? double.tryParse(lng.toString()) : null
           ..contactInfoId = advocateDecoded['contactInfoId']?.toString()
           ..locationId = advocateDecoded['locationId']?.toString()
-          ..cvHexKey = advocateDecoded['cvHexKey']?.toString();
+          ..cvHexKey = advocateDecoded['cvHexKey']?.toString()
+          ..district = advocateDecoded['district'];
 
         models.add(model);
       }

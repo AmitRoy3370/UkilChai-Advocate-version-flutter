@@ -39,9 +39,13 @@ dependencies:
   flutter_map_location_marker: ^10.1.0
   flutter_map_marker_popup: ^8.1.0
   web_socket_channel: ^3.0.0
-
+  google_maps_flutter: ^2.5.0
+  free_map: ^2.5.0
+  flutter_screenutil: ^5.9.0
+  connectivity_plus: ^5.0.0
   open_filex: ^4.4.0
   file_picker: ^8.0.0
+  flutter_local_notifications: ^16.3.0
   open_file: ^3.3.2
   flutter_rotation_sensor: ^0.1.1
   geolocator: ^14.0.2  # Matches flutter_map_location_marker requirement; supports web
@@ -59,7 +63,7 @@ dependencies:
   syncfusion_flutter_pdfviewer: ^32.1.24
   stomp_dart_client: ^3.0.1
   google_fonts: ^6.1.0         # Attractive fonts
-
+  permission_handler: ^11.0.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -83,7 +87,9 @@ flutter:
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
-  # assets:
+  assets:
+   - assets/images/logo.png
+   - assets/sounds/notification.mp3
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

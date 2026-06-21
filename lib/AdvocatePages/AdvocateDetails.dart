@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:advocatechaiadvocate/PostRelatedPages/post_response.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/material.dart' as NavigatorPageRoute;
@@ -23,7 +24,6 @@ import '../PostRelatedPages/AdvocatePost.dart';
 import '../PostRelatedPages/PostService.dart';
 import '../PostRelatedPages/post_card.dart';
 import '../PostRelatedPages/post_card_home_page.dart';
-import '../PostRelatedPages/post_response.dart';
 import '../Utils/BaseURL.dart' as BASE_URL;
 
 class AdvocateDetails extends StatefulWidget {
@@ -134,6 +134,7 @@ class AdvocateDetailsState extends State<AdvocateDetails> {
       }
 
       return [];
+
     }
     return null;
   }
@@ -354,6 +355,13 @@ class AdvocateDetailsState extends State<AdvocateDetails> {
               ),
             ]),
 
+            _section("District", [
+              _row(
+                Icons.location_on,
+                "District: ${widget.advocateDetailsModel.district != null ? widget.advocateDetailsModel.district : 'none'}",
+              ),
+            ]),
+
             _listSection(
               "Specialities",
               (widget.advocateDetailsModel.advocateSpeciality).cast<String>(),
@@ -382,30 +390,7 @@ class AdvocateDetailsState extends State<AdvocateDetails> {
                       width: 300,
                       child: Card(
                         child: SingleChildScrollView(
-                          child: PostCard(
-                            post: posts[index],
-                            onReactionChanged: (reaction, action) {
-                              if (action == "add") {
-                                setState(() {
-                                  posts.add(reaction);
-                                });
-                              } else if (action == "update") {
-                                setState(() {
-                                  posts[posts.indexWhere(
-                                        (element) => element.id == reaction.id,
-                                      )] =
-                                      reaction;
-                                });
-                              } else if (action == "delete") {
-                                setState(() {
-                                  posts.removeWhere(
-                                    (element) => element.id == reaction.id,
-                                  );
-                                });
-                              }
-                            },
-                            canReact: false,
-                          ),
+                          child: PostCard(post: posts[index], canReact: false),
                         ),
                       ),
                     );

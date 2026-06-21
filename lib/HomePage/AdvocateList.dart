@@ -174,7 +174,8 @@ Future<void> _navigateToDetails(BuildContext context, AdvocateDetailsModel advoc
       // ❗ ALSO FIX THIS (WRONG KEY)
         ..contactInfoId = advocateDecoded['contactInfoId']?.toString()
         ..locationId = advocateDecoded['locationId']?.toString()
-        ..cvHexKey = advocateDecoded['cvHexKey']?.toString();
+        ..cvHexKey = advocateDecoded['cvHexKey']?.toString()
+        ..district = advocateDecoded['district'];
 
       print("advocate model :- $model");
 
@@ -370,6 +371,13 @@ Future<void> _navigateToDetails(BuildContext context, AdvocateDetailsModel advoc
                                 _row(
                                   Icons.badge,
                                   "License: ${advocate.licenseKey}",
+                                ),
+                              ]),
+
+                              _section("District", [
+                                _row(
+                                  Icons.badge,
+                                  "District: ${advocate.district != null ? advocate.district : 'none'}",
                                 ),
                               ]),
 

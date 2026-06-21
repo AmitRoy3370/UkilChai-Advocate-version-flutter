@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:advocatechaiadvocate/AdvocatePages/AdvocateFilterPage.dart';
+import 'package:advocatechaiadvocate/AdvocatePages/advocate_home_page_pageview.dart';
 import 'package:advocatechaiadvocate/PostRelatedPages/post_feed_page.dart';
 import 'package:advocatechaiadvocate/ProfilePage/ProfileAvatar.dart';
 import 'package:advocatechaiadvocate/ProfilePage/ProfileImageWidget.dart';
@@ -83,7 +83,7 @@ class _MyHomePageState extends State<MyHomePage> {
       bottomPages = [
         Homepage(),
         PostFeedPage(),
-        AdvocateFilterPage(),
+        AdvocateHomePage(),
         AllUserChatListScreen(
           currentUserId: _userId,
           currentUserName: _userName,
@@ -126,7 +126,7 @@ class _MyHomePageState extends State<MyHomePage> {
       bottomPages = [
         Homepage(),
         PostFeedPage(),
-        AdvocateFilterPage(),
+        AdvocateHomePage(),
         AllUserChatListScreen(
           currentUserId: _userId,
           currentUserName: _userName,
