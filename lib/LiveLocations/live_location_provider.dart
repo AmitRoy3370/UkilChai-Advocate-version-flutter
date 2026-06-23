@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../LiveLocations/live_location_model.dart';
 import '../LiveLocations/live_location_service.dart';
 import '../LiveLocations/location_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 
 class LiveLocationProvider extends ChangeNotifier {
   final LocationService _locationService = LocationService();
@@ -78,43 +80,67 @@ class LiveLocationProvider extends ChangeNotifier {
     print('✅ Live Location Tracking Started');
   }
 
-  Future<void> _updateLocation() async {
-    if (_currentUserId == null || !_isTracking) {
-      print('⚠️ Cannot update location - not tracking');
+Future<void> _updateLocation() async {
+  if (_currentUserId == null || !_isTracking) {
+    print('⚠️ Cannot update location - not tracking');
+    return;
+  }
+
+  try {
+    print('📍 Getting current location...');
+    final position = await _locationService.getCurrentLocation();
+    
+    if (position == null) {
+      print('❌ No position available');
+      
+      // ✅ NEW: Web-specific message
+      if (kIsWeb) {
+        print('⚠️ WEB: Location not available. Please:');
+        print('1. Click the lock icon in address bar');
+        print('2. Allow location access');
+        print('3. Refresh the page');
+      }
       return;
     }
 
-    try {
-      final position = await _locationService.getCurrentLocation();
-      if (position == null) {
-        print('❌ No position available');
-        return;
-      }
-
-      final locationName = await _locationService.getLocationName(
-        position.latitude,
-        position.longitude,
-      );
-
-      // ✅ Send heartbeat and get LiveLocationData
-      final result = await LiveLocationService.sendHeartbeat(
-        userId: _currentUserId!,
-        latitude: position.latitude,
-        longitude: position.longitude,
-        locationName: locationName,
-        advocateId: _advocateId,
-      );
-
-      if (result != null) {
-        // ✅ Convert LiveLocationData to UserLiveLocationDataResponse
-        _myLocation = result/*.toResponse(userName: _myUserName)*/;
-        notifyListeners();
-        print('📍 Location updated: $locationName');
-      }
-    } catch (e) {
-      print('❌ Error updating location: $e');
+    // ✅ NEW: Validate coordinates
+    if (position.latitude == 0 && position.longitude == 0) {
+      print('⚠️ Invalid coordinates (0,0) - waiting for accurate location');
+      // Don't return - wait for accurate location
+      return;
     }
+
+    print('📍 Position: ${position.latitude}, ${position.longitude}');
+
+    final locationName = await _locationService.getLocationName(
+      position.latitude,
+      position.longitude,
+    );
+    print('📍 Location name: $locationName');
+
+    // ✅ FIX: Send heartbeat with correct field name
+    final result = await LiveLocationService.sendHeartbeat(
+      userId: _currentUserId!,
+      latitude: position.latitude,
+      longitude: position.longitude,
+      locationName: locationName,
+      advocateId: _advocateId,
+    );
+
+    if (result != null) {
+      _myLocation = result;
+      notifyListeners();
+      print('✅ Location updated: $locationName');
+      
+      // ✅ NEW: Refresh after update
+      await refreshLocations();
+    } else {
+      print('❌ Heartbeat failed - location not saved');
+    }
+  } catch (e) {
+    print('❌ Error updating location: $e');
   }
+}
 
   Future<void> refreshLocations() async {
     if (!_isTracking) {

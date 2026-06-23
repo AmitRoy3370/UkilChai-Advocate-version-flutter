@@ -6,11 +6,12 @@ import 'package:advocatechaiadvocate/ProfilePage/ProfileImageWidget.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-
+import '../Auth/AuthService.dart';
 import 'ChatRelatedPages/AllUserChatListScreen.dart';
 import 'ChatRelatedPages/user_active_service.dart';
 import 'HomePage.dart';
 import 'LifeCycles/LifecycleManager.dart';
+import 'LifeCycles/PresenceSocketService.dart';
 import 'LogInPage/LogIn.dart';
 import 'NotificationPages/notification_page.dart';
 import 'NotificationPages/notification_socket_service.dart';
@@ -19,6 +20,7 @@ import 'ProfilePage/ProfileMenuPage.dart';
 import 'TermsAndPrivacyScreen.dart';
 import 'AboutUkilScreen.dart';
 import 'Utils/BaseURL.dart' as BASE_URL;
+import 'dart:async';
 import 'PageTransition.dart';
 
 // Global key to access MyHomePage state from anywhere
@@ -65,9 +67,11 @@ class _MyHomePageState extends State<MyHomePage> {
   bool isLoading = true;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   int _selectedIndex = 0;
-
+  Timer? _heartbeatTimer;
   String? _userId;
   String? _userName;
+  bool _isOnline = false;
+
   int unreadCount = 0;
 
   final NotificationSocketService socketService = NotificationSocketService();
@@ -112,6 +116,52 @@ class _MyHomePageState extends State<MyHomePage> {
     _initializeData();
   }
 
+
+  // ✅ Start presence service
+  void _startPresence() {
+    if (_userId != null && _userId!.isNotEmpty) {
+      final socketService = PresenceSocketService();
+      socketService.connect(_userId!);
+      _startHeartbeat(_userId!);
+      setState(() {
+        _isOnline = true;
+      });
+      print('🟢 User is now ONLINE');
+    }
+  }
+
+  void _startHeartbeat(String userId) {
+    _heartbeatTimer = Timer.periodic(
+    const Duration(seconds: 20),
+    (timer) async {
+       try {
+      // ✅ Direct heartbeat by userId
+      final url = Uri.parse("${BASE_URL.Urls().baseURL}user-active/heartbeat/$userId");
+      
+      final token = await AuthService.getToken();
+
+      final response = await http.put(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        //_lastHeartbeatTime = DateTime.now();
+        //print("💓 Heartbeat sent at ${_lastHeartbeatTime?.toLocal()}");
+      } else {
+        print("❌ Heartbeat failed: ${response.statusCode}");
+      }
+    } catch (e) {
+      print("❌ Heartbeat error: $e");
+    }
+    },
+  );
+}
+
+
   @override
   void dispose() {
     print("I am in main application dispose state....");
@@ -135,6 +185,12 @@ class _MyHomePageState extends State<MyHomePage> {
       ];
       isLoading = false;
     });
+
+    // ✅ Start presence after user is loaded
+    if (_userId != null && _userId!.isNotEmpty) {
+      _startPresence();
+    }
+
   }
 
   Future<void> _loadUserData() async {
