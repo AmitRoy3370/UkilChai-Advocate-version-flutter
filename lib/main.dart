@@ -1,11 +1,13 @@
 import 'dart:convert';
-import 'package:advocatechaiadvocate/AdvocatePages/advocate_home_page_pageview.dart';
-import 'package:advocatechaiadvocate/PostRelatedPages/post_feed_page.dart';
-import 'package:advocatechaiadvocate/ProfilePage/ProfileAvatar.dart';
-import 'package:advocatechaiadvocate/ProfilePage/ProfileImageWidget.dart';
+import '../AdvocatePages/advocate_home_page_pageview.dart';
+import '../PostRelatedPages/post_feed_page.dart';
+import '../ProfilePage/ProfileAvatar.dart';
+import '../ProfilePage/ProfileImageWidget.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
+
 import '../Auth/AuthService.dart';
 import 'ChatRelatedPages/AllUserChatListScreen.dart';
 import 'ChatRelatedPages/user_active_service.dart';
@@ -15,6 +17,8 @@ import 'LifeCycles/PresenceSocketService.dart';
 import 'LogInPage/LogIn.dart';
 import 'NotificationPages/notification_page.dart';
 import 'NotificationPages/notification_socket_service.dart';
+import 'NotificationPages/notification_service.dart';
+import 'package:provider/provider.dart';
 import 'PostRelatedPages/post_feed_page_home_page.dart';
 import 'ProfilePage/ProfileMenuPage.dart';
 import 'TermsAndPrivacyScreen.dart';
@@ -22,13 +26,30 @@ import 'AboutUkilScreen.dart';
 import 'Utils/BaseURL.dart' as BASE_URL;
 import 'dart:async';
 import 'PageTransition.dart';
+import 'splash_screen.dart';
+
+import '../Auth/AuthGate.dart';
+import '../AdvocatePages/AdvocateProfilePage.dart';
+
+// 👇 ADD THESE IMPORTS (Adjust paths if necessary based on your project structure)
+import '../DirectorsPages/director_profile_page.dart';
+import '../ShareholderPages/shareholder_profile_page.dart';
+import '../DirectorsPages/director_list_page.dart';
+import '../ShareholderPages/shareholder_list_page.dart';
+import '../CompanyPages/company_registration_screen.dart';
+import '../CompanyPages/my_company_page.dart';
 
 // Global key to access MyHomePage state from anywhere
 final GlobalKey<_MyHomePageState> homePageKey = GlobalKey<_MyHomePageState>();
 
 void main() {
   runApp(
-    LifecycleManager(child: MyApp()),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => NotificationService()),
+      ],
+      child: LifecycleManager(child: MyApp()),
+    ),
   );
 }
 
@@ -42,6 +63,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
+      navigatorObservers: [routeObserver],
       home: MyHomePage(
         key: homePageKey,
         title: 'উকিল চাই',
@@ -53,8 +75,16 @@ class MyApp extends StatelessWidget {
 
 class MyHomePage extends StatefulWidget {
   final String? userId, userName;
+  final String? directorId, shareHolderId;
 
-  const MyHomePage({super.key, required this.title, this.userId, this.userName});
+  const MyHomePage({
+    super.key,
+    required this.title,
+    this.userId,
+    this.userName,
+    this.directorId,
+    this.shareHolderId,
+  });
 
   final String title;
 
@@ -66,26 +96,37 @@ class _MyHomePageState extends State<MyHomePage> {
   late List<Widget> bottomPages = [];
   bool isLoading = true;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey<_MyHomePageState> homePageKey = GlobalKey<_MyHomePageState>();
+  final GlobalKey<HomeScreenState> homeScreenKey = GlobalKey<HomeScreenState>();
   int _selectedIndex = 0;
   Timer? _heartbeatTimer;
   String? _userId;
   String? _userName;
+
+  // 👇 ADDED MISSING IDS
+  String? _directorId;
+  String? _shareHolderId;
+
+  // 👇 ADDED: advocate flag for drawer label + routing
+  bool _isAdvocate = false;
+
   bool _isOnline = false;
 
   int unreadCount = 0;
 
   final NotificationSocketService socketService = NotificationSocketService();
 
-  // Public method to refresh user data - can be called from anywhere
   Future<void> refreshUserData() async {
     print("Refreshing user data...");
     await _loadUserData();
     print("Loaded userId: $_userId");
     print("Loaded userName: $_userName");
 
+    if (!mounted) return;
+
     setState(() {
       bottomPages = [
-        Homepage(),
+        Homepage(key: homeScreenKey),
         PostFeedPage(),
         AdvocateHomePage(),
         AllUserChatListScreen(
@@ -113,68 +154,100 @@ class _MyHomePageState extends State<MyHomePage> {
       });
     }
 
+    if (widget.directorId != null) {
+      setState(() {
+        _directorId = widget.directorId;
+      });
+    }
+
+    if (widget.shareHolderId != null) {
+      setState(() {
+        _shareHolderId = widget.shareHolderId;
+      });
+    }
+
     _initializeData();
   }
 
-
-  // ✅ Start presence service
   void _startPresence() {
     if (_userId != null && _userId!.isNotEmpty) {
       final socketService = PresenceSocketService();
       socketService.connect(_userId!);
       _startHeartbeat(_userId!);
-      setState(() {
-        _isOnline = true;
-      });
+      if (mounted) {
+        setState(() {
+          _isOnline = true;
+        });
+      }
       print('🟢 User is now ONLINE');
     }
   }
 
   void _startHeartbeat(String userId) {
     _heartbeatTimer = Timer.periodic(
-    const Duration(seconds: 20),
-    (timer) async {
-       try {
-      // ✅ Direct heartbeat by userId
-      final url = Uri.parse("${BASE_URL.Urls().baseURL}user-active/heartbeat/$userId");
-      
-      final token = await AuthService.getToken();
+      const Duration(seconds: 20),
+      (timer) async {
+        try {
+          final url = Uri.parse(
+              "${BASE_URL.Urls().baseURL}user-active/heartbeat/$userId");
+          final token = await AuthService.getToken();
 
-      final response = await http.put(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
+          final response = await http.put(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          );
 
-      if (response.statusCode == 200) {
-        //_lastHeartbeatTime = DateTime.now();
-        //print("💓 Heartbeat sent at ${_lastHeartbeatTime?.toLocal()}");
-      } else {
-        print("❌ Heartbeat failed: ${response.statusCode}");
-      }
-    } catch (e) {
-      print("❌ Heartbeat error: $e");
-    }
-    },
-  );
-}
-
+          if (response.statusCode == 200) {
+            // Heartbeat successful
+          } else {
+            print("❌ Heartbeat failed: ${response.statusCode}");
+          }
+        } catch (e) {
+          print("❌ Heartbeat error: $e");
+        }
+      },
+    );
+  }
 
   @override
   void dispose() {
     print("I am in main application dispose state....");
+    _heartbeatTimer?.cancel();
     super.dispose();
   }
 
   Future<void> _initializeData() async {
-    await _loadUserData();
-    await _initializeNotification();
+    final splashStart = DateTime.now();
+
+    await Future.wait([
+      _loadUserData().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          print('⚠️ _loadUserData timeout');
+        },
+      ),
+      _initializeNotification().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          print('⚠️ _initializeNotification timeout');
+        },
+      ),
+    ]);
+
+    final elapsed = DateTime.now().difference(splashStart);
+    const minDuration = Duration(seconds: 2);
+    if (elapsed < minDuration) {
+      await Future.delayed(minDuration - elapsed);
+    }
+
+    if (!mounted) return;
 
     setState(() {
       bottomPages = [
-        Homepage(),
+        Homepage(key: homeScreenKey),
         PostFeedPage(),
         AdvocateHomePage(),
         AllUserChatListScreen(
@@ -186,17 +259,20 @@ class _MyHomePageState extends State<MyHomePage> {
       isLoading = false;
     });
 
-    // ✅ Start presence after user is loaded
     if (_userId != null && _userId!.isNotEmpty) {
       _startPresence();
     }
-
   }
 
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getString('userId');
     final token = prefs.getString('jwt_token');
+
+    // 👇 FETCH DIRECTOR / SHAREHOLDER / ADVOCATE IDS
+    final directorId = prefs.getString('directorId');
+    final shareHolderId = prefs.getString('shareHolderId');
+    final advocateId = (prefs.getString('advocateId') ?? '').trim();
 
     print('Loading user data - userId: $userId');
 
@@ -212,9 +288,13 @@ class _MyHomePageState extends State<MyHomePage> {
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
+          if (!mounted) return;
           setState(() {
             _userId = userId;
             _userName = data['name'] ?? "User";
+            _directorId = directorId;
+            _shareHolderId = shareHolderId;
+            _isAdvocate = advocateId.isNotEmpty;
           });
           print('User loaded: $_userName');
         }
@@ -222,13 +302,13 @@ class _MyHomePageState extends State<MyHomePage> {
         print('Error loading user: $e');
       }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Don't find any user Info....")),
-      );
-
+      if (!mounted) return;
       setState(() {
         _userId = null;
         _userName = null;
+        _isAdvocate = false;
+        _directorId = null;
+        _shareHolderId = null;
       });
     }
   }
@@ -269,7 +349,7 @@ class _MyHomePageState extends State<MyHomePage> {
         },
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 && mounted) {
         setState(() {
           unreadCount = jsonDecode(response.body).length;
         });
@@ -278,6 +358,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void showNotificationSnack(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.green),
     );
@@ -305,7 +386,6 @@ class _MyHomePageState extends State<MyHomePage> {
 
         if (response.statusCode == 200) {
           final body = jsonDecode(response.body);
-          print("response body in user main service :- $body");
           await UserActiveService.updateUserActive(
             body["id"],
             userId,
@@ -319,6 +399,45 @@ class _MyHomePageState extends State<MyHomePage> {
     } catch (e) {
       print(e);
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Helpers: profile routing (advocate vs user), open login
+  // ═══════════════════════════════════════════════════════════════════════
+
+  Future<void> _openProfileTarget() async {
+    final loggedIn = await AuthGate.isLoggedIn();
+    if (!loggedIn) {
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const LogIn()),
+      );
+      if (result == true && mounted) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        await refreshUserData();
+        await _loadUnreadCount();
+        setState(() {});
+      }
+      return;
+    }
+
+    final isAdv = await AuthGate.isAdvocate();
+    if (!mounted) return;
+
+    if (isAdv) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const AdvocateProfilePage()),
+      );
+    } else {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ProfileMenuPage()),
+      );
+    }
+    await refreshUserData();
+    await _loadUnreadCount();
+    if (mounted) setState(() {});
   }
 
   @override
@@ -342,14 +461,23 @@ class _MyHomePageState extends State<MyHomePage> {
           },
         ),
         actions: [
-          /// 🔔 Notification Bell
           Stack(
             children: [
               IconButton(
                 icon: const Icon(Icons.notifications, color: Colors.white),
-                onPressed: () {
+                onPressed: () async {
+                  // Optional: gate notifications behind login too
+                  final loggedIn = await AuthGate.isLoggedIn();
+                  if (!loggedIn) {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LogIn()),
+                    );
+                    return;
+                  }
+                  if (!mounted) return;
                   setState(() {
-                    unreadCount = 0; // reset when opened
+                    unreadCount = 0;
                   });
                   Navigator.push(
                     context,
@@ -357,7 +485,6 @@ class _MyHomePageState extends State<MyHomePage> {
                   );
                 },
               ),
-              /// 🔴 Badge Counter
               if (unreadCount > 0)
                 Positioned(
                   right: 8,
@@ -385,16 +512,10 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
             ],
           ),
-          /// 👤 Profile Image
           Padding(
             padding: const EdgeInsets.only(right: 20),
             child: GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ProfileMenuPage()),
-                );
-              },
+              onTap: _openProfileTarget,
               child: ProfileImageWidget(
                 key: ValueKey(_userId),
               ),
@@ -443,27 +564,82 @@ class _MyHomePageState extends State<MyHomePage> {
                       title: "Chat",
                       index: 3,
                     ),
-                    const Divider(color: Colors.white38, height: 20, thickness: 1),
-                    
-                    // About Ukil Option
+                    const Divider(
+                        color: Colors.white38, height: 20, thickness: 1),
+
+                    // 👇 DIRECTOR SECTION
+                    if (_directorId != null && _directorId!.isNotEmpty)
+                      _buildModernDrawerItem(
+                        icon: Icons.person,
+                        title: "Director Profile",
+                        index: 6,
+                      ),
+
+                    const Divider(
+                        color: Colors.white38, height: 20, thickness: 1),
+
+                    // 👇 SHAREHOLDER SECTION
+                    if (_shareHolderId != null && _shareHolderId!.isNotEmpty)
+                      _buildModernDrawerItem(
+                        icon: Icons.person,
+                        title: "Shareholder Profile",
+                        index: 9,
+                      ),
+
+                    const Divider(
+                        color: Colors.white38, height: 20, thickness: 1),
+
+                    // 👇 LIST VIEWS
+                    _buildModernDrawerItem(
+                      icon: Icons.people,
+                      title: "All Directors",
+                      index: 7,
+                    ),
+                    _buildModernDrawerItem(
+                      icon: Icons.people_outline,
+                      title: "All Shareholders",
+                      index: 8,
+                    ),
+
+                    const Divider(
+                        color: Colors.white38, height: 20, thickness: 1),
+
+                    // 👇 COMPANY SECTION
+                    _buildModernDrawerItem(
+                      icon: Icons.business,
+                      title: "Company Registration",
+                      index: 13,
+                    ),
+                    _buildModernDrawerItem(
+                      icon: Icons.business_center,
+                      title: "My Companies",
+                      index: 14,
+                    ),
+
+                    const Divider(
+                        color: Colors.white38, height: 20, thickness: 1),
+
                     _buildModernDrawerItem(
                       icon: Icons.info_outline,
                       title: "About Ukil",
                       index: 5,
                     ),
-                    
-                    // Terms & Privacy Option
+
+                    // NOTE: Terms & Privacy uses index 12 in _onItemTapped
                     _buildModernDrawerItem(
                       icon: Icons.description,
                       title: "Terms & Privacy",
-                      index: 6,
+                      index: 12,
                     ),
-                    
-                    const Divider(color: Colors.white38, height: 20, thickness: 1),
-                    
+
+                    const Divider(
+                        color: Colors.white38, height: 20, thickness: 1),
+
                     _buildModernDrawerItem(
                       icon: _userId != null ? Icons.person : Icons.login,
-                      title: _userId != null ? "Profile" : "LogIn",
+                      title: _userId != null
+                          ? (_isAdvocate ? "Advocate Profile" : "Profile")
+                          : "LogIn",
                       index: 4,
                     ),
                   ],
@@ -475,9 +651,10 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const SplashScreen()
           : (_selectedIndex == 3 && _userId != null)
-              ? AllUserChatListScreen(currentUserId: _userId, currentUserName: _userName)
+              ? AllUserChatListScreen(
+                  currentUserId: _userId, currentUserName: _userName)
               : bottomPages[_selectedIndex],
     );
   }
@@ -545,8 +722,16 @@ class _MyHomePageState extends State<MyHomePage> {
     required String title,
     required int index,
   }) {
-    // For About and Terms pages (indices 5 and 6), never show as selected
-    final isSelected = (index == 5 || index == 6) ? false : (_selectedIndex == index);
+    // 👇 Handle special pages so they don't stay highlighted
+    final isSpecialPage = (index == 6 ||
+        index == 7 ||
+        index == 8 ||
+        index == 9 ||
+        index == 11 ||
+        index == 12 ||
+        index == 13 ||
+        index == 14);
+    final isSelected = isSpecialPage ? false : (_selectedIndex == index);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -570,7 +755,8 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ),
         trailing: isSelected
-            ? const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16)
+            ? const Icon(Icons.arrow_forward_ios,
+                color: Colors.white, size: 16)
             : null,
         onTap: () {
           _onItemTapped(index);
@@ -587,11 +773,14 @@ class _MyHomePageState extends State<MyHomePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.circle, color: Colors.white.withOpacity(0.5), size: 8),
+              Icon(Icons.circle,
+                  color: Colors.white.withOpacity(0.5), size: 8),
               const SizedBox(width: 4),
-              Icon(Icons.circle, color: Colors.white.withOpacity(0.5), size: 8),
+              Icon(Icons.circle,
+                  color: Colors.white.withOpacity(0.5), size: 8),
               const SizedBox(width: 4),
-              Icon(Icons.circle, color: Colors.white.withOpacity(0.5), size: 8),
+              Icon(Icons.circle,
+                  color: Colors.white.withOpacity(0.5), size: 8),
             ],
           ),
           const SizedBox(height: 12),
@@ -607,10 +796,166 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // Central drawer tap handler
+  // ═══════════════════════════════════════════════════════════════════
   void _onItemTapped(int newIndex) async {
-    // Handle About Ukil (index 5) - Open as new page
+    // ─── Auth gate ────────────────────────────────────────────────
+    // Home (0), About Ukil (5), Terms & Privacy (12) are public.
+    const publicIndexes = {0, 5, 12};
+    if (!publicIndexes.contains(newIndex)) {
+      final loggedIn = await AuthGate.isLoggedIn();
+      if (!loggedIn) {
+        Navigator.pop(context); // close drawer
+        final result = await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const LogIn()),
+        );
+        if (result == true && mounted) {
+          await Future.delayed(const Duration(milliseconds: 300));
+          await refreshUserData();
+          await _loadUnreadCount();
+          setState(() {});
+        }
+        return;
+      }
+    }
+    // ───────────────────────────────────────────────────────────────
+
+    // Handle Company Registration (index 13)
+    if (newIndex == 13) {
+      Navigator.pop(context);
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId');
+      if (userId == null || userId.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Please login first'),
+              backgroundColor: Colors.orange),
+        );
+        return;
+      }
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (context) => CompanyRegistrationScreen(userId: userId)),
+      );
+      return;
+    }
+
+    // Handle My Companies (index 14)
+    if (newIndex == 14) {
+      Navigator.pop(context);
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId');
+      if (userId == null || userId.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Please login first'),
+              backgroundColor: Colors.orange),
+        );
+        return;
+      }
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const MyCompanyPage()),
+      );
+      return;
+    }
+
+    // Handle Director Profile (index 6)
+    if (newIndex == 6) {
+      Navigator.pop(context);
+      final prefs = await SharedPreferences.getInstance();
+      final storedDirectorId = prefs.getString('directorId');
+      final directorIdToUse = _directorId ?? storedDirectorId;
+
+      if (directorIdToUse != null && directorIdToUse.isNotEmpty) {
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DirectorProfilePage(
+              userId: _userId ?? '',
+              directorId: directorIdToUse,
+            ),
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'You are not registered as a director. Please register first.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Handle All Directors (index 7)
+    if (newIndex == 7) {
+      Navigator.pop(context);
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const DirectorListPage()),
+      );
+      return;
+    }
+
+    // Handle All Shareholders (index 8)
+    if (newIndex == 8) {
+      Navigator.pop(context);
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const ShareholderListPage()),
+      );
+      return;
+    }
+
+    // Handle Shareholder Profile (index 9)
+    if (newIndex == 9) {
+      Navigator.pop(context);
+      final prefs = await SharedPreferences.getInstance();
+      final storedShareHolderId = prefs.getString('shareHolderId');
+      final shareHolderIdToUse = _shareHolderId ?? storedShareHolderId;
+
+      if (shareHolderIdToUse != null && shareHolderIdToUse.isNotEmpty) {
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ShareholderProfilePage(
+              userId: _userId ?? '',
+              shareholderId: shareHolderIdToUse,
+            ),
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'You are not registered as a shareholder. Please register first.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    // ─── Existing logic ──────────────────────────────────────────
     if (newIndex == 5) {
-      Navigator.pop(context); // Close drawer
+      Navigator.pop(context);
       await NavigationHelper.push(
         context,
         const AboutUkilScreen(),
@@ -620,9 +965,12 @@ class _MyHomePageState extends State<MyHomePage> {
       return;
     }
 
-    // Handle Terms & Privacy (index 6) - Open as new page
-    if (newIndex == 6) {
-      Navigator.pop(context); // Close drawer
+    if (newIndex == 0) {
+      homeScreenKey.currentState?.reloadData();
+    }
+
+    if (newIndex == 12) {
+      Navigator.pop(context);
       await NavigationHelper.push(
         context,
         const TermsAndPrivacyScreen(),
@@ -632,49 +980,19 @@ class _MyHomePageState extends State<MyHomePage> {
       return;
     }
 
-    // Handle Login/Profile (index 4)
+    // Profile / Advocate Profile
     if (newIndex == 4) {
-      Navigator.pop(context); // Close drawer
-
-      if (_userId != null && _userId!.isNotEmpty) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ProfileMenuPage()),
-        );
-        await refreshUserData();
-        await _loadUnreadCount();
-      } else {
-        final result = await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const LogIn(),
-          ),
-        );
-
-        if (result == true && mounted) {
-          // wait a little for SharedPreferences to settle
-          await Future.delayed(const Duration(milliseconds: 300));
-          await refreshUserData();
-          await _loadUnreadCount();
-          setState(() {});
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Welcome! You have successfully logged in."),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      }
+      Navigator.pop(context);
+      await _openProfileTarget();
       return;
     }
 
-    // For main tab navigation (indices 0, 1, 2, 3)
     if (newIndex >= 0 && newIndex < bottomPages.length) {
       setState(() {
         _selectedIndex = newIndex;
       });
     }
-    
+
     Navigator.pop(context);
   }
 }

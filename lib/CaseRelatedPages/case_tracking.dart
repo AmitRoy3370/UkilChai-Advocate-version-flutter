@@ -19,9 +19,7 @@ import 'package:advocatechaiadvocate/CaseRelatedPages/CaseCloseModel.dart';
 import 'package:advocatechaiadvocate/CaseRelatedPages/document_draft_service.dart';
 import 'package:advocatechaiadvocate/CaseRelatedPages/_TimelineStep.dart';
 import '../CaseRelatedPages/ReadStatusModel.dart';
-import 'CaseJudgmentModel.dart';
 import 'ScheduleAppealHearingPage.dart';
-import 'case_judgment_service.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'AppealHearingModel.dart';
@@ -63,11 +61,12 @@ class CaseTracking extends StatefulWidget {
 
 class _CaseTrackingState extends State<CaseTracking> {
   late Future<void> _loadFuture;
-  DocumentDraft? documentDrafts;
-  CaseJudgment? caseJudgment;
+
+  DocumentDraftResponse? documentDrafts;
+  CaseJudgmentResponse? caseJudgment;
   CaseClose? caseClose;
   List<TimelineStep> timelineSteps = [];
-  List<Hearing> hearings = [];
+  List<HearingResponse> hearings = [];
   bool? isClosed;
   bool hasDraft = false;
   int selectedStars = 0;
@@ -75,28 +74,24 @@ class _CaseTrackingState extends State<CaseTracking> {
   bool ratingLoaded = false;
   String? presentUsersAdvocateId;
 
-  // Add near other state variables
+  // ✅ NEW: hold error messages so UI can surface them
+  String? _judgmentLoadError;
+  String? _draftLoadError;
+
   bool _isUploadingDraft = false;
   List<PlatformFile> _selectedDocumentsDraftsNewFiles = [];
-  List<String> _documentDraftsExistingAttachments = []; // for update mode
-  Set<String> _documentDraftsAttachmentsToDelete =
-      {}; // user wants to remove these
+  List<String> _documentDraftsExistingAttachments = [];
+  Set<String> _documentDraftsAttachmentsToDelete = {};
 
-  // ====================== HEARING STATES ======================
   bool _isUploadingHearing = false;
   List<PlatformFile> _selectedHearingNewFiles = [];
   List<String> _hearingExistingAttachments = [];
   Set<String> _hearingAttachmentsToDelete = {};
 
-  // ====================== PRICE STATES ======================
   bool _isSavingPrice = false;
-
   TextEditingController _priceController = TextEditingController();
-
-  // ====================== HEARING PRICE RULE STATE ======================
   int _hearingPriceCount = 0;
 
-  // ====================== JUDGMENT STATES ======================
   PlatformFile? _selectedJudgmentFile;
   bool _isUploadingJudgment = false;
 
@@ -104,12 +99,10 @@ class _CaseTrackingState extends State<CaseTracking> {
   bool _isUpdatingReadStatus = false;
 
   List<CaseTrackingStage> caseTrackings = [];
+  bool _isUpdatingCaseTracking = false;
 
-  bool _isUpdatingCaseTracking = false; // ← ADD THIS
-
-  // Payment prices map: stage enum string → price
-  Map<String, double> stagePrices = {}; // ← CHANGE TO
-  Map<String, PaymentDetails> stagePayments = {}; // ← NEW
+  Map<String, double> stagePrices = {};
+  Map<String, PaymentDetails> stagePayments = {};
 
   @override
   void initState() {
@@ -124,108 +117,86 @@ class _CaseTrackingState extends State<CaseTracking> {
   }
 
   Future<void> _loadAllData() async {
+    // Reset errors each load
+    _judgmentLoadError = null;
+    _draftLoadError = null;
+
     final draftService = DocumentDraftService(widget.token!);
 
     SharedPreferences prefs = await SharedPreferences.getInstance();
     presentUsersAdvocateId = prefs.getString("advocateId");
 
     print("present users advocate id :- $presentUsersAdvocateId");
+    print("caseTracking loadAllData for caseId :- ${widget.caseId}");
+    print("token length :- ${widget.token?.length}");
 
     try {
       await _loadMyRating();
-    } catch (e) {}
-
-    try {
-      // ---------- DOCUMENT DRAFT ----------
-      documentDrafts = await draftService.findByCase(widget.caseId!);
-
-      print(
-        "${documentDrafts?.caseId} ${documentDrafts?.advocateId} ${documentDrafts?.issuedDate} of case tracking page",
-      );
-
-      hasDraft = documentDrafts != null;
     } catch (e) {
-      print(e);
+      print("rating load error :- $e");
     }
 
+    // ---------- DOCUMENT DRAFT ----------
     try {
-      print("collecting all hearings....");
+      print("📄 fetching document draft for case ${widget.caseId}...");
+      documentDrafts = await draftService.findByCase(widget.caseId!);
+      print("📄 document draft result :- $documentDrafts");
+      hasDraft = documentDrafts != null;
+    } catch (e, st) {
+      print("❌ DOCUMENT DRAFT LOAD ERROR: $e");
+      print(st);
+      documentDrafts = null;
+      hasDraft = false;
+      _draftLoadError = e.toString();
+    }
 
-      try {
-        // ---------- HEARINGS ----------
-        hearings = await HearingService.getByCase(
-          widget.token!,
-          widget.caseId!,
-        );
-      } catch (e) {}
+    // ---------- HEARINGS ----------
+    try {
+      print("⚖️ collecting hearings...");
+      hearings = await HearingService.getByCase(
+        widget.token!,
+        widget.caseId!,
+      );
+      print("⚖️ hearings count :- ${hearings.length}");
+    } catch (e) {
+      print("⚠️ hearing load error :- $e");
+      hearings = [];
+    }
 
-      print("collecting all hearing price count....");
-
+    // ---------- HEARING PRICE COUNT ----------
+    try {
       _hearingPriceCount = await PaymentService.getHearingPaymentCount(
         widget.token!,
         widget.caseId!,
       );
-
-      print(
-        "collected total price set for hearing is :- $_hearingPriceCount and total hearing has :- ${hearings.length}",
-      );
+      print("💵 hearing price count :- $_hearingPriceCount");
     } catch (e) {
+      print("⚠️ hearing price count error :- $e");
       _hearingPriceCount = 0;
-      print(
-        "find some $e for collecting total hearing count and setted hearing price count",
-      );
     }
 
+    // ---------- CASE CLOSE ----------
     try {
       caseClose = await CaseCloseService.findByCaseId(
         widget.token!,
         widget.caseId!,
       );
-
       isClosed = caseClose != null && caseClose?.open == false;
-    } catch (e) {}
+    } catch (e) {
+      print("⚠️ case close load error :- $e");
+    }
 
-    final documentDraftPrice = await PaymentService.getCasePaymentPrice(
-      widget.token!,
-      widget.caseId!,
-      "CASE_DOCUMENT_DRAFT_PAYMENT",
-    );
-
-    final hearingPrice = await PaymentService.getCasePaymentPrice(
-      widget.token!,
-      widget.caseId!,
-      "CASE_HEARING_PAYMENT",
-    );
-
-    final filingPrice = await PaymentService.getCasePaymentPrice(
-      widget.token!,
-      widget.caseId!,
-      "CASE_FILING_PAYMENT",
-    );
-
-    final paperFinalizePrice = await PaymentService.getCasePaymentPrice(
-      widget.token!,
-      widget.caseId!,
-      "PAPER_FINALIZE_PAYMENT",
-    );
-
-    final closingPrice = await PaymentService.getCasePaymentPrice(
-      widget.token!,
-      widget.caseId!,
-      "CASE_CLOSING_PAYMENT",
-    );
-
+    // ---------- CASE TRACKINGS ----------
     try {
-      print("collecting case trackings....");
+      print("🗂 collecting case trackings...");
       caseTrackings = await _getCaseTrackingsByCase();
       caseTrackings.sort((a, b) => a.stageNumber.compareTo(b.stageNumber));
     } catch (e) {
-      print("error loading case trackings: $e");
+      print("⚠️ error loading case trackings: $e");
       caseTrackings = [];
     }
 
-    // Build dynamic timeline from backend sequence
-    // Build dynamic timeline + price from your payment map
+    // Build dynamic timeline
     timelineSteps = caseTrackings.map((ct) {
       final price = stagePayments[ct.caseStage]?.price;
       return TimelineStep(
@@ -235,105 +206,51 @@ class _CaseTrackingState extends State<CaseTracking> {
         icon: Icons.timeline,
         color: Colors.deepPurple,
         completed: true,
-        price: price, // ← THIS WAS MISSING
+        price: price,
       );
     }).toList();
 
-    // Load payment prices for all stages of this case
-    // Load payment prices for all stages of this case
+    // ---------- STAGE PAYMENTS ----------
     try {
       final payments = await _getPaymentsByCase(widget.caseId!);
       setState(() {
         stagePayments = {for (var p in payments) p.paymentFor.toString(): p};
       });
     } catch (e) {
-      print("Error loading stage prices: $e");
+      print("⚠️ Error loading stage prices: $e");
       stagePayments = {};
     }
 
-    /*timelineSteps = [
-      TimelineStep(
-        title: "Document Drafting",
-        subtitle: hasDraft ? "Status: In Progress" : "Status: Pending",
-        date: hasDraft ? _formatDate(documentDrafts!.issuedDate) : "",
-        icon: Icons.description,
-        color: hasDraft ? Colors.orange : Colors.grey,
-        completed: hasDraft,
-        price: documentDraftPrice,
-      ),
-
-      TimelineStep(
-        title: "Hearing Date Issued",
-        subtitle: hearings.isNotEmpty ? "Scheduled" : "Pending",
-        date: hearings.isNotEmpty ? _formatDate(hearings.first.issuedDate) : "",
-        icon: Icons.calendar_today,
-        color: hearings.isNotEmpty ? Colors.blue : Colors.grey,
-        completed: hearings.isNotEmpty,
-        price: hearingPrice,
-      ),
-
-      TimelineStep(
-        title: "Case Filing / Registration",
-        subtitle: "In progress",
-        date: hearings.isNotEmpty ? _formatDate(hearings.first.issuedDate) : "",
-        icon: Icons.calendar_today,
-        color: Colors.blue,
-        completed: hearings.isNotEmpty,
-        price: filingPrice,
-      ),
-
-      TimelineStep(
-        title: "Paper Finalize",
-        subtitle: "Pending",
-        date: hearings.isNotEmpty ? _formatDate(hearings.first.issuedDate) : "",
-        icon: Icons.emoji_events,
-        color: Colors.grey,
-        completed: hearings.isNotEmpty ? true : false,
-        price: paperFinalizePrice,
-      ),
-
-      TimelineStep(
-        title: "Case Close",
-        subtitle: caseClose == null
-            ? "Pending"
-            : caseClose?.open == true
-            ? "In Progress"
-            : "Closed",
-        date: "",
-        icon: Icons.stop,
-        color: Colors.grey,
-        completed: caseClose != null && caseClose?.open == false,
-        price: closingPrice,
-      ),
-    ];*/
-
-    print("collecting the case judgment.....");
-
+    // ---------- CASE JUDGMENT (LOUD) ----------
     try {
+      print("🏛 fetching case judgment for case ${widget.caseId}...");
       final judgmentRes = await CaseJudgmentService.getByCase(widget.caseId!);
-
-      print(
-        "judgment response in load all data of case tracking :- $judgmentRes}",
-      );
+      print("🏛 judgment result :- $judgmentRes");
 
       if (judgmentRes != null) {
         caseJudgment = judgmentRes;
-
-        print(
-          "${caseJudgment?.caseId} ${caseJudgment?.result} ${caseJudgment?.date} of case judgment page",
-        );
+        print("🏛 judgment loaded: id=${caseJudgment!.id}, result=${caseJudgment!.result}");
+      } else {
+        // 404 → no judgment. Legitimately null. Not an error.
+        caseJudgment = null;
+        print("🏛 no judgment exists for this case (null)");
       }
+    } catch (e, st) {
+      // This is a REAL failure — surface it in the UI
+      print("❌ CASE JUDGMENT LOAD ERROR: $e");
+      print(st);
+      caseJudgment = null;
+      _judgmentLoadError = e.toString();
+    }
 
-      // ==================== LOAD READ STATUSES (NEW) ====================
-      try {
-        print("collecting all read statuses....");
-        readStatuses = await _getReadStatusesByCase();
-      } catch (e) {
-        print("error loading read statuses: $e");
-        readStatuses = [];
-      }
+    // ---------- READ STATUSES ----------
+    try {
+      print("👁 collecting read statuses...");
+      readStatuses = await _getReadStatusesByCase();
+      print("👁 read statuses count :- ${readStatuses.length}");
     } catch (e) {
-      print("error in loading case judgment :- $e");
+      print("⚠️ read status load error :- $e");
+      readStatuses = [];
     }
   }
 
@@ -365,9 +282,9 @@ class _CaseTrackingState extends State<CaseTracking> {
     throw Exception('Failed to load trackings');
   }
 
-  Future<bool> _addCaseTracking(String caseStage, DateTime selectedDateTime, bool? visibility) async {
-    final userId =
-        widget.advocateUserId ??
+  Future<bool> _addCaseTracking(String caseStage, DateTime selectedDateTime,
+      bool? visibility) async {
+    final userId = widget.advocateUserId ??
         (await SharedPreferences.getInstance()).getString('userId');
     final response = await http.post(
       Uri.parse("${BASE_URL.Urls().baseURL}caseTracking/add/$userId"),
@@ -375,14 +292,19 @@ class _CaseTrackingState extends State<CaseTracking> {
         'Authorization': 'Bearer ${widget.token!}',
         'content-type': 'application/json',
       },
-      body: jsonEncode({"caseId": widget.caseId!, "caseStage": caseStage, "trackingTime": selectedDateTime.toUtc().toIso8601String(), "visibility":visibility!}),
+      body: jsonEncode({
+        "caseId": widget.caseId!,
+        "caseStage": caseStage,
+        "trackingTime": selectedDateTime.toUtc().toIso8601String(),
+        "visibility": visibility!
+      }),
     );
     return response.statusCode == 200 || response.statusCode == 201;
   }
 
-  Future<bool> _updateCaseTracking(String id, String caseStage, DateTime selectedDateTime, bool? visibility) async {
-    final userId =
-        widget.advocateUserId ??
+  Future<bool> _updateCaseTracking(String id, String caseStage,
+      DateTime selectedDateTime, bool? visibility) async {
+    final userId = widget.advocateUserId ??
         (await SharedPreferences.getInstance()).getString('userId');
     final response = await http.put(
       Uri.parse("${BASE_URL.Urls().baseURL}caseTracking/update/$id/$userId"),
@@ -390,14 +312,18 @@ class _CaseTrackingState extends State<CaseTracking> {
         'Authorization': 'Bearer ${widget.token!}',
         'content-type': 'application/json',
       },
-      body: jsonEncode({"caseId": widget.caseId!, "caseStage": caseStage, "trackingTime": selectedDateTime.toUtc().toIso8601String(), "visibility":visibility!}),
+      body: jsonEncode({
+        "caseId": widget.caseId!,
+        "caseStage": caseStage,
+        "trackingTime": selectedDateTime.toUtc().toIso8601String(),
+        "visibility": visibility!
+      }),
     );
     return response.statusCode == 200 || response.statusCode == 201;
   }
 
   Future<bool> _deleteCaseTracking(String id) async {
-    final userId =
-        widget.advocateUserId ??
+    final userId = widget.advocateUserId ??
         (await SharedPreferences.getInstance()).getString('userId');
     final response = await http.delete(
       Uri.parse("${BASE_URL.Urls().baseURL}caseTracking/delete/$id/$userId"),
@@ -432,7 +358,6 @@ class _CaseTrackingState extends State<CaseTracking> {
     return formatted;
   }
 
-  // ==================== READ STATUS API HELPERS (NEW) ====================
   Future<List<ReadStatus>> _getReadStatusesByCase() async {
     final response = await http.get(
       Uri.parse("${BASE_URL.Urls().baseURL}read-status/case/${widget.caseId!}"),
@@ -506,7 +431,6 @@ class _CaseTrackingState extends State<CaseTracking> {
   }) async {
     if (!mounted) return await task();
 
-    // Show loading dialog
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -527,10 +451,10 @@ class _CaseTrackingState extends State<CaseTracking> {
     try {
       final result = await task();
       setState(() => _loadFuture = _loadAllData());
-      if (context.mounted) Navigator.pop(context); // Close loading dialog
+      if (context.mounted) Navigator.pop(context);
       return result;
     } catch (e) {
-      if (context.mounted) Navigator.pop(context); // Close loading dialog
+      if (context.mounted) Navigator.pop(context);
       rethrow;
     }
   }
@@ -554,9 +478,8 @@ class _CaseTrackingState extends State<CaseTracking> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error picking files: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error picking files: $e")));
     }
   }
 
@@ -564,7 +487,6 @@ class _CaseTrackingState extends State<CaseTracking> {
     final draftService = DocumentDraftService(widget.token!);
     final isUpdate = documentDrafts != null;
 
-    // For update mode — initialize existing files
     if (isUpdate && _documentDraftsExistingAttachments.isEmpty) {
       _documentDraftsExistingAttachments = List.from(
         documentDrafts!.attachmentsId,
@@ -602,29 +524,25 @@ class _CaseTrackingState extends State<CaseTracking> {
                       ),
                       const SizedBox(height: 24),
 
-                      // Selected / Existing files list
                       if (_documentDraftsExistingAttachments.isNotEmpty ||
                           _selectedDocumentsDraftsNewFiles.isNotEmpty)
                         Expanded(
                           child: ListView(
                             controller: scrollController,
                             children: [
-                              // Existing files (only in update mode)
                               ..._documentDraftsExistingAttachments.map((
                                 attId,
                               ) {
                                 final willDelete =
-                                    _documentDraftsAttachmentsToDelete.contains(
-                                      attId,
-                                    );
+                                    _documentDraftsAttachmentsToDelete
+                                        .contains(attId);
                                 return ListTile(
                                   leading: Icon(
                                     willDelete
                                         ? Icons.delete_forever
                                         : Icons.attach_file,
-                                    color: willDelete
-                                        ? Colors.red
-                                        : Colors.blue,
+                                    color:
+                                        willDelete ? Colors.red : Colors.blue,
                                   ),
                                   title: Text(
                                     "File $attId",
@@ -647,10 +565,11 @@ class _CaseTrackingState extends State<CaseTracking> {
                                     onPressed: () {
                                       setModalState(() {
                                         if (willDelete) {
-                                          _documentDraftsExistingAttachments
+                                          _documentDraftsAttachmentsToDelete
                                               .remove(attId);
                                         } else {
-                                          //_documentDraftsExistingAttachments.remove(attId);
+                                          _documentDraftsAttachmentsToDelete
+                                              .add(attId);
                                         }
                                       });
                                     },
@@ -658,40 +577,38 @@ class _CaseTrackingState extends State<CaseTracking> {
                                 );
                               }),
 
-                              // Newly selected files
                               ..._selectedDocumentsDraftsNewFiles
                                   .asMap()
                                   .entries
                                   .map((entry) {
-                                    int idx = entry.key;
-                                    PlatformFile file = entry.value;
-                                    return ListTile(
-                                      leading: const Icon(
-                                        Icons.add_circle,
-                                        color: Colors.green,
-                                      ),
-                                      title: Text(file.name),
-                                      trailing: IconButton(
-                                        icon: const Icon(
-                                          Icons.remove_circle,
-                                          color: Colors.red,
-                                        ),
-                                        onPressed: () {
-                                          setModalState(() {
-                                            _selectedDocumentsDraftsNewFiles
-                                                .removeAt(idx);
-                                          });
-                                        },
-                                      ),
-                                    );
-                                  }),
+                                int idx = entry.key;
+                                PlatformFile file = entry.value;
+                                return ListTile(
+                                  leading: const Icon(
+                                    Icons.add_circle,
+                                    color: Colors.green,
+                                  ),
+                                  title: Text(file.name),
+                                  trailing: IconButton(
+                                    icon: const Icon(
+                                      Icons.remove_circle,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: () {
+                                      setModalState(() {
+                                        _selectedDocumentsDraftsNewFiles
+                                            .removeAt(idx);
+                                      });
+                                    },
+                                  ),
+                                );
+                              }),
                             ],
                           ),
                         ),
 
                       const SizedBox(height: 16),
 
-                      // Action buttons
                       Row(
                         children: [
                           Expanded(
@@ -733,24 +650,25 @@ class _CaseTrackingState extends State<CaseTracking> {
                                         () => _isUploadingDraft = true,
                                       );
 
-                                      // Disable the button by showing loading state
                                       try {
-                                        bool success;
-
                                         if (isUpdate) {
-                                          success = await draftService.updateDraft(
+                                          await draftService.updateDraft(
                                             draftId: documentDrafts!.id,
                                             advocateId:
                                                 documentDrafts!.advocateId,
                                             caseId: documentDrafts!.caseId,
                                             userId: widget.advocateUserId!,
                                             existingFiles:
-                                                _documentDraftsExistingAttachments,
+                                                _documentDraftsExistingAttachments
+                                                    .where((id) =>
+                                                        !_documentDraftsAttachmentsToDelete
+                                                            .contains(id))
+                                                    .toList(),
                                             newFiles:
                                                 _selectedDocumentsDraftsNewFiles,
                                           );
                                         } else {
-                                          success = await draftService.addDraft(
+                                          await draftService.addDraft(
                                             advocateId: widget.advocateId ?? "",
                                             caseId: widget.caseId!,
                                             userId: widget.advocateUserId!,
@@ -759,54 +677,43 @@ class _CaseTrackingState extends State<CaseTracking> {
                                           );
                                         }
 
-                                        if (success) {
-                                          if (context.mounted) {
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  isUpdate
-                                                      ? "✓ Document draft updated successfully"
-                                                      : "✓ Document draft created successfully",
-                                                ),
-                                                backgroundColor: Colors.green,
-                                                duration: const Duration(
-                                                  seconds: 2,
-                                                ),
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                isUpdate
+                                                    ? "✓ Document draft updated successfully"
+                                                    : "✓ Document draft created successfully",
                                               ),
-                                            );
-                                            Navigator.pop(
-                                              context,
-                                            ); // Close bottom sheet
+                                              backgroundColor: Colors.green,
+                                              duration:
+                                                  const Duration(seconds: 2),
+                                            ),
+                                          );
+                                          Navigator.pop(context);
 
-                                            // Update UI
-                                            setState(() {
-                                              _loadFuture = _loadAllData();
-                                              _selectedDocumentsDraftsNewFiles
-                                                  .clear();
-                                              _documentDraftsAttachmentsToDelete
-                                                  .clear();
-                                              _documentDraftsExistingAttachments
-                                                  .clear();
-                                            });
-                                          }
-                                        } else {
-                                          throw Exception("Operation failed");
+                                          setState(() {
+                                            _loadFuture = _loadAllData();
+                                            _selectedDocumentsDraftsNewFiles
+                                                .clear();
+                                            _documentDraftsAttachmentsToDelete
+                                                .clear();
+                                            _documentDraftsExistingAttachments
+                                                .clear();
+                                          });
                                         }
                                       } catch (e) {
                                         if (context.mounted) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
                                             SnackBar(
                                               content: Text(
                                                 "✗ Error: ${e.toString()}",
                                               ),
                                               backgroundColor: Colors.red,
-                                              duration: const Duration(
-                                                seconds: 3,
-                                              ),
+                                              duration:
+                                                  const Duration(seconds: 3),
                                             ),
                                           );
                                         }
@@ -840,19 +747,18 @@ class _CaseTrackingState extends State<CaseTracking> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error picking file: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error picking file: $e")));
     }
   }
 
-  void _showCaseJudgmentDialog({CaseJudgment? existing}) {
+  void _showCaseJudgmentDialog({CaseJudgmentResponse? existing}) {
     final isUpdate = existing != null;
     final resultController = TextEditingController(
       text: existing?.result ?? "",
     );
     DateTime selectedDate = existing?.date ?? DateTime.now();
-    _selectedJudgmentFile = null; // reset file
+    _selectedJudgmentFile = null;
 
     showDialog(
       context: context,
@@ -928,48 +834,43 @@ class _CaseTrackingState extends State<CaseTracking> {
                               await SharedPreferences.getInstance();
                           final userId = prefs.getString('userId');
 
-                          final response = isUpdate
-                              ? await CaseJudgmentService.updateJudgment(
-                                  judgmentId: existing!.id,
-                                  caseId: widget.caseId!,
-                                  result: resultController.text,
-                                  userId: userId!,
-                                  oldAttachmentId:
-                                      existing.judgmentAttachmentId,
-                                  file: _selectedJudgmentFile,
-                                  date: selectedDate,
-                                )
-                              : await CaseJudgmentService.addJudgment(
-                                  caseId: widget.caseId!,
-                                  result: resultController.text,
-                                  userId: userId!,
-                                  file: _selectedJudgmentFile,
-                                  date: selectedDate,
-                                );
-
-                          if (response.statusCode == 200 ||
-                              response.statusCode == 201) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    isUpdate
-                                        ? "✓ Judgment updated successfully"
-                                        : "✓ Judgment added successfully",
-                                  ),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
-                              Navigator.pop(ctx); // Close dialog
-
-                              setState(() {
-                                _loadFuture = _loadAllData();
-                              });
-                            }
-                          } else {
-                            throw Exception(
-                              "Failed with status: ${response.statusCode}",
+                          if (isUpdate) {
+                            await CaseJudgmentService.updateJudgment(
+                              judgmentId: existing!.id,
+                              caseId: widget.caseId!,
+                              result: resultController.text,
+                              userId: userId!,
+                              oldAttachmentId:
+                                  existing.judgmentAttachmentId,
+                              file: _selectedJudgmentFile,
+                              date: selectedDate,
                             );
+                          } else {
+                            await CaseJudgmentService.addJudgment(
+                              caseId: widget.caseId!,
+                              result: resultController.text,
+                              userId: userId!,
+                              file: _selectedJudgmentFile,
+                              date: selectedDate,
+                            );
+                          }
+
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  isUpdate
+                                      ? "✓ Judgment updated successfully"
+                                      : "✓ Judgment added successfully",
+                                ),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                            Navigator.pop(ctx);
+
+                            setState(() {
+                              _loadFuture = _loadAllData();
+                            });
                           }
                         } catch (e) {
                           if (context.mounted) {
@@ -992,7 +893,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                       )
                     : Text(
                         isUpdate ? "Update" : "Add",
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
@@ -1004,221 +905,6 @@ class _CaseTrackingState extends State<CaseTracking> {
         },
       ),
     );
-  }
-
-  String? _paymentTypeForTitle(String title) {
-    switch (title) {
-      // Basic Case Flow
-      case "Case Request":
-        return "CASE_REQUEST_PAYMENT";
-      case "Document Drafting":
-        return "CASE_DOCUMENT_DRAFT_PAYMENT";
-      case "Hearing Date Issued":
-        return "CASE_HEARING_PAYMENT";
-      case "Appeal":
-        return "CASE_APPEAL_PAYMENT";
-      case "Appeal Hearing":
-        return "CASE_HEARING_APPEAL_PAYMENT";
-      case "Case Close":
-        return "CASE_CLOSING_PAYMENT";
-      case "Judgment":
-        return "CASE_JUDGMENT_PAYMENT";
-      case "Paper Finalize":
-        return "PAPER_FINALIZE_PAYMENT";
-      case "Case Filing / Registration":
-        return "CASE_FILING_PAYMENT";
-
-      // Consultation
-      case "Initial Consultation":
-        return "CASE_INITIAL_CONSULTATION_PAYMENT";
-      case "Legal Advice":
-        return "CASE_LEGAL_ADVICE_PAYMENT";
-      case "Case Review":
-        return "CASE_CASE_REVIEW_PAYMENT";
-      case "Case Evaluation":
-        return "CASE_CASE_EVALUATION_PAYMENT";
-      case "Case Strategy":
-        return "CASE_CASE_STRATEGY_PAYMENT";
-      case "Case Preparation":
-        return "CASE_CASE_PREPARATION_PAYMENT";
-      case "Evidence Collection":
-        return "CASE_EVIDENCE_COLLECTION_PAYMENT";
-      case "Document Review":
-        return "CASE_DOCUMENT_REVIEW_PAYMENT";
-      case "Legal Research":
-        return "CASE_LEGAL_RESEARCH_PAYMENT";
-      case "Case Analysis":
-        return "CASE_CASE_ANALYSIS_PAYMENT";
-
-      // Documentation
-      case "Document Preparation":
-        return "CASE_DOCUMENT_PREPARATION_PAYMENT";
-      case "Document Correction":
-        return "CASE_DOCUMENT_CORRECTION_PAYMENT";
-      case "Document Translation":
-        return "CASE_DOCUMENT_TRANSLATION_PAYMENT";
-      case "Document Notarization":
-        return "CASE_DOCUMENT_NOTARIZATION_PAYMENT";
-      case "Document Verification":
-        return "CASE_DOCUMENT_VERIFICATION_PAYMENT";
-      case "Document Submission":
-        return "CASE_DOCUMENT_SUBMISSION_PAYMENT";
-      case "Document Resubmission":
-        return "CASE_DOCUMENT_RESUBMISSION_PAYMENT";
-      case "Document Updation":
-        return "CASE_DOCUMENT_UPDATION_PAYMENT";
-      case "Document Validation":
-        return "CASE_DOCUMENT_VALIDATION_PAYMENT";
-      case "Document Authentication":
-        return "CASE_DOCUMENT_AUTHENTICATION_PAYMENT";
-
-      // Filing
-      case "Case Registration":
-        return "CASE_REGISTRATION_PAYMENT";
-      case "Case Acceptance":
-        return "CASE_CASE_ACCEPTANCE_PAYMENT";
-      case "Case Admission":
-        return "CASE_CASE_ADMISSION_PAYMENT";
-      case "Case Processing":
-        return "CASE_CASE_PROCESSING_PAYMENT";
-      case "Case Listing":
-        return "CASE_CASE_LISTING_PAYMENT";
-      case "Case Scheduling":
-        return "CASE_CASE_SCHEDULING_PAYMENT";
-      case "Case Relisting":
-        return "CASE_CASE_RELISTING_PAYMENT";
-      case "Case Reopening":
-        return "CASE_CASE_REOPENING_PAYMENT";
-      case "Case Transfer":
-        return "CASE_CASE_TRANSFER_PAYMENT";
-      case "Case Merge":
-        return "CASE_CASE_MERGE_PAYMENT";
-
-      // Evidence
-      case "Evidence Presentation":
-        return "CASE_EVIDENCE_PRESENTATION_PAYMENT";
-      case "Evidence Verification":
-        return "CASE_EVIDENCE_VERIFICATION_PAYMENT";
-      case "Evidence Challenge":
-        return "CASE_EVIDENCE_CHALLENGE_PAYMENT";
-      case "Evidence Admission":
-        return "CASE_EVIDENCE_ADMISSION_PAYMENT";
-      case "Evidence Review":
-        return "CASE_EVIDENCE_REVIEW_PAYMENT";
-      case "Witness Preparation":
-        return "CASE_WITNESS_PREPARATION_PAYMENT";
-      case "Witness Examination":
-        return "CASE_WITNESS_EXAMINATION_PAYMENT";
-      case "Witness Cross Examination":
-        return "CASE_WITNESS_CROSS_EXAMINATION_PAYMENT";
-      case "Expert Opinion":
-        return "CASE_EXPERT_OPINION_PAYMENT";
-      case "Investigation":
-        return "CASE_INVESTIGATION_PAYMENT";
-
-      // Hearing
-      case "Pre Hearing":
-        return "CASE_PRE_HEARING_PAYMENT";
-      case "Interim Hearing":
-        return "CASE_INTERIM_HEARING_PAYMENT";
-      case "Argument Hearing":
-        return "CASE_ARGUMENT_HEARING_PAYMENT";
-      case "Final Argument":
-        return "CASE_FINAL_ARGUMENT_PAYMENT";
-      case "Hearing Reschedule":
-        return "CASE_HEARING_RESCHEDULE_PAYMENT";
-      case "Hearing Extension":
-        return "CASE_HEARING_EXTENSION_PAYMENT";
-      case "Hearing Preparation":
-        return "CASE_HEARING_PREPARATION_PAYMENT";
-      case "Hearing Attendance":
-        return "CASE_HEARING_ATTENDANCE_PAYMENT";
-      case "Hearing Document":
-        return "CASE_HEARING_DOCUMENT_PAYMENT";
-      case "Hearing Review":
-        return "CASE_HEARING_REVIEW_PAYMENT";
-
-      // Appeals
-      case "Appeal Preparation":
-        return "CASE_APPEAL_PREPARATION_PAYMENT";
-      case "Appeal Document":
-        return "CASE_APPEAL_DOCUMENT_PAYMENT";
-      case "Appeal Argument":
-        return "CASE_APPEAL_ARGUMENT_PAYMENT";
-      case "Appeal Review":
-        return "CASE_APPEAL_REVIEW_PAYMENT";
-      case "Appeal Hearing":
-        return "CASE_APPEAL_HEARING_PAYMENT";
-      case "Second Appeal":
-        return "CASE_SECOND_APPEAL_PAYMENT";
-      case "High Court Appeal":
-        return "CASE_HIGH_COURT_APPEAL_PAYMENT";
-      case "Supreme Court Appeal":
-        return "CASE_SUPREME_COURT_APPEAL_PAYMENT";
-      case "Review Petition":
-        return "CASE_REVIEW_PETITION_PAYMENT";
-      case "Revision Petition":
-        return "CASE_REVISION_PETITION_PAYMENT";
-
-      // Settlement
-      case "Mediation":
-        return "CASE_MEDIATION_PAYMENT";
-      case "Arbitration":
-        return "CASE_ARBITRATION_PAYMENT";
-      case "Settlement Negotiation":
-        return "CASE_SETTLEMENT_NEGOTIATION_PAYMENT";
-      case "Out Of Court Settlement":
-        return "CASE_OUT_OF_COURT_SETTLEMENT_PAYMENT";
-      case "Compromise":
-        return "CASE_COMPROMISE_PAYMENT";
-      case "Settlement Document":
-        return "CASE_SETTLEMENT_DOCUMENT_PAYMENT";
-      case "Settlement Review":
-        return "CASE_SETTLEMENT_REVIEW_PAYMENT";
-      case "Settlement Finalization":
-        return "CASE_SETTLEMENT_FINALIZATION_PAYMENT";
-      case "Compensation Claim":
-        return "CASE_COMPENSATION_CLAIM_PAYMENT";
-      case "Compensation Approval":
-        return "CASE_COMPENSATION_APPROVAL_PAYMENT";
-
-      // Judgment
-      case "Judgment Preparation":
-        return "CASE_JUDGMENT_PREPARATION_PAYMENT";
-      case "Judgment Review":
-        return "CASE_JUDGMENT_REVIEW_PAYMENT";
-      case "Judgment Copy":
-        return "CASE_JUDGMENT_COPY_PAYMENT";
-      case "Judgment Certification":
-        return "CASE_JUDGMENT_CERTIFICATION_PAYMENT";
-      case "Judgment Execution":
-        return "CASE_JUDGMENT_EXECUTION_PAYMENT";
-
-      // Closing
-      case "Final Settlement":
-        return "CASE_FINAL_SETTLEMENT_PAYMENT";
-      case "Case Completion":
-        return "CASE_CASE_COMPLETION_PAYMENT";
-      case "Case Archive":
-        return "CASE_CASE_ARCHIVE_PAYMENT";
-      case "Case Record":
-        return "CASE_CASE_RECORD_PAYMENT";
-      case "Document Storage":
-        return "CASE_CASE_DOCUMENT_STORAGE_PAYMENT";
-      case "Case History Preparation":
-        return "CASE_CASE_HISTORY_PREPARATION_PAYMENT";
-      case "Case Summary":
-        return "CASE_CASE_SUMMARY_PAYMENT";
-      case "Case Closure Report":
-        return "CASE_CASE_CLOSURE_REPORT_PAYMENT";
-      case "Final Legal Advice":
-        return "CASE_FINAL_LEGAL_ADVICE_PAYMENT";
-      case "Final Document Handover":
-        return "CASE_FINAL_DOCUMENT_HANDOVER_PAYMENT";
-
-      default:
-        return null;
-    }
   }
 
   Future<void> _savePaymentPrice(String paymentType, double newPrice) async {
@@ -1233,19 +919,17 @@ class _CaseTrackingState extends State<CaseTracking> {
       );
 
       if (success) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Price updated to ৳$newPrice")));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Price updated to ৳$newPrice")));
         setState(() {
-          _loadFuture = _loadAllData(); // refresh prices in timeline
+          _loadFuture = _loadAllData();
         });
       } else {
         throw Exception("Failed to save price");
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
       setState(() => _isSavingPrice = false);
     }
@@ -1296,9 +980,8 @@ class _CaseTrackingState extends State<CaseTracking> {
               Navigator.pop(ctx);
 
               await _showLoadingDialog(
-                loadingMessage: isAddMode
-                    ? "Setting price..."
-                    : "Updating price...",
+                loadingMessage:
+                    isAddMode ? "Setting price..." : "Updating price...",
                 task: () async {
                   final prefs = await SharedPreferences.getInstance();
                   final token = prefs.getString('jwt_token');
@@ -1340,7 +1023,7 @@ class _CaseTrackingState extends State<CaseTracking> {
 
                   if (response.statusCode == 200 ||
                       response.statusCode == 201) {
-                    await _loadAllData(); // ← LOADER STAYS UNTIL FULL REFRESH
+                    await _loadAllData();
                   } else {
                     throw Exception("Failed: ${response.statusCode}");
                   }
@@ -1374,22 +1057,22 @@ class _CaseTrackingState extends State<CaseTracking> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error picking files: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error picking files: $e")));
     }
   }
 
-  Future<void> _showHearingBottomSheet(Hearing? hearing) async {
+  Future<void> _showHearingBottomSheet(HearingResponse? hearing) async {
     final isUpdate = hearing != null;
     final nextNumber = hearings.isEmpty
         ? 1
-        : hearings.map((h) => h.hearingNumber).reduce((a, b) => a > b ? a : b) +
-              1;
+        : hearings
+                .map((h) => h.hearingNumber)
+                .reduce((a, b) => a > b ? a : b) +
+            1;
 
     final hearingNumber = isUpdate ? hearing.hearingNumber : nextNumber;
 
-    // Reset lists
     setState(() {
       _selectedHearingNewFiles.clear();
       _hearingAttachmentsToDelete.clear();
@@ -1436,7 +1119,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                         child: ListView(
                           controller: scrollController,
                           children: [
-                            // Existing files
                             ..._hearingExistingAttachments.map((attId) {
                               final willDelete = _hearingAttachmentsToDelete
                                   .contains(attId);
@@ -1445,7 +1127,8 @@ class _CaseTrackingState extends State<CaseTracking> {
                                   willDelete
                                       ? Icons.delete_forever
                                       : Icons.attach_file,
-                                  color: willDelete ? Colors.red : Colors.blue,
+                                  color:
+                                      willDelete ? Colors.red : Colors.blue,
                                 ),
                                 title: Text(
                                   "File $attId",
@@ -1476,7 +1159,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                               );
                             }),
 
-                            // New files
                             ..._selectedHearingNewFiles.asMap().entries.map((
                               entry,
                             ) {
@@ -1554,37 +1236,35 @@ class _CaseTrackingState extends State<CaseTracking> {
                                               )
                                               .toList();
 
-                                      var response;
+                                      http.Response response;
 
                                       if (isUpdate) {
-                                        response =
-                                            await HearingService.updateHearing(
-                                              token: widget.token!,
-                                              hearingId: hearing!.id,
-                                              userId: widget.advocateUserId!,
-                                              caseId: hearing.caseId,
-                                              hearingNumber:
-                                                  hearing.hearingNumber,
-                                              existingFiles: filteredExisting,
-                                              files: _selectedHearingNewFiles,
-                                            );
+                                        response = await HearingService
+                                            .updateHearing(
+                                          token: widget.token!,
+                                          hearingId: hearing!.id,
+                                          userId: widget.advocateUserId!,
+                                          caseId: hearing.caseId,
+                                          hearingNumber: hearing.hearingNumber,
+                                          existingFiles: filteredExisting,
+                                          files: _selectedHearingNewFiles,
+                                        );
                                       } else {
                                         response =
                                             await HearingService.addHearing(
-                                              token: widget.token!,
-                                              userId: widget.advocateUserId!,
-                                              caseId: widget.caseId!,
-                                              hearingNumber: hearingNumber,
-                                              files: _selectedHearingNewFiles,
-                                            );
+                                          token: widget.token!,
+                                          userId: widget.advocateUserId!,
+                                          caseId: widget.caseId!,
+                                          hearingNumber: hearingNumber,
+                                          files: _selectedHearingNewFiles,
+                                        );
                                       }
 
                                       if (response.statusCode == 200 ||
                                           response.statusCode == 201) {
                                         if (context.mounted) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
                                             SnackBar(
                                               content: Text(
                                                 isUpdate
@@ -1598,14 +1278,13 @@ class _CaseTrackingState extends State<CaseTracking> {
                                           setState(() {
                                             _loadFuture = _loadAllData();
                                             _selectedHearingNewFiles.clear();
-                                            _hearingAttachmentsToDelete.clear();
-                                            _hearingExistingAttachments.clear();
+                                            _hearingAttachmentsToDelete
+                                                .clear();
+                                            _hearingExistingAttachments
+                                                .clear();
                                           });
 
-                                          Navigator.pop(
-                                            context,
-                                            true,
-                                          ); // Close bottom sheet
+                                          Navigator.pop(context, true);
                                         } else {
                                           Navigator.pop(context, false);
                                         }
@@ -1615,9 +1294,8 @@ class _CaseTrackingState extends State<CaseTracking> {
                                       }
                                     } catch (e) {
                                       if (context.mounted) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
                                           SnackBar(
                                             content: Text(
                                               "✗ Error: ${e.toString()}",
@@ -1671,15 +1349,12 @@ class _CaseTrackingState extends State<CaseTracking> {
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Rating saved")));
-
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("Rating saved")));
         _loadFuture = _loadAllData();
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Rating not saved")));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("Rating not saved")));
       }
     } else {
       final response = await http.put(
@@ -1694,20 +1369,17 @@ class _CaseTrackingState extends State<CaseTracking> {
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Rating updated")));
-
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("Rating updated")));
         _loadFuture = _loadAllData();
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Rating not updated")));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("Rating not updated")));
       }
     }
   }
 
-  // ==================== NEW RESPONSIVE HELPERS ====================
+  // ==================== RESPONSIVE HELPERS ====================
   Widget _buildMainLeftContent(double spacing) {
     return Column(
       children: [
@@ -1715,8 +1387,11 @@ class _CaseTrackingState extends State<CaseTracking> {
         SizedBox(height: spacing),
         _caseTrackingCard(),
         SizedBox(height: spacing),
+        // ✅ Judgment tile OR error card OR add button
         if (caseJudgment != null)
           _caseJudgmentTile(caseJudgment!)
+        else if (_judgmentLoadError != null)
+          _judgmentErrorCard()
         else
           IconButton(
             onPressed: () async {
@@ -1730,11 +1405,62 @@ class _CaseTrackingState extends State<CaseTracking> {
     );
   }
 
+  Widget _judgmentErrorCard() {
+    return Card(
+      color: Colors.red.shade50,
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: ListTile(
+        leading: const Icon(Icons.error, color: Colors.red),
+        title: const Text(
+          "Could not load case judgment",
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+        ),
+        subtitle: Text(
+          _judgmentLoadError ?? "",
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: IconButton(
+          icon: const Icon(Icons.refresh),
+          onPressed: () {
+            setState(() {
+              _loadFuture = _loadAllData();
+            });
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildMainRightContent(double spacing) {
     return Column(
       children: [
         if (documentDrafts != null)
           _documentDraftTile(documentDrafts!)
+        else if (_draftLoadError != null)
+          Card(
+            color: Colors.orange.shade50,
+            child: ListTile(
+              leading: const Icon(Icons.error, color: Colors.orange),
+              title: const Text(
+                "Could not load document draft",
+                style: TextStyle(color: Colors.orange),
+              ),
+              subtitle: Text(
+                _draftLoadError ?? "",
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: () {
+                  setState(() {
+                    _loadFuture = _loadAllData();
+                  });
+                },
+              ),
+            ),
+          )
         else
           Card(
             child: ListTile(
@@ -1780,10 +1506,6 @@ class _CaseTrackingState extends State<CaseTracking> {
         if (widget.userId != null)
           ElevatedButton(
             onPressed: () {
-              print(
-                "in case tracking other user :- ${widget.advocateUserId} and name :- ${widget.caseLawyer} and my name :- ${widget.userName} and my id :- ${widget.userId}",
-              );
-
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -1812,8 +1534,7 @@ class _CaseTrackingState extends State<CaseTracking> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 600; // Mobile / small tablet
-    final padding = ResponsiveHelper.padding(context, 12);
+    final isSmallScreen = screenWidth < 600;
     final spacing = ResponsiveHelper.padding(context, 12);
 
     return Scaffold(
@@ -1831,11 +1552,9 @@ class _CaseTrackingState extends State<CaseTracking> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // ================= RESPONSIVE LAYOUT =================
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             scrollDirection: Axis.vertical,
-
             child: isSmallScreen
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1848,10 +1567,8 @@ class _CaseTrackingState extends State<CaseTracking> {
                 : Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // LEFT SIDE (Timeline, Summary, Judgment, Rating)
                       Expanded(flex: 2, child: _buildMainLeftContent(spacing)),
                       const SizedBox(width: 16),
-                      // RIGHT SIDE (Draft, Hearings, Read Status, Close, Chat)
                       Expanded(flex: 1, child: _buildMainRightContent(spacing)),
                     ],
                   ),
@@ -1861,7 +1578,6 @@ class _CaseTrackingState extends State<CaseTracking> {
     );
   }
 
-  // Responsive Button Helper
   Widget _buildResponsiveButton({
     required IconData icon,
     required String label,
@@ -1896,7 +1612,6 @@ class _CaseTrackingState extends State<CaseTracking> {
     );
   }
 
-  // ================= CASE SUMMARY =================
   Widget _caseSummaryCard() {
     final padding = ResponsiveHelper.padding(context, 12);
     final fontSize = ResponsiveHelper.fontSize(context, 18);
@@ -1905,9 +1620,8 @@ class _CaseTrackingState extends State<CaseTracking> {
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(
-          ResponsiveHelper.cardRadius(context),
-        ),
+        borderRadius:
+            BorderRadius.circular(ResponsiveHelper.cardRadius(context)),
       ),
       child: Padding(
         padding: EdgeInsets.all(padding),
@@ -1942,7 +1656,6 @@ class _CaseTrackingState extends State<CaseTracking> {
     );
   }
 
-  // ================= TIMELINE =================
   Widget _timelineCard() {
     return Card(
       elevation: 3,
@@ -1955,8 +1668,7 @@ class _CaseTrackingState extends State<CaseTracking> {
   }
 
   Widget _timelineTile(TimelineStep step) {
-    final isAdvocate =
-        presentUsersAdvocateId != null &&
+    final isAdvocate = presentUsersAdvocateId != null &&
         presentUsersAdvocateId == widget.advocateId;
 
     final matchingStage = caseTrackings.firstWhere(
@@ -1965,20 +1677,15 @@ class _CaseTrackingState extends State<CaseTracking> {
           CaseTrackingStage(caseId: "", caseStage: "", stageNumber: 0),
     );
 
-    final stageEnumStr = matchingStage.caseStage.isNotEmpty
-        ? matchingStage.caseStage
-        : null;
-    final currentPayment = stageEnumStr != null
-        ? stagePayments[stageEnumStr]
-        : null;
+    final stageEnumStr =
+        matchingStage.caseStage.isNotEmpty ? matchingStage.caseStage : null;
+    final currentPayment =
+        stageEnumStr != null ? stagePayments[stageEnumStr] : null;
     final currentPrice = currentPayment?.price ?? 0;
 
     final screenWidth = MediaQuery.of(context).size.width;
-
-    // Better breakpoint for very small phones
     final isVerySmallScreen = screenWidth < 380;
 
-    // Responsive sizes
     final iconSize = isVerySmallScreen
         ? ResponsiveHelper.iconSize(context, 18)
         : ResponsiveHelper.iconSize(context, 20);
@@ -1990,7 +1697,6 @@ class _CaseTrackingState extends State<CaseTracking> {
         children: [
           Icon(step.icon, color: step.color),
           const SizedBox(width: 12),
-
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2008,7 +1714,6 @@ class _CaseTrackingState extends State<CaseTracking> {
               ],
             ),
           ),
-
           if (isAdvocate)
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -2030,9 +1735,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                       fontSize: priceFontSize - 1,
                     ),
                   ),
-
                 const SizedBox(width: 8),
-
                 IconButton(
                   icon: Icon(
                     currentPrice > 0 ? Icons.edit : Icons.add_circle,
@@ -2045,8 +1748,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                     currentPayment == null,
                   ),
                 ),
-
-                if (currentPrice > 0) // ← DELETE BUTTON
+                if (currentPrice > 0)
                   IconButton(
                     icon: Icon(Icons.delete, color: Colors.red, size: iconSize),
                     onPressed: () async {
@@ -2077,8 +1779,7 @@ class _CaseTrackingState extends State<CaseTracking> {
                         loadingMessage: "Deleting price...",
                         task: () async {
                           final prefs = await SharedPreferences.getInstance();
-                          final userId =
-                              prefs.getString('userId') ??
+                          final userId = prefs.getString('userId') ??
                               widget.advocateUserId;
                           final token = prefs.getString('jwt_token');
 
@@ -2111,21 +1812,14 @@ class _CaseTrackingState extends State<CaseTracking> {
     );
   }
 
-  // ================ Hearing Card ===============
   Widget _hearingCard() {
-    final isAdvocate =
-        presentUsersAdvocateId != null &&
+    final isAdvocate = presentUsersAdvocateId != null &&
         presentUsersAdvocateId == widget.advocateId;
 
-    // Correct logic: To add the NEXT hearing, price for it must be set first
     final canAddNextHearing = _hearingPriceCount >= hearings.length + 1;
 
     final padding = ResponsiveHelper.padding(context, 12);
     final titleSize = ResponsiveHelper.fontSize(context, 18);
-
-    print(
-      "total set hearing for price :- $_hearingPriceCount and total hearing :- ${hearings.length}",
-    );
 
     return Card(
       elevation: 3,
@@ -2143,7 +1837,6 @@ class _CaseTrackingState extends State<CaseTracking> {
               ),
             ),
             SizedBox(height: ResponsiveHelper.padding(context, 12)),
-
             if (hearings.isEmpty)
               Text(
                 "No hearing scheduled",
@@ -2152,15 +1845,11 @@ class _CaseTrackingState extends State<CaseTracking> {
                   color: Colors.grey,
                 ),
               ),
-
             ...hearings.map(_hearingTile),
-
             SizedBox(height: ResponsiveHelper.padding(context, 12)),
-
             if (isAdvocate)
               Column(
                 children: [
-                  // 1. Hearing Price button - only when next price is NOT set
                   if (!canAddNextHearing)
                     _buildResponsiveButton(
                       icon: Icons.attach_money,
@@ -2174,8 +1863,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                         );
                       },
                     ),
-
-                  // 2. Add Hearing button - only when price is already set
                   if (canAddNextHearing)
                     _buildResponsiveButton(
                       icon: Icons.add,
@@ -2194,33 +1881,24 @@ class _CaseTrackingState extends State<CaseTracking> {
     );
   }
 
-  Widget _hearingTile(Hearing hearing) {
-    final isAdvocate =
-        presentUsersAdvocateId != null &&
+  Widget _hearingTile(HearingResponse hearing) {
+    final isAdvocate = presentUsersAdvocateId != null &&
         presentUsersAdvocateId == widget.advocateId;
-
-    // Get price for this specific hearing (using hearing number)
-    final paymentType = "CASE_HEARING_PAYMENT"; // same type for all hearings
-    // We will show the price fetched for the case, but button allows update
 
     final titleSize = ResponsiveHelper.fontSize(context, 15);
     final subSize = ResponsiveHelper.fontSize(context, 12);
 
     return Card(
-      margin: EdgeInsets.symmetric(
-        vertical: ResponsiveHelper.padding(context, 6),
-      ),
+      margin:
+          EdgeInsets.symmetric(vertical: ResponsiveHelper.padding(context, 6)),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(
           ResponsiveHelper.cardRadius(context) * 0.7,
         ),
       ),
-
       child: ExpansionTile(
-        leading: Icon(
-          Icons.gavel,
-          size: ResponsiveHelper.iconSize(context, 20),
-        ),
+        leading:
+            Icon(Icons.gavel, size: ResponsiveHelper.iconSize(context, 20)),
         title: Row(
           children: [
             Text(
@@ -2240,7 +1918,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                       Icons.edit,
                       size: ResponsiveHelper.iconSize(context, 18),
                     ),
-
                     onPressed: () async {
                       _showHearingBottomSheet(hearing);
                     },
@@ -2251,7 +1928,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                     widget.advocateId == presentUsersAdvocateId)
                   IconButton(
                     onPressed: () async {
-                      // Show confirmation dialog
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder: (context) => AlertDialog(
@@ -2292,25 +1968,22 @@ class _CaseTrackingState extends State<CaseTracking> {
                             userId!,
                           );
 
-                          if (deleted) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    "✓ Hearing #${hearing.hearingNumber} deleted successfully",
-                                  ),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
-                              setState(() {
-                                _loadFuture = _loadAllData();
-                              });
-                            }
-                          } else {
+                          if (!deleted) {
                             throw Exception("Failed to delete hearing");
                           }
                         },
                       );
+
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              "✓ Hearing #${hearing.hearingNumber} deleted successfully",
+                            ),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
                     },
                     icon: Icon(
                       Icons.delete,
@@ -2341,7 +2014,6 @@ class _CaseTrackingState extends State<CaseTracking> {
               )
             : null,
         children: [
-          // ---------- ATTACHMENTS ----------
           if (hearing.attachmentsId.isNotEmpty)
             Padding(
               padding: EdgeInsets.symmetric(
@@ -2369,8 +2041,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                     .toList(),
               ),
             ),
-
-          // ---------- APPEAL HEARINGS (FutureBuilder) ----------
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: FutureBuilder<AppealHearing?>(
@@ -2416,11 +2086,11 @@ class _CaseTrackingState extends State<CaseTracking> {
                                 MaterialPageRoute(
                                   builder: (context) =>
                                       ScheduleAppealHearingPage(
-                                        token: widget.token!,
-                                        hearingId: hearing.id,
-                                        userId: widget.userId!,
-                                        needUpdate: false,
-                                      ),
+                                    token: widget.token!,
+                                    hearingId: hearing.id,
+                                    userId: widget.userId!,
+                                    needUpdate: false,
+                                  ),
                                 ),
                               );
 
@@ -2451,7 +2121,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                         ),
                       ),
                     ),
-
                     if (appeals != null) _appealTile(appeals),
                   ],
                 );
@@ -2463,7 +2132,7 @@ class _CaseTrackingState extends State<CaseTracking> {
     );
   }
 
-  Widget _documentDraftTile(DocumentDraft draft) {
+  Widget _documentDraftTile(DocumentDraftResponse draft) {
     return SingleChildScrollView(
       child: Card(
         margin: const EdgeInsets.symmetric(vertical: 6),
@@ -2491,7 +2160,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                         IconButton(
                           icon: const Icon(Icons.delete),
                           onPressed: () async {
-                            // Show confirmation dialog
                             final confirm = await showDialog<bool>(
                               context: context,
                               builder: (context) => AlertDialog(
@@ -2527,35 +2195,27 @@ class _CaseTrackingState extends State<CaseTracking> {
                                 final token = prefs.getString('jwt_token');
                                 final userId = prefs.getString('userId');
 
-                                final response = await http.delete(
-                                  Uri.parse(
-                                    "${BASE_URL.Urls().baseURL}document-draft/${draft.id}?userId=$userId",
-                                  ),
-                                  headers: {
-                                    'Authorization': 'Bearer $token',
-                                    'content-type': 'application/json',
-                                  },
-                                );
+                                final ok = await DocumentDraftService(
+                                        token ?? widget.token!)
+                                    .deleteDraft(draft.id, userId!);
 
-                                if (response.statusCode == 200) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          "✓ Document draft deleted successfully",
-                                        ),
-                                        backgroundColor: Colors.green,
-                                      ),
-                                    );
-                                    setState(() {
-                                      _loadFuture = _loadAllData();
-                                    });
-                                  }
-                                } else {
-                                  throw Exception("Failed to delete");
+                                if (!ok) {
+                                  throw Exception(
+                                      "Failed to delete document draft");
                                 }
                               },
                             );
+
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    "✓ Document draft deleted successfully",
+                                  ),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
                           },
                         ),
                     ],
@@ -2571,7 +2231,7 @@ class _CaseTrackingState extends State<CaseTracking> {
     );
   }
 
-  void _showDraftAttachmentSheet(DocumentDraft draft) {
+  void _showDraftAttachmentSheet(DocumentDraftResponse draft) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -2590,7 +2250,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
-
                 ...draft.attachmentsId.map(
                   (attachmentId) => Card(
                     child: ListTile(
@@ -2662,9 +2321,8 @@ class _CaseTrackingState extends State<CaseTracking> {
     );
   }
 
-  Widget _caseJudgmentTile(CaseJudgment caseJudgment) {
-    final isAdvocate =
-        presentUsersAdvocateId != null &&
+  Widget _caseJudgmentTile(CaseJudgmentResponse caseJudgment) {
+    final isAdvocate = presentUsersAdvocateId != null &&
         presentUsersAdvocateId == widget.advocateId;
 
     return Card(
@@ -2706,70 +2364,8 @@ class _CaseTrackingState extends State<CaseTracking> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.delete),
-                      onPressed: () async {
-                        // Show confirmation dialog
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text("Delete Case Judgment"),
-                            content: const Text(
-                              "Are you sure you want to delete this judgment?",
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text("Cancel"),
-                              ),
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                ),
-                                onPressed: () => Navigator.pop(context, true),
-                                child: const Text("Delete"),
-                              ),
-                            ],
-                          ),
-                        );
-
-                        if (confirm != true) return;
-
-                        await _showLoadingDialog(
-                          loadingMessage: "Deleting case judgment...",
-                          task: () async {
-                            SharedPreferences prefs =
-                                await SharedPreferences.getInstance();
-                            final userId = prefs.getString('userId');
-
-                            if (userId == null)
-                              throw Exception("User not logged in");
-
-                            final result = await CaseJudgmentService.remove(
-                              caseJudgment.id,
-                            );
-
-                            if (result.statusCode == 200) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      "✓ Case judgment deleted successfully",
-                                    ),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                                setState(() {
-                                  _loadFuture = _loadAllData();
-                                  this.caseJudgment = null;
-                                });
-                              }
-                            } else {
-                              throw Exception(
-                                "Failed to delete (${result.statusCode})",
-                              );
-                            }
-                          },
-                        );
-                      },
+                      onPressed: () =>
+                          _deleteJudgmentWithFeedback(caseJudgment),
                     ),
                   ],
                 ),
@@ -2777,17 +2373,84 @@ class _CaseTrackingState extends State<CaseTracking> {
             : null,
         onTap: caseJudgment.judgmentAttachmentId != null
             ? () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => CaseJudgmentAttachmentView(
-                    attachmentId: caseJudgment.judgmentAttachmentId!,
-                    jwtToken: widget.token!,
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CaseJudgmentAttachmentView(
+                      attachmentId: caseJudgment.judgmentAttachmentId!,
+                      jwtToken: widget.token!,
+                    ),
                   ),
-                ),
-              )
+                )
             : null,
       ),
     );
+  }
+
+  Future<void> _deleteJudgmentWithFeedback(
+      CaseJudgmentResponse judgment) async {
+    // 1. Ask for confirmation
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete Case Judgment"),
+        content: const Text(
+          "Are you sure you want to delete this judgment?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Delete"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // 2. Perform delete and CLEAR STATE ON SUCCESS ONLY
+    try {
+      await _showLoadingDialog(
+        loadingMessage: "Deleting case judgment...",
+        task: () async {
+          final bool ok =
+              await CaseJudgmentService.remove(judgment.id);
+
+          if (!ok) {
+            throw Exception(
+                "Backend rejected delete (probably not your case)");
+          }
+        },
+      );
+
+      if (!mounted) return;
+
+      // ✅ Delete succeeded — clear local state and refresh
+      setState(() {
+        caseJudgment = null;
+        _judgmentLoadError = null;
+        _loadFuture = _loadAllData();
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("✓ Case judgment deleted successfully"),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("✗ Delete failed: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _caseCloseButton() {
@@ -2797,8 +2460,6 @@ class _CaseTrackingState extends State<CaseTracking> {
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
           onPressed: () async {
-            print("Open case action");
-
             CaseClose tempCaseClose = CaseClose.callingConstructor(
               widget.caseId!,
               widget.userId!,
@@ -2827,9 +2488,8 @@ class _CaseTrackingState extends State<CaseTracking> {
                 _loadFuture = _loadAllData();
               });
             } catch (e) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(e.toString())));
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text(e.toString())));
             }
           },
           child: const Text("Close Case"),
@@ -2843,17 +2503,13 @@ class _CaseTrackingState extends State<CaseTracking> {
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
           onPressed: () async {
-            print("Close case action");
-
             CaseClose? tempCaseClose = await CaseCloseService.findByCaseId(
               widget.token,
               widget.caseId,
             );
 
             String? id = tempCaseClose?.id;
-
             tempCaseClose?.open = false;
-
             tempCaseClose?.closedDate = DateTime.parse(
               DateTime.now().toIso8601String().replaceAll("+00:00", "Z"),
             );
@@ -2880,9 +2536,8 @@ class _CaseTrackingState extends State<CaseTracking> {
                 _loadFuture = _loadAllData();
               });
             } catch (e) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(e.toString())));
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text(e.toString())));
             }
           },
           child: const Text("Close Case"),
@@ -2901,9 +2556,7 @@ class _CaseTrackingState extends State<CaseTracking> {
           );
 
           String? id = tempCaseClose?.id;
-
           tempCaseClose?.open = true;
-
           tempCaseClose?.closedDate = DateTime.parse(
             DateTime.now().toIso8601String().replaceAll("+00:00", "Z"),
           );
@@ -2926,9 +2579,8 @@ class _CaseTrackingState extends State<CaseTracking> {
               _loadFuture = _loadAllData();
             });
           } catch (e) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(e.toString())));
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text(e.toString())));
           }
         },
         child: const Text("Case Close"),
@@ -2975,7 +2627,6 @@ class _CaseTrackingState extends State<CaseTracking> {
     return Card(
       child: Padding(
         padding: EdgeInsets.all(padding),
-
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2987,7 +2638,6 @@ class _CaseTrackingState extends State<CaseTracking> {
               ),
             ),
             SizedBox(height: ResponsiveHelper.padding(context, 10)),
-
             Row(
               children: List.generate(5, (index) {
                 return IconButton(
@@ -3006,7 +2656,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                 );
               }),
             ),
-
             Text(
               "Score: ${selectedStars * 20} / 100",
               style: TextStyle(
@@ -3015,9 +2664,7 @@ class _CaseTrackingState extends State<CaseTracking> {
               ),
               textAlign: TextAlign.center,
             ),
-
             SizedBox(height: ResponsiveHelper.padding(context, 10)),
-
             ElevatedButton(
               onPressed: selectedStars == 0 ? null : _submitRating,
               child: Text(ratingId == null ? "Submit Rating" : "Update Rating"),
@@ -3028,10 +2675,8 @@ class _CaseTrackingState extends State<CaseTracking> {
     );
   }
 
-  // ==================== READ STATUS UI (NEW) ====================
   Widget _readStatusCard() {
-    final isAdvocate =
-        presentUsersAdvocateId != null &&
+    final isAdvocate = presentUsersAdvocateId != null &&
         presentUsersAdvocateId == widget.advocateId;
 
     return Card(
@@ -3047,17 +2692,13 @@ class _CaseTrackingState extends State<CaseTracking> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-
             if (readStatuses.isEmpty)
               const Text(
                 "No read status submitted yet",
                 style: TextStyle(color: Colors.grey),
               ),
-
             ...readStatuses.map(_readStatusTile),
-
             const SizedBox(height: 16),
-
             if (isAdvocate)
               ElevatedButton.icon(
                 icon: const Icon(Icons.add),
@@ -3078,29 +2719,23 @@ class _CaseTrackingState extends State<CaseTracking> {
   }
 
   Widget _readStatusTile(ReadStatus rs) {
-    final isAdvocate =
-        presentUsersAdvocateId != null &&
+    final isAdvocate = presentUsersAdvocateId != null &&
         presentUsersAdvocateId == widget.advocateId;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: ListTile(
         leading: const Icon(Icons.visibility, color: Colors.blue),
-
-        // Title with safe wrapping to prevent overflow
         title: Text(
           rs.status,
           maxLines: 3,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
-
         subtitle: Text(
           "Issued: ${_formatDate(rs.issuedTime)}",
           style: const TextStyle(color: Colors.grey),
         ),
-
-        // ✅ THREE DOT MENU (Popup) - Compact & No Overflow
         trailing: isAdvocate
             ? PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, color: Colors.grey),
@@ -3149,11 +2784,10 @@ class _CaseTrackingState extends State<CaseTracking> {
                           headers: {'Authorization': 'Bearer ${widget.token!}'},
                         );
 
-                        if (response.statusCode == 200) {
-                          return true;
-                        } else {
+                        if (response.statusCode != 200) {
                           throw Exception("Failed to delete");
                         }
+                        return true;
                       },
                     );
 
@@ -3164,9 +2798,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                           backgroundColor: Colors.green,
                         ),
                       );
-                      setState(() {
-                        _loadFuture = _loadAllData();
-                      });
                     }
                   }
                 },
@@ -3266,13 +2897,13 @@ class _CaseTrackingState extends State<CaseTracking> {
                                         statusController.text,
                                       );
 
-                                if (success) {
-                                  await _loadAllData(); // ← LOADER STAYS UNTIL FULL REFRESH
-                                } else {
+                                if (!success) {
                                   throw Exception(
                                     "Failed to do the changes at here....",
                                   );
                                 }
+
+                                await _loadAllData();
 
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -3317,10 +2948,8 @@ class _CaseTrackingState extends State<CaseTracking> {
     );
   }
 
-  // ==================== TIMELINE MANAGEMENT CARD ====================
   Widget _caseTrackingCard() {
-    final isAdvocate =
-        presentUsersAdvocateId != null &&
+    final isAdvocate = presentUsersAdvocateId != null &&
         presentUsersAdvocateId == widget.advocateId;
 
     final padding = ResponsiveHelper.padding(context, 12);
@@ -3329,9 +2958,8 @@ class _CaseTrackingState extends State<CaseTracking> {
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(
-          ResponsiveHelper.cardRadius(context),
-        ),
+        borderRadius:
+            BorderRadius.circular(ResponsiveHelper.cardRadius(context)),
       ),
       child: Padding(
         padding: EdgeInsets.all(padding),
@@ -3346,7 +2974,6 @@ class _CaseTrackingState extends State<CaseTracking> {
               ),
             ),
             SizedBox(height: ResponsiveHelper.padding(context, 12)),
-
             if (caseTrackings.isEmpty)
               Text(
                 "No stages added yet",
@@ -3372,11 +2999,11 @@ class _CaseTrackingState extends State<CaseTracking> {
 
   void _showCaseTrackingBottomSheet(CaseTrackingStage? existing) {
     final isUpdate = existing != null;
-    bool isVisible = existing?.visibility ?? true; // Default to true for new entries
+    bool isVisible = existing?.visibility ?? true;
     String? selectedStage = existing?.caseStage;
 
     DateTime selectedDateTime = existing?.trackingTime != null
-        ? existing!.trackingTime!
+        ? (DateTime.tryParse(existing!.trackingTime!) ?? DateTime.now())
         : DateTime.now();
 
     showModalBottomSheet(
@@ -3398,7 +3025,6 @@ class _CaseTrackingState extends State<CaseTracking> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Date & Time Picker
                     InkWell(
                       onTap: () async {
                         final DateTime? pickedDate = await showDatePicker(
@@ -3411,7 +3037,8 @@ class _CaseTrackingState extends State<CaseTracking> {
                         if (pickedDate != null && context.mounted) {
                           final TimeOfDay? pickedTime = await showTimePicker(
                             context: context,
-                            initialTime: TimeOfDay.fromDateTime(selectedDateTime),
+                            initialTime:
+                                TimeOfDay.fromDateTime(selectedDateTime),
                           );
 
                           if (pickedTime != null && context.mounted) {
@@ -3446,10 +3073,9 @@ class _CaseTrackingState extends State<CaseTracking> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
-                                DateFormat('dd MMM yyyy, hh:mm a').format(selectedDateTime),
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                ),
+                                DateFormat('dd MMM yyyy, hh:mm a')
+                                    .format(selectedDateTime),
+                                style: const TextStyle(fontSize: 14),
                               ),
                             ),
                             Icon(
@@ -3461,66 +3087,70 @@ class _CaseTrackingState extends State<CaseTracking> {
                       ),
                     ),
 
-                  // Visibility Switch Button
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade400),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              isVisible ? Icons.visibility : Icons.visibility_off,
-                              color: isVisible ? Colors.green : Colors.grey,
-                              size: 24,
-                            ),
-                            const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "Visibility",
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.grey.shade800,
-                                  ),
-                                ),
-                                Text(
-                                  isVisible
-                                      ? "Visible to clients"
-                                      : "Hidden from clients",
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isVisible ? Colors.green : Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        Switch(
-                          value: isVisible,
-                          onChanged: (value) {
-                            setModalState(() {
-                              isVisible = value;
-                            });
-                          },
-                          activeColor: Colors.green,
-                          inactiveThumbColor: Colors.grey,
-                          activeTrackColor: Colors.green.shade200,
-                        ),
-                      ],
-                    ),
-                  ),
+                    const SizedBox(height: 12),
 
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade400),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                isVisible
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                                color: isVisible ? Colors.green : Colors.grey,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "Visibility",
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey.shade800,
+                                    ),
+                                  ),
+                                  Text(
+                                    isVisible
+                                        ? "Visible to clients"
+                                        : "Hidden from clients",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isVisible
+                                          ? Colors.green
+                                          : Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          Switch(
+                            value: isVisible,
+                            onChanged: (value) {
+                              setModalState(() {
+                                isVisible = value;
+                              });
+                            },
+                            activeColor: Colors.green,
+                            inactiveThumbColor: Colors.grey,
+                            activeTrackColor: Colors.green.shade200,
+                          ),
+                        ],
+                      ),
+                    ),
 
                     const SizedBox(height: 24),
                     Text(
@@ -3540,14 +3170,15 @@ class _CaseTrackingState extends State<CaseTracking> {
                         labelText: "Select Stage",
                         border: OutlineInputBorder(),
                       ),
-                      items: CASE_STAGES.CaseStages().allCasePaymentStages.map((
-                        stage,
-                      ) {
-                        return DropdownMenuItem<String>(
-                          value: stage,
-                          child: Text(_prettyStageName(stage)),
-                        );
-                      }).toList(),
+                      items: CASE_STAGES.CaseStages()
+                          .allCasePaymentStages
+                          .map(
+                            (stage) => DropdownMenuItem<String>(
+                              value: stage,
+                              child: Text(_prettyStageName(stage)),
+                            ),
+                          )
+                          .toList(),
                       onChanged: (value) {
                         setModalState(() => selectedStage = value);
                       },
@@ -3572,8 +3203,8 @@ class _CaseTrackingState extends State<CaseTracking> {
                         backgroundColor: Colors.green,
                         minimumSize: const Size(double.infinity, 48),
                       ),
-                      onPressed:
-                          (_isUpdatingCaseTracking || selectedStage == null)
+                      onPressed: (_isUpdatingCaseTracking ||
+                              selectedStage == null)
                           ? null
                           : () async {
                               setModalState(
@@ -3588,21 +3219,18 @@ class _CaseTrackingState extends State<CaseTracking> {
                                         ? await _updateCaseTracking(
                                             existing!.id!,
                                             selectedStage!,
-                                        selectedDateTime,
-                                        isVisible
+                                            selectedDateTime,
+                                            isVisible,
                                           )
                                         : await _addCaseTracking(
                                             selectedStage!,
                                             selectedDateTime,
-                                            isVisible
+                                            isVisible,
                                           );
 
-                                    if (success) {
-                                      if (context.mounted) {
-                                        setState(() {
-                                          _loadFuture = _loadAllData();
-                                        });
-                                      }
+                                    if (!success) {
+                                      throw Exception(
+                                          "Failed to save stage...");
                                     }
                                   },
                                 );
@@ -3622,7 +3250,12 @@ class _CaseTrackingState extends State<CaseTracking> {
                                 }
                               } catch (e) {
                                 if (context.mounted) {
-                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text("✗ Error: $e"),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
                                 }
                               } finally {
                                 setModalState(
@@ -3642,8 +3275,7 @@ class _CaseTrackingState extends State<CaseTracking> {
   }
 
   Widget _caseTrackingTile(CaseTrackingStage ct) {
-    final isAdvocate =
-        presentUsersAdvocateId != null &&
+    final isAdvocate = presentUsersAdvocateId != null &&
         presentUsersAdvocateId == widget.advocateId;
     final index = caseTrackings.indexOf(ct);
     final canUp = index > 0;
@@ -3655,270 +3287,255 @@ class _CaseTrackingState extends State<CaseTracking> {
     final isSmallMobile = screenWidth < 480;
     final isVerySmall = screenWidth < 380;
 
-    final titleSize = isVerySmall ? 12 : (isSmallMobile ? 13 : 14);
-    final subtitleSize = isVerySmall ? 10 : (isSmallMobile ? 11 : 12);
+    final double titleSize =
+        isVerySmall ? 12.0 : (isSmallMobile ? 13.0 : 14.0);
+    final double subtitleSize =
+        isVerySmall ? 10.0 : (isSmallMobile ? 11.0 : 12.0);
 
     String stageName = _prettyStageName(ct.caseStage);
-    if (isVerySmall && stageName.length > 20) {
-      stageName = _prettyStageName(stageName);
-    } else if (isSmallMobile && stageName.length > 28) {
+    if (isSmallMobile && stageName.length > 28) {
       stageName = stageName.substring(0, 25) + '...';
     }
 
     return Card(
-        margin: EdgeInsets.symmetric(vertical: isVerySmall ? 4 : 6),
-        elevation: 1,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(isVerySmall ? 8 : 10),
+      margin: EdgeInsets.symmetric(vertical: isVerySmall ? 4 : 6),
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(isVerySmall ? 8 : 10),
+      ),
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(
+          vertical: isVerySmall ? 8 : 10,
+          horizontal: isVerySmall ? 10 : 12,
         ),
-        child: Container(
-          width: double.infinity,
-          padding: EdgeInsets.symmetric(
-            vertical: isVerySmall ? 8 : 10,
-            horizontal: isVerySmall ? 10 : 12,
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // আইকন
-              Icon(
-                Icons.timeline,
-                color: Colors.deepPurple,
-                size: isVerySmall ? 16 : 18,
-              ),
-              SizedBox(width: isVerySmall ? 8 : 12),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      stageName,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: titleSize * 1.0,
-                        height: 1.3,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      softWrap: true,
-                    ),
-                    SizedBox(height: isVerySmall ? 2 : 4),
-                    Text(
-                      "Stage #${ct.stageNumber}",
-                      style: TextStyle(
-                        fontSize: subtitleSize * 1.0,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    if(ct.trackingTime != null &&
-                      (ct.visibility == null || ct.visibility == true))
-                      Text(
-                        "${ct.trackingTime}",
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: subtitleSize * 1.0,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-
-              if (!isAdvocate && currentPrice > 0)
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isVerySmall ? 4 : 6,
-                    vertical: isVerySmall ? 2 : 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    "৳${currentPrice.toStringAsFixed(0)}",
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.timeline,
+              color: Colors.deepPurple,
+              size: isVerySmall ? 16 : 18,
+            ),
+            SizedBox(width: isVerySmall ? 8 : 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    stageName,
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                      fontSize: subtitleSize - 1,
+                      fontWeight: FontWeight.w600,
+                      fontSize: titleSize,
+                      height: 1.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: true,
+                  ),
+                  SizedBox(height: isVerySmall ? 2 : 4),
+                  Text(
+                    "Stage #${ct.stageNumber}",
+                    style: TextStyle(
+                      fontSize: subtitleSize,
+                      color: Colors.grey.shade600,
                     ),
                   ),
-                ),
-
-              if (isAdvocate)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (currentPrice > 0)
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isVerySmall ? 4 : 6,
-                          vertical: isVerySmall ? 2 : 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          "৳${currentPrice.toStringAsFixed(0)}",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                            fontSize: subtitleSize - 1,
-                          ),
-                        ),
-                      )
-                    else
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isVerySmall ? 4 : 6,
-                          vertical: isVerySmall ? 2 : 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          isVerySmall ? "Set" : "Set",
-                          style: TextStyle(
-                            fontWeight: FontWeight.w500,
-                            color: Colors.orange.shade700,
-                            fontSize: subtitleSize - 1,
-                          ),
-                        ),
+                  if (ct.trackingTime != null &&
+                      (ct.visibility == null || ct.visibility == true))
+                    Text(
+                      "${ct.trackingTime}",
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: subtitleSize,
                       ),
-
-                    IconButton(
-                      icon: Icon(
-                        Icons.edit,
-                        color: Colors.green,
-                        size: isVerySmall ? 16 : 18,
-                      ),
-                      onPressed: () => _showPriceEditDialog(
-                        stageName,
-                        ct.caseStage,
-                        currentPayment == null,
-                      ),
-                      padding: EdgeInsets.zero,
-                      constraints: BoxConstraints(
-                        minWidth: isVerySmall ? 28 : 32,
-                        minHeight: isVerySmall ? 28 : 32,
-                      ),
-                      splashRadius: 16,
                     ),
+                ],
+              ),
+            ),
+            if (!isAdvocate && currentPrice > 0)
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isVerySmall ? 4 : 6,
+                  vertical: isVerySmall ? 2 : 3,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  "৳${currentPrice.toStringAsFixed(0)}",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                    fontSize: subtitleSize - 1,
+                  ),
+                ),
+              ),
+            if (isAdvocate)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (currentPrice > 0)
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isVerySmall ? 4 : 6,
+                        vertical: isVerySmall ? 2 : 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        "৳${currentPrice.toStringAsFixed(0)}",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                          fontSize: subtitleSize - 1,
+                        ),
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isVerySmall ? 4 : 6,
+                        vertical: isVerySmall ? 2 : 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        "Set",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          color: Colors.orange.shade700,
+                          fontSize: subtitleSize - 1,
+                        ),
+                      ),
+                    ),
+                  IconButton(
+                    icon: Icon(
+                      Icons.edit,
+                      color: Colors.green,
+                      size: isVerySmall ? 16 : 18,
+                    ),
+                    onPressed: () => _showPriceEditDialog(
+                      stageName,
+                      ct.caseStage,
+                      currentPayment == null,
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints(
+                      minWidth: isVerySmall ? 28 : 32,
+                      minHeight: isVerySmall ? 28 : 32,
+                    ),
+                    splashRadius: 16,
+                  ),
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.more_vert, size: isVerySmall ? 16 : 18),
+                    onSelected: (v) async {
+                      if (v == "edit") {
+                        _showCaseTrackingBottomSheet(ct);
+                      } else if (v == "delete") {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: Text(
+                              "Delete Stage",
+                              style: TextStyle(fontSize: titleSize + 2),
+                            ),
+                            content: Text(
+                              "Delete \"$stageName\"?",
+                              style: TextStyle(fontSize: subtitleSize),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: Text(
+                                  "Cancel",
+                                  style: TextStyle(fontSize: subtitleSize),
+                                ),
+                              ),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                ),
+                                onPressed: () => Navigator.pop(context, true),
+                                child: Text(
+                                  "Delete",
+                                  style: TextStyle(fontSize: subtitleSize),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm != true) return;
 
-                    PopupMenuButton<String>(
-                      icon: Icon(Icons.more_vert, size: isVerySmall ? 16 : 18),
-                      onSelected: (v) async {
-                        if (v == "edit") {
-                          _showCaseTrackingBottomSheet(ct);
-                        } else if (v == "delete") {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: Text(
-                                "Delete Stage",
-                                style: TextStyle(fontSize: titleSize + 2),
-                              ),
-                              content: Text(
-                                "Delete \"$stageName\"?",
-                                style: TextStyle(fontSize: subtitleSize * 1.0),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.pop(context, false),
-                                  child: Text(
-                                    "Cancel",
-                                    style: TextStyle(
-                                      fontSize: subtitleSize * 1.0,
-                                    ),
-                                  ),
-                                ),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.red,
-                                  ),
-                                  onPressed: () => Navigator.pop(context, true),
-                                  child: Text(
-                                    "Delete",
-                                    style: TextStyle(
-                                      fontSize: subtitleSize * 1.0,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                        await _showLoadingDialog(
+                          loadingMessage: "Deleting stage...",
+                          task: () async {
+                            final ok = await _deleteCaseTracking(ct.id!);
+                            if (!ok) {
+                              throw Exception("Failed to delete stage");
+                            }
+                          },
+                        );
+
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("✓ Stage deleted"),
+                              backgroundColor: Colors.green,
                             ),
                           );
-                          if (confirm != true) return;
-
-                          await _showLoadingDialog(
-                            loadingMessage: "Deleting stage...",
-                            task: () async {
-                              final response = await _deleteCaseTracking(
-                                ct.id!,
-                              );
-                              setState(() => _loadFuture = _loadAllData());
-                              return response;
-                            },
-                          );
-
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text("✓ Stage deleted"),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          }
-                        } else if (v == "up" && canUp) {
-                          await _showLoadingDialog(
-                            loadingMessage: "Moving stage up...",
-                            task: () async {
-                              await _swapCaseTrackings(
-                                caseTrackings[index - 1].id!,
-                                ct.id!,
-                              );
-                              setState(() => _loadFuture = _loadAllData());
-                            },
-                          );
-                        } else if (v == "down" && canDown) {
-                          await _showLoadingDialog(
-                            loadingMessage: "Moving stage down...",
-                            task: () async {
-                              await _swapCaseTrackings(
-                                ct.id!,
-                                caseTrackings[index + 1].id!,
-                              );
-                              setState(() => _loadFuture = _loadAllData());
-                            },
-                          );
                         }
-                      },
-                      itemBuilder: (_) => [
-                        const PopupMenuItem(value: "edit", child: Text("Edit")),
+                      } else if (v == "up" && canUp) {
+                        await _showLoadingDialog(
+                          loadingMessage: "Moving stage up...",
+                          task: () async {
+                            await _swapCaseTrackings(
+                              caseTrackings[index - 1].id!,
+                              ct.id!,
+                            );
+                          },
+                        );
+                      } else if (v == "down" && canDown) {
+                        await _showLoadingDialog(
+                          loadingMessage: "Moving stage down...",
+                          task: () async {
+                            await _swapCaseTrackings(
+                              ct.id!,
+                              caseTrackings[index + 1].id!,
+                            );
+                          },
+                        );
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(value: "edit", child: Text("Edit")),
+                      const PopupMenuItem(
+                        value: "delete",
+                        child: Text("Delete"),
+                      ),
+                      if (canUp)
                         const PopupMenuItem(
-                          value: "delete",
-                          child: Text("Delete"),
+                          value: "up",
+                          child: Text("Move Up"),
                         ),
-                        if (canUp)
-                          const PopupMenuItem(
-                            value: "up",
-                            child: Text("Move Up"),
-                          ),
-                        if (canDown)
-                          const PopupMenuItem(
-                            value: "down",
-                            child: Text("Move Down"),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-            ],
-          ),
+                      if (canDown)
+                        const PopupMenuItem(
+                          value: "down",
+                          child: Text("Move Down"),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+          ],
         ),
-
+      ),
     );
   }
 }

@@ -9,6 +9,7 @@ class QuestionResponse {
   final String id;
   final String userId;
   final String userName;
+  final String? fullName;
   final String message;
   final AdvocateSpeciality questionType;
   final DateTime postTime;
@@ -19,6 +20,7 @@ class QuestionResponse {
     required this.id,
     required this.userId,
     required this.userName,
+    required this.fullName,
     required this.message,
     required this.questionType,
     required this.postTime,
@@ -32,6 +34,7 @@ class QuestionResponse {
       id: json['id'] ?? '',
       userId: json['userId'] ?? '',
       userName: json['userName'] ?? '',
+      fullName: json['fullName'],
       message: json['message'] ?? '',
       questionType: AdvocateSpecialityExt.fromApi(json['questionType']),
       postTime: json['postTime'] != null
@@ -51,6 +54,7 @@ class QuestionResponse {
       'id': id,
       'userId': userId,
       'userName': userName,
+      'fullName': fullName,
       'message': message,
       'questionType': questionType.apiValue,
       'postTime': postTime.toUtc().toIso8601String(),
@@ -64,6 +68,7 @@ class QuestionResponse {
     String? id,
     String? userId,
     String? userName,
+    String? fullName,
     String? message,
     AdvocateSpeciality? questionType,
     DateTime? postTime,
@@ -74,6 +79,7 @@ class QuestionResponse {
       id: id ?? this.id,
       userId: userId ?? this.userId,
       userName: userName ?? this.userName,
+      fullName: fullName ?? this.fullName,
       message: message ?? this.message,
       questionType: questionType ?? this.questionType,
       postTime: postTime ?? this.postTime,
@@ -127,6 +133,7 @@ class QuestionResponse {
         other.id == id &&
         other.userId == userId &&
         other.userName == userName &&
+        other.fullName == fullName &&
         other.message == message &&
         other.questionType == questionType &&
         other.postTime == postTime &&
@@ -136,6 +143,6 @@ class QuestionResponse {
 
   @override
   int get hashCode {
-    return Object.hash(id, userId, userName, message, questionType, postTime, attachmentId, answers.length);
+    return Object.hash(id, userId, userName, fullName, message, questionType, postTime, attachmentId, answers.length);
   }
 }

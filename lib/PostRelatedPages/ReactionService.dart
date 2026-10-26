@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:advocatechaiadvocate/PostRelatedPages/post_reaction_response.dart';
+import '../PostRelatedPages/post_reaction_response.dart';
 import 'package:http/http.dart' as http;
 import '../Utils/BaseURL.dart' as BASE_URL;
 import 'PostReaction.dart';

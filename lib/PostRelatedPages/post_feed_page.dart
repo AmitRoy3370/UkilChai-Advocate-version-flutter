@@ -1,4 +1,4 @@
-import 'package:advocatechaiadvocate/PostRelatedPages/post_response.dart';
+import '../PostRelatedPages/post_response.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,7 +6,7 @@ import './AdvocatePost.dart';
 import './PostService.dart';
 import './post_card.dart';
 import 'CreateOrUpdatePostPage.dart';
-import '../main.dart'; // Import for homePageKey
+import '../main.dart'; 
 
 class PostFeedPage extends StatefulWidget {
   const PostFeedPage({super.key});
@@ -31,9 +31,8 @@ class _PostFeedPageState extends State<PostFeedPage> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        // Navigate to home page on back press
         _navigateToHomePage();
-        return false; // Prevent default back behavior
+        return false; 
       },
       child: Scaffold(
         backgroundColor: Colors.grey[50],
@@ -52,7 +51,6 @@ class _PostFeedPageState extends State<PostFeedPage> {
           leading: IconButton(
             icon: Icon(Icons.arrow_back, color: Colors.grey[800]),
             onPressed: () {
-              // Navigate to home page on back button press
               _navigateToHomePage();
             },
           ),
@@ -166,16 +164,11 @@ class _PostFeedPageState extends State<PostFeedPage> {
   }
 
   void _navigateToHomePage() {
-    // Use pushAndRemoveUntil to clear the navigation stack and go to home
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => const MyHomePage(title: 'উকিল চাই')),
       (route) => false,
     );
-  }
-
-  Future<void> _refreshPostAtIndex(int index) async {
-    setState(() {});
   }
 
   Future<void> _editPost(PostResponse post, int index) async {
@@ -195,7 +188,11 @@ class _PostFeedPageState extends State<PostFeedPage> {
     final token = prefs.getString('jwt_token') ?? '';
     final userId = prefs.getString('userId') ?? '';
 
-    final response = await PostService.deletePost(post.id, userId, token);
+    final response = await PostService.deletePost(
+            postId: post.id,
+            userId: userId,
+            token: token,
+     );
 
     if (response == 200) {
       ScaffoldMessenger.of(context).showSnackBar(

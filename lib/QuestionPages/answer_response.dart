@@ -6,6 +6,7 @@ class AnswerResponse {
   final String id;
   final String advocateId;
   final String advocateName;
+  final String? advocateFullName;
   final String message;
   final DateTime time;
   final String questionId;
@@ -15,6 +16,7 @@ class AnswerResponse {
     required this.id,
     required this.advocateId,
     required this.advocateName,
+    required this.advocateFullName,
     required this.message,
     required this.time,
     required this.questionId,
@@ -27,6 +29,7 @@ class AnswerResponse {
       id: json['id'] ?? '',
       advocateId: json['advocateId'] ?? '',
       advocateName: json['advocateName'] ?? '',
+      advocateFullName: json['advocateFullName'],
       message: json['message'] ?? '',
       time: json['time'] != null
           ? DateTime.parse(json['time']).toLocal()
@@ -42,6 +45,7 @@ class AnswerResponse {
       'id': id,
       'advocateId': advocateId,
       'advocateName': advocateName,
+      'advocateFullName': advocateFullName,
       'message': message,
       'time': time.toUtc().toIso8601String(),
       'questionId': questionId,
@@ -54,6 +58,7 @@ class AnswerResponse {
     String? id,
     String? advocateId,
     String? advocateName,
+    String? advocateFullName,
     String? message,
     DateTime? time,
     String? questionId,
@@ -63,6 +68,7 @@ class AnswerResponse {
       id: id ?? this.id,
       advocateId: advocateId ?? this.advocateId,
       advocateName: advocateName ?? this.advocateName,
+      advocateFullName: advocateFullName ?? this.advocateFullName,
       message: message ?? this.message,
       time: time ?? this.time,
       questionId: questionId ?? this.questionId,
@@ -114,6 +120,7 @@ class AnswerResponse {
         other.id == id &&
         other.advocateId == advocateId &&
         other.advocateName == advocateName &&
+        other.advocateFullName == advocateFullName &&
         other.message == message &&
         other.time == time &&
         other.questionId == questionId &&
@@ -122,6 +129,6 @@ class AnswerResponse {
 
   @override
   int get hashCode {
-    return Object.hash(id, advocateId, advocateName, message, time, questionId, attachmentId);
+    return Object.hash(id, advocateId, advocateName, advocateFullName, message, time, questionId, attachmentId);
   }
 }

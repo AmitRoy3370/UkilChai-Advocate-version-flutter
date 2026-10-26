@@ -1,5 +1,5 @@
-import 'package:advocatechaiadvocate/Auth/AuthService.dart';
-import 'package:advocatechaiadvocate/CaseRelatedPages/see_my_requested_Case_to_fight.dart';
+import '../Auth/AuthService.dart';
+import '../CaseRelatedPages/see_my_requested_Case_to_fight.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +9,7 @@ import 'SeeAllCases.dart';
 import 'SeeMyCaseRequest.dart';
 import 'case_request_list_page.dart';
 import '../PageTransition.dart';
+import '../CaseRelatedPages/advocate_cases_paged_page.dart';
 
 class CaseHomePage extends StatelessWidget {
   const CaseHomePage({super.key});
@@ -93,7 +94,7 @@ class CaseHomePage extends StatelessWidget {
                   mainAxisSpacing: 16,
                   childAspectRatio: 1.1,
                   children: [
-                    _buildAnimatedCaseCard(
+                    /*_buildAnimatedCaseCard(
                       context,
                       title: "Add Case Request",
                       icon: Icons.add_circle_outline,
@@ -110,7 +111,7 @@ class CaseHomePage extends StatelessWidget {
                           );
                         }
                       },
-                    ),
+                    ),*/
                     _buildAnimatedCaseCard(
                       context,
                       title: "All Requests",
@@ -125,7 +126,7 @@ class CaseHomePage extends StatelessWidget {
                         );
                       },
                     ),
-                    _buildAnimatedCaseCard(
+                    /*_buildAnimatedCaseCard(
                       context,
                       title: "My Requests",
                       icon: Icons.pending_actions,
@@ -138,7 +139,7 @@ class CaseHomePage extends StatelessWidget {
                           const SeeMyCaseRequestsPage(),
                         );
                       },
-                    ),
+                    ),*/
                     _buildAnimatedCaseCard(
                       context,
                       title: "My Cases",
@@ -149,10 +150,11 @@ class CaseHomePage extends StatelessWidget {
                       onTap: () async {
                         final prefs = await SharedPreferences.getInstance();
                         final userId = prefs.getString('userId') ?? '';
+                        final advocateId = prefs.getString('advocateId') ?? '';
                         if (userId.isNotEmpty) {
                           _navigateWithRandomTransition(
                             context,
-                            MyCasesPage(userId: userId),
+                            AdvocateCasesPagedPage(advocateId: advocateId),
                           );
                         }
                       },

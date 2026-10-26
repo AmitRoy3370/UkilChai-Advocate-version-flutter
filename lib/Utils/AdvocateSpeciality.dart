@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 enum AdvocateSpeciality {
@@ -18,60 +17,48 @@ enum AdvocateSpeciality {
 }
 
 extension AdvocateSpecialityExt on AdvocateSpeciality {
-  String get apiValue => name; // EXACT enum string
+  String get apiValue => name;
 
   static AdvocateSpeciality fromApi(String value) {
     return AdvocateSpeciality.values.firstWhere(
-          (e) => e.name == value,
+      (e) => e.name == value,
       orElse: () => AdvocateSpeciality.CRIMINAL_LAWYER,
     );
   }
 
   String get label {
     switch (this) {
-      case AdvocateSpeciality.CRIMINAL_LAWYER:
-        return "Criminal Lawyer";
-      case AdvocateSpeciality.CIVIL_LAWYER:
-        return "Civil Lawyer";
-      case AdvocateSpeciality.FAMILY_LAWYER:
-        return "Family Lawyer";
-      case AdvocateSpeciality.CORPORATE_LAWYER:
-        return "Corporate Lawyer";
-      case AdvocateSpeciality.CYBER_CRIME_LAWYER:
-        return "Cyber Crime Lawyer";
-      case AdvocateSpeciality.PROPERTY_LAWYER:
-        return "Property Lawyer";
-      case AdvocateSpeciality.INTELLECTUAL_PROPERTY_LAWYER:
-        return "IP Lawyer";
-      case AdvocateSpeciality.TAX_LAWYER:
-        return "Tax Lawyer";
-      case AdvocateSpeciality.LABOR_LAWYER:
-        return "Labor Lawyer";
-      case AdvocateSpeciality.TRADE_LAWYER:
-        return "Trade Lawyer";
-      case AdvocateSpeciality.BANKING_LAWYER:
-        return "Banking Lawyer";
-      case AdvocateSpeciality.INSURANCE_LAWYER:
-        return "Insurance Lawyer";
-      case AdvocateSpeciality.WOMEN_AND_CHILD_RIGHTS_LAWYER:
-        return "Women & Child Rights";
+      case AdvocateSpeciality.CRIMINAL_LAWYER: return "Criminal Lawyer";
+      case AdvocateSpeciality.CIVIL_LAWYER: return "Civil Lawyer";
+      case AdvocateSpeciality.FAMILY_LAWYER: return "Family Lawyer";
+      case AdvocateSpeciality.CORPORATE_LAWYER: return "Corporate Lawyer";
+      case AdvocateSpeciality.CYBER_CRIME_LAWYER: return "Cyber Crime Lawyer";
+      case AdvocateSpeciality.PROPERTY_LAWYER: return "Property Lawyer";
+      case AdvocateSpeciality.INTELLECTUAL_PROPERTY_LAWYER: return "IP Lawyer";
+      case AdvocateSpeciality.TAX_LAWYER: return "Tax Lawyer";
+      case AdvocateSpeciality.LABOR_LAWYER: return "Labor Lawyer";
+      case AdvocateSpeciality.TRADE_LAWYER: return "Trade Lawyer";
+      case AdvocateSpeciality.BANKING_LAWYER: return "Banking Lawyer";
+      case AdvocateSpeciality.INSURANCE_LAWYER: return "Insurance Lawyer";
+      case AdvocateSpeciality.WOMEN_AND_CHILD_RIGHTS_LAWYER: return "Women & Child Rights";
     }
   }
 
   IconData get icon {
     switch (this) {
-      case AdvocateSpeciality.CRIMINAL_LAWYER:
-        return Icons.gavel;
-      case AdvocateSpeciality.FAMILY_LAWYER:
-        return Icons.family_restroom;
-      case AdvocateSpeciality.CORPORATE_LAWYER:
-        return Icons.business;
-      case AdvocateSpeciality.CYBER_CRIME_LAWYER:
-        return Icons.security;
-      case AdvocateSpeciality.PROPERTY_LAWYER:
-        return Icons.home_work;
-      default:
-        return Icons.balance;
+      case AdvocateSpeciality.CRIMINAL_LAWYER: return Icons.gavel;
+      case AdvocateSpeciality.CIVIL_LAWYER: return Icons.balance;
+      case AdvocateSpeciality.FAMILY_LAWYER: return Icons.family_restroom;
+      case AdvocateSpeciality.CORPORATE_LAWYER: return Icons.business;
+      case AdvocateSpeciality.CYBER_CRIME_LAWYER: return Icons.security;
+      case AdvocateSpeciality.PROPERTY_LAWYER: return Icons.home_work;
+      case AdvocateSpeciality.INTELLECTUAL_PROPERTY_LAWYER: return Icons.copy;
+      case AdvocateSpeciality.TAX_LAWYER: return Icons.attach_money;
+      case AdvocateSpeciality.LABOR_LAWYER: return Icons.engineering;
+      case AdvocateSpeciality.TRADE_LAWYER: return Icons.storefront;
+      case AdvocateSpeciality.BANKING_LAWYER: return Icons.account_balance;
+      case AdvocateSpeciality.INSURANCE_LAWYER: return Icons.shield;
+      case AdvocateSpeciality.WOMEN_AND_CHILD_RIGHTS_LAWYER: return Icons.woman;
     }
   }
 }

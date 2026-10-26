@@ -13,6 +13,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:advocatechaiadvocate/Utils/BaseURL.dart' as baseURL;
 import 'package:file_picker/file_picker.dart';
 import '../Utils/AdvocateSpeciality.dart';
+import '../LogInPage/LogIn.dart';
+
+// ✅ Gender imports
+import 'Gender.dart';
+import 'UserGender.dart';
+import 'UserGenderService.dart';
 
 class RegistrationPage extends StatefulWidget {
   const RegistrationPage({super.key});
@@ -23,7 +29,9 @@ class RegistrationPage extends StatefulWidget {
 
 class _RegistrationPageState extends State<RegistrationPage> {
   final TextEditingController searchController = TextEditingController();
-  final TextEditingController nameController = TextEditingController();
+
+  final TextEditingController fullNameController = TextEditingController();
+  final TextEditingController userNameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
@@ -31,78 +39,28 @@ class _RegistrationPageState extends State<RegistrationPage> {
   final TextEditingController experienceController = TextEditingController();
   final TextEditingController licenseKeyController = TextEditingController();
   final TextEditingController degreeController = TextEditingController();
-  final TextEditingController workingExperienceController =
-      TextEditingController();
+  final TextEditingController workingExperienceController = TextEditingController();
 
   bool _showPassword = false;
+
+  // ✅ Gender state
+  Gender? _selectedGender;
 
   // ✅ District selection
   String? _selectedDistrict;
   final List<String> _districts = [
-    'Bagerhat',
-    'Bandarban',
-    'Barguna',
-    'Barisal',
-    'Bhola',
-    'Bogra',
-    'Brahmanbaria',
-    'Chandpur',
-    'Chapai Nawabganj',
-    'Chittagong',
-    'Chuadanga',
-    'Comilla',
-    "Cox's Bazar",
-    'Dhaka',
-    'Dinajpur',
-    'Faridpur',
-    'Feni',
-    'Gaibandha',
-    'Gazipur',
-    'Gopalganj',
-    'Habiganj',
-    'Jamalpur',
-    'Jessore',
-    'Jhalokati',
-    'Jhenaidah',
-    'Joypurhat',
-    'Khagrachari',
-    'Khulna',
-    'Kishoreganj',
-    'Kurigram',
-    'Kushtia',
-    'Lakshmipur',
-    'Lalmonirhat',
-    'Madaripur',
-    'Magura',
-    'Manikganj',
-    'Meherpur',
-    'Moulvibazar',
-    'Munshiganj',
-    'Mymensingh',
-    'Naogaon',
-    'Narail',
-    'Narayanganj',
-    'Narsingdi',
-    'Natore',
-    'Netrokona',
-    'Nilphamari',
-    'Noakhali',
-    'Pabna',
-    'Panchagarh',
-    'Patuakhali',
-    'Pirojpur',
-    'Rajbari',
-    'Rajshahi',
-    'Rangamati',
-    'Rangpur',
-    'Satkhira',
-    'Shariatpur',
-    'Sherpur',
-    'Sirajganj',
-    'Sunamganj',
-    'Sylhet',
-    'Tangail',
-    'Thakurgaon'
+    'Bagerhat', 'Bandarban', 'Barguna', 'Barisal', 'Bhola', 'Bogra',
+    'Brahmanbaria', 'Chandpur', 'Chapai Nawabganj', 'Chittagong', 'Chuadanga',
+    'Comilla', "Cox's Bazar", 'Dhaka', 'Dinajpur', 'Faridpur', 'Feni',
+    'Gaibandha', 'Gazipur', 'Gopalganj', 'Habiganj', 'Jamalpur', 'Jessore',
+    'Jhalokati', 'Jhenaidah', 'Joypurhat', 'Khagrachari', 'Khulna',
+    'Kishoreganj', 'Kurigram', 'Kushtia', 'Lakshmipur', 'Lalmonirhat',
+    'Madaripur', 'Magura', 'Manikganj', 'Meherpur', 'Moulvibazar',
+    'Munshiganj', 'Mymensingh', 'Naogaon', 'Narail', 'Narayanganj',
+    'Narsingdi', 'Natore', 'Netrokona', 'Nilphamari', 'Noakhali', 'Pabna',
+    'Panchagarh', 'Patuakhali', 'Pirojpur', 'Rajbari', 'Rajshahi', 'Rangamati',
+    'Rangpur', 'Satkhira', 'Shariatpur', 'Sherpur', 'Sirajganj', 'Sunamganj',
+    'Sylhet', 'Tangail', 'Thakurgaon'
   ];
 
   lat_lng.LatLng? _devicePosition;
@@ -119,14 +77,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
   String? cvFileName;
 
   final MapController mapController = MapController();
-
   Stream<Position>? _positionStream;
 
   List<String> degrees = [];
   List<String> workingExperiences = [];
   Set<AdvocateSpeciality> selectedSpecialities = {};
-
-  Set<AdvocateSpeciality> selectedDistricts = {};
 
   final List<String> bangladeshDistricts = AdvocateSpeciality.values
       .map((e) => e.name)
@@ -141,9 +96,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
   void _startLocationUpdates() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enable location service")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please enable location service")),
+        );
+      }
       return;
     }
 
@@ -151,17 +108,21 @@ class _RegistrationPageState extends State<RegistrationPage> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Location permission denied")),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Location permission denied")),
+          );
+        }
         return;
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Location permission denied forever")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Location permission denied forever")),
+        );
+      }
       return;
     }
 
@@ -194,6 +155,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
       position.latitude,
       position.longitude,
     );
+
+    if (!mounted) return;
 
     setState(() {
       _devicePosition = newPos;
@@ -236,7 +199,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
     }
   }
 
-  // Unified Reverse Geocoding (using Nominatim for all platforms)
   Future<String> getAddressFromLatLng(double lat, double lng) async {
     try {
       final url = Uri.parse(
@@ -253,10 +215,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
     } catch (e) {
       if (kDebugMode) print('Geocoding error: $e');
     }
-    return 'Lat: $lat, Lng: $lng'; // Fallback
+    return 'Lat: $lat, Lng: $lng';
   }
 
-  // Search for place (unified Nominatim for all platforms)
   Future<void> searchPlace() async {
     String query = searchController.text.trim();
     if (query.isEmpty) return;
@@ -282,27 +243,28 @@ class _RegistrationPageState extends State<RegistrationPage> {
           longititude = lng;
           pos = lat_lng.LatLng(lat, lng);
           String name = data[0]['display_name'];
-          setState(() {
-            _selectedPosition = pos;
-            _selectedPlaceName = name;
-            locationTextController.text = _selectedPlaceName!;
-            _updateMarkers();
-          });
-          mapController.move(pos, 15.0);
+          if (mounted) {
+            setState(() {
+              _selectedPosition = pos;
+              _selectedPlaceName = name;
+              locationTextController.text = _selectedPlaceName!;
+              _updateMarkers();
+            });
+            mapController.move(pos, 15.0);
+          }
         }
       }
     } catch (e) {
       if (kDebugMode) print('Search error: $e');
     }
 
-    if (pos == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("No results found")));
+    if (pos == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No results found")),
+      );
     }
   }
 
-  // Pick image
   Future<void> pickImage() async {
     XFile? file = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (file != null) {
@@ -327,7 +289,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 borderRadius: BorderRadius.circular(20),
               ),
               title: const Text(
-                "Select Specialist",
+                "Select Speciality",
                 style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
               ),
               content: SizedBox(
@@ -336,17 +298,19 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   children: bangladeshDistricts.map((district) {
                     return CheckboxListTile(
                       title: Text(district),
-                      value: selectedDistricts.contains(
+                      value: selectedSpecialities.contains(
                         AdvocateSpecialityExt.fromApi(district),
                       ),
                       onChanged: (value) {
                         dialogSetState(() {
                           if (value == true) {
-                            selectedDistricts.add(
+                            selectedSpecialities.add(
                               AdvocateSpecialityExt.fromApi(district),
                             );
                           } else {
-                            selectedDistricts.remove(district);
+                            selectedSpecialities.remove(
+                              AdvocateSpecialityExt.fromApi(district),
+                            );
                           }
                         });
                       },
@@ -356,7 +320,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    setState(() {});
+                  },
                   child: const Text("Done", style: TextStyle(color: Colors.blue)),
                 ),
               ],
@@ -367,7 +334,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
     );
   }
 
-  // Pick CV PDF
   Future<void> pickCv() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -385,58 +351,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
     }
   }
 
-  // Show speciality selection dialog
-  void showSpecialityDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              title: const Text(
-                "Select Specialities",
-                style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: AdvocateSpeciality.values.map((e) {
-                    return CheckboxListTile(
-                      title: Text(e.label),
-                      value: selectedSpecialities.contains(e),
-                      onChanged: (val) {
-                        setStateDialog(() {
-                          if (val!) {
-                            selectedSpecialities.add(e);
-                          } else {
-                            selectedSpecialities.remove(e);
-                          }
-                        });
-                      },
-                    );
-                  }).toList(),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    setState(() {});
-                  },
-                  child: const Text("Done", style: TextStyle(color: Colors.blue)),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // Add degree
   void addDegree() {
     if (degreeController.text.trim().isNotEmpty) {
       degrees.add(degreeController.text.trim());
@@ -445,7 +359,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
     }
   }
 
-  // Add working experience
   void addWorkingExperience() {
     if (workingExperienceController.text.trim().isNotEmpty) {
       workingExperiences.add(workingExperienceController.text.trim());
@@ -454,52 +367,108 @@ class _RegistrationPageState extends State<RegistrationPage> {
     }
   }
 
-  // Remove degree
   void removeDegree(String degree) {
     degrees.remove(degree);
     setState(() {});
   }
 
-  // Remove working experience
   void removeWorkingExperience(String exp) {
     workingExperiences.remove(exp);
     setState(() {});
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // ✅ SAVE GENDER after user creation
+  // ══════════════════════════════════════════════════════════════
+  Future<bool> _saveUserGender({
+    required String userId,
+    required Gender gender,
+    required String token,
+  }) async {
+    try {
+      // Prefer using the service (respects Dio configuration + interceptors)
+      final service = UserGenderService();
+      final created = await service.createUserGender(
+        userId: userId,
+        gender: gender,
+      );
+
+      if (kDebugMode) {
+        print('✅ UserGender created: ${created.toString()}');
+      }
+      return true;
+    } catch (e) {
+      // Fallback: if the service fails because it uses the persisted token from
+      // prefs (which we just saved), try a direct HTTP call to be safe.
+      if (kDebugMode) {
+        print('⚠️ UserGenderService failed, trying raw http: $e');
+      }
+
+      try {
+        final uri = Uri.parse(
+          "${baseURL.Urls().baseURL}user-gender/create?userId=$userId",
+        );
+        final res = await http.post(
+          uri,
+          headers: {
+            "Authorization": "Bearer $token",
+            "Content-Type": "application/json",
+          },
+          body: jsonEncode({
+            "userId": userId,
+            "gender": gender.name, // "MALE", "FEMALE", "OTHER"
+          }),
+        );
+
+        if (kDebugMode) {
+          print('📡 Raw gender create status: ${res.statusCode}');
+          print('📡 Raw gender create body: ${res.body}');
+        }
+
+        return res.statusCode == 200 || res.statusCode == 201;
+      } catch (e2) {
+        if (kDebugMode) print('❌ Gender save failed completely: $e2');
+        return false;
+      }
+    }
+  }
+
   Future<void> _submitForm() async {
     try {
       final uri = Uri.parse("${baseURL.Urls().baseURL}auth/register");
-      //final updateUri = Uri.parse("${baseURL.Urls().baseURL}user/update/${logInResponse.userId}");
 
-      if (nameController.text.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Please enter userName")));
+      if (userNameController.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please enter username")));
         return;
       } else if (passwordController.text.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Please enter password")));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please enter password")));
         return;
       } else if (emailController.text.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Please enter email")));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please enter email")));
         return;
       } else if (phoneController.text.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Please enter phone")));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please enter phone")));
         return;
       } else if (locationTextController.text.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Please enter location")));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please enter location")));
         return;
       } else if (_selectedDistrict == null || _selectedDistrict!.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Please select your district")));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please select your district")));
+        return;
+      } else if (_selectedGender == null) {
+        // ✅ NEW validation
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please select your gender")));
+        return;
+      } else if (selectedSpecialities.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please select at least one speciality")));
         return;
       }
 
@@ -509,94 +478,138 @@ class _RegistrationPageState extends State<RegistrationPage> {
       var logInResponse = await http.post(
         uri1,
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"userName": nameController.text, "password": passwordController.text}),
-       );
+        body: jsonEncode({
+          "userName": userNameController.text,
+          "password": passwordController.text,
+        }),
+      );
 
-      var request = (logInResponse.statusCode == 200 || logInResponse.statusCode == 201) ? http.MultipartRequest("PUT", Uri.parse("${baseURL.Urls().baseURL}user/update/${jsonDecode(logInResponse.body)['userId'].toString()}")) :  http.MultipartRequest("POST", uri);
+      final bool loginOk =
+          logInResponse.statusCode == 200 || logInResponse.statusCode == 201;
+
+      Map<String, dynamic>? loginJson;
+      if (loginOk) {
+        try {
+          final decodedLogin = jsonDecode(logInResponse.body);
+          if (decodedLogin is Map<String, dynamic>) {
+            loginJson = decodedLogin;
+          }
+        } catch (e) {
+          if (kDebugMode) print("Login JSON decode error: $e");
+        }
+      }
+
+      var request = loginOk
+          ? http.MultipartRequest(
+              "PUT",
+              Uri.parse(
+                  "${baseURL.Urls().baseURL}user/update/${loginJson?['userId']?.toString() ?? ''}"))
+          : http.MultipartRequest("POST", uri);
 
       // -------- Text fields ----------
-      request.fields["name"] = nameController.text.trim();
+      request.fields["name"] = userNameController.text.trim();
       request.fields["password"] = passwordController.text.trim();
-      
-      if((logInResponse.statusCode == 200 || logInResponse.statusCode == 201)) {
 
-        request.headers["Authorization"] = "Bearer ${jsonDecode(logInResponse.body)['token'].toString()}";
-
-      } 
-
-      // optional (send only if backend allows)
-      request.fields["profileImageId"] = "profileImageId";
-
-      if (kDebugMode) {
-        print("profileImageId :- ${request.fields["profileImageId"]}");
-        print("district :- ${request.fields["district"]}");
+      if (fullNameController.text.trim().isNotEmpty) {
+        request.fields["FullName"] = fullNameController.text.trim();
       }
+
+      if (loginOk) {
+        final loginToken = loginJson?['token']?.toString();
+        if (loginToken != null && loginToken.isNotEmpty) {
+          request.headers["Authorization"] = "Bearer $loginToken";
+        }
+      }
+
+      request.fields["profileImageId"] = "profileImageId";
 
       // -------- File upload ----------
       if (kIsWeb && webImageBytes != null) {
-        if (kIsWeb && webImageBytes != null) {
-          request.files.add(
-            http.MultipartFile.fromBytes(
-              'file',
-              webImageBytes!,
-              filename: '${nameController.text.trim()}.png',
-              contentType: http.MediaType('image', 'png'),
-            ),
-          );
-        }
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'file',
+            webImageBytes!,
+            filename: '${userNameController.text.trim()}.png',
+            contentType: http.MediaType('image', 'png'),
+          ),
+        );
       } else if (!kIsWeb && pickedImage != null) {
         request.files.add(
           await http.MultipartFile.fromPath("file", pickedImage!.path),
         );
       }
 
-      if (kDebugMode) {
-        print("added file :- ${request.files.toString()}");
-        print("request body :- ${request.fields}");
-        print("request :- ${request.toString()}");
-      }
-
-      // -------- Send request ----------
       final response = await request.send();
-
-      print(
-        "response :- ${response.statusCode} and ${response.reasonPhrase} and ${response.request}",
-      );
-
       final responseBody = await response.stream.bytesToString();
 
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Registration status code :- ${response.statusCode} ")));
-
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final decoded = jsonDecode(responseBody);
+        Map<String, dynamic>? decoded;
+        try {
+          final d = jsonDecode(responseBody);
+          if (d is Map<String, dynamic>) decoded = d;
+        } catch (e) {
+          if (kDebugMode) print("Register/Update JSON decode error: $e");
+        }
 
-        // ✅ JWT token from backend
-        final String token = (logInResponse.statusCode == 200 || logInResponse.statusCode == 201) ? jsonDecode(logInResponse.body)['token'].toString() : decoded["token"];
-        final String userId = (logInResponse.statusCode == 200 || logInResponse.statusCode == 201) ? jsonDecode(logInResponse.body)['userId'].toString() : decoded['id'];
+        final String? token = loginOk
+            ? (loginJson?['token']?.toString() ??
+                loginJson?['jwt']?.toString() ??
+                loginJson?['accessToken']?.toString())
+            : (decoded?['token']?.toString() ??
+                decoded?['jwt']?.toString() ??
+                decoded?['accessToken']?.toString());
 
-        print("received token :- $token");
+        final String? userId = loginOk
+            ? (loginJson?['userId']?.toString() ??
+                loginJson?['id']?.toString())
+            : (decoded?['id']?.toString() ??
+                decoded?['userId']?.toString());
 
-        // -------- Save token (App + Web) ----------
+        if (token == null || token.isEmpty || userId == null || userId.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                    "Registration succeeded but server did not return token/userId"),
+              ),
+            );
+          }
+          return;
+        }
+
+        // ✅ SAVE TOKEN FIRST so subsequent API calls work
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString("jwt_token", token);
         await prefs.setString("userId", userId);
 
-        final sharedPreferences = await SharedPreferences.getInstance();
-        final _token = sharedPreferences.getString("jwt_token");
+        final _token = prefs.getString("jwt_token");
 
-        if (_token == null || token.isEmpty) {
-          print("No token found. User not logged in.");
+        if (_token == null || _token.isEmpty) {
+          if (kDebugMode) print("No token found in prefs.");
           return;
         }
 
+        // ═══════════════════════════════════════════════════════════
+        // ✅ NEW: SAVE USER GENDER (before contact-info & join-request)
+        // ═══════════════════════════════════════════════════════════
+        if (_selectedGender != null) {
+          final genderSaved = await _saveUserGender(
+            userId: userId,
+            gender: _selectedGender!,
+            token: _token,
+          );
+
+          if (!genderSaved && kDebugMode) {
+            print("⚠️ Gender save failed but continuing registration flow");
+          }
+        }
+
+        // ---------- CONTACT INFO ----------
         String contactInfoUri =
             "${baseURL.Urls().baseURL}user/contact-info/add?userId=$userId";
-
         final url = Uri.parse(contactInfoUri);
 
-        final responseForContactInfo = await http.post(
+        await http.post(
           url,
           headers: {
             "Authorization": "Bearer $_token",
@@ -609,49 +622,15 @@ class _RegistrationPageState extends State<RegistrationPage> {
           }),
         );
 
-        if (responseForContactInfo.statusCode == 200 ||
-            responseForContactInfo.statusCode == 201) {
-          if (kDebugMode) {
-            print("Contact info added successfully");
-          }
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Contact info add successfully")),
-          );
-          if (kDebugMode) {
-            print(
-              "Contact info add successfully: ${responseForContactInfo.body}",
-            );
-          }
-        } else {
-          if (kDebugMode) {
-            print("Contact info add failed");
-          }
-          if (kDebugMode) {
-            print("Contact info add failed: ${responseForContactInfo.body}");
-          }
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(responseForContactInfo.body)));
-        }
-
-        final String locationUrl = "${baseURL.Urls().baseURL}userLocation/add";
-
+        // ---------- LOCATION ----------
+        final String locationUrl =
+            "${baseURL.Urls().baseURL}userLocation/add";
         final loaction = Uri.parse(locationUrl);
 
-        final sharedPreferences1 = await SharedPreferences.getInstance();
-        final token1 = sharedPreferences1.getString("jwt_token");
-
-        if (token1 == null || token.isEmpty) {
-          print("No token found. User not logged in.");
-          return;
-        }
-
-        print("latitude :- $lattitude longitude :- $longititude");
-
-        final responseForContactInfo1 = await http.post(
+        await http.post(
           loaction,
           headers: {
-            "Authorization": "Bearer $token1",
+            "Authorization": "Bearer $_token",
             "Content-Type": "application/json",
           },
           body: jsonEncode({
@@ -662,61 +641,29 @@ class _RegistrationPageState extends State<RegistrationPage> {
           }),
         );
 
-        if (responseForContactInfo1.statusCode == 200 ||
-            responseForContactInfo1.statusCode == 201) {
-          print("Contact info added successfully");
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Location info add successfully")),
-          );
-          if (kDebugMode) {
-            print(
-              "Contact info add successfully: ${responseForContactInfo1.body}",
-            );
-          }
-        } else {
-          print("location info add failed ${responseForContactInfo1.body}");
-          if (kDebugMode) {
-            print("Location info add failed: ${responseForContactInfo1.body}");
-          }
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text("Failed to add location...")));
-        }
-
         // ---------------- ADVOCATE JOIN REQUEST ----------------
-
-        final joinUri = Uri.parse(
-          "${baseURL.Urls().baseURL}advocateJoinRequest",
-        );
-
+        final joinUri =
+            Uri.parse("${baseURL.Urls().baseURL}advocateJoinRequest");
         var joinRequest = http.MultipartRequest("POST", joinUri);
 
-        // 🔐 Authorization header
-        joinRequest.headers["Authorization"] = "Bearer $token1";
-
-        // -------- Required Fields --------
+        joinRequest.headers["Authorization"] = "Bearer $_token";
         joinRequest.fields["userId"] = userId;
         joinRequest.fields["experience"] =
             experienceController.text.trim().isEmpty
-            ? "0"
-            : experienceController.text.trim();
+                ? "0"
+                : experienceController.text.trim();
         joinRequest.fields["licenseKey"] = licenseKeyController.text.trim();
-        joinRequest.fields["district"] = _selectedDistrict!; // ✅ District added
 
-        // Convert Enum list to String list
-        List<String> specialityList = selectedDistricts
-            .map((e) => e.name)
-            .toList();
+        joinRequest.fields["district"] = _selectedDistrict ?? "Dhaka";
 
-        // Send JSON string
+        List<String> specialityList =
+            selectedSpecialities.map((e) => e.name).toList();
         joinRequest.fields["advocateSpeciality"] = jsonEncode(specialityList);
 
         joinRequest.fields["degrees"] = jsonEncode(degrees);
-        joinRequest.fields["workingExperiences"] = jsonEncode(
-          workingExperiences,
-        );
+        joinRequest.fields["workingExperiences"] =
+            jsonEncode(workingExperiences);
 
-        // -------- CV File Upload --------
         if (kIsWeb && webCvBytes != null) {
           joinRequest.files.add(
             http.MultipartFile.fromBytes(
@@ -732,66 +679,76 @@ class _RegistrationPageState extends State<RegistrationPage> {
           );
         }
 
-        // -------- Send Join Request --------
         final joinResponse = await joinRequest.send();
         final joinResponseBody = await joinResponse.stream.bytesToString();
 
-        print("Join Status: ${joinResponse.statusCode}");
-        print("Join Body: $joinResponseBody");
+        if (joinResponse.statusCode == 200 ||
+            joinResponse.statusCode == 201) {
+          if (mounted) {
+            // Clear token so user cannot access app until approved
+            await prefs.remove("jwt_token");
+            await prefs.remove("userId");
+            await prefs.remove("advocateId");
 
-        if (joinResponse.statusCode == 200 || joinResponse.statusCode == 201) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Advocate Join Request Sent Successfully"),
-            ),
-          );
-          
-          // Clear form after successful submission
-          setState(() {
-            showForm = false;
-          });
-          
-          nameController.clear();
-          passwordController.clear();
-          emailController.clear();
-          phoneController.clear();
-          locationTextController.clear();
-          experienceController.clear();
-          licenseKeyController.clear();
-          degrees.clear();
-          workingExperiences.clear();
-          selectedDistricts.clear();
-          _selectedDistrict = null;
-          pickedImage = null;
-          webImageBytes = null;
-          cvFile = null;
-          webCvBytes = null;
-          cvFileName = null;
-          
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                    "Join Request Sent Successfully! Please wait for admin approval."),
+                duration: Duration(seconds: 4),
+              ),
+            );
+
+            setState(() {
+              showForm = false;
+            });
+
+            fullNameController.clear();
+            userNameController.clear();
+            passwordController.clear();
+            emailController.clear();
+            phoneController.clear();
+            locationTextController.clear();
+            experienceController.clear();
+            licenseKeyController.clear();
+            degrees.clear();
+            workingExperiences.clear();
+            selectedSpecialities.clear();
+            _selectedDistrict = null;
+            _selectedGender = null; // ✅ reset gender
+            pickedImage = null;
+            webImageBytes = null;
+            cvFile = null;
+            webCvBytes = null;
+            cvFileName = null;
+
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const LogIn()),
+            );
+          }
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Join Request Failed: $joinResponseBody")),
-          );
-        }
-
-        if (kDebugMode) {
-          print("JWT TOKEN => $token");
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                  content:
+                      Text("Join Request Failed: $joinResponseBody")),
+            );
+          }
         }
       } else {
-        if (kDebugMode) {
-          print("Register failed: $responseBody");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Registration failed")),
+          );
         }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Registration failed")));
       }
     } catch (e) {
-      if (kDebugMode) {
-        print("Error: $e");
+      if (kDebugMode) print("Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${e.toString()}')),
+        );
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('${e.toString()}')));
     }
   }
 
@@ -802,298 +759,293 @@ class _RegistrationPageState extends State<RegistrationPage> {
           showForm = true;
         });
       },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        transform: Matrix4.identity()..scale(showForm ? 0.0 : 1.0),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Colors.blue, Colors.blueAccent],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(40),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.blue.withOpacity(0.4),
-                blurRadius: 15,
-                offset: const Offset(0, 5),
-                spreadRadius: 2,
-              ),
-            ],
-            border: Border.all(
-              color: Colors.white.withOpacity(0.5),
-              width: 1,
-            ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Colors.blue, Colors.blueAccent],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TweenAnimationBuilder(
-                tween: Tween<double>(begin: 0, end: 1),
-                duration: const Duration(milliseconds: 1000),
-                builder: (context, value, child) {
-                  return Transform.scale(
-                    scale: 1 + (value * 0.1),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.gavel,
-                        color: Colors.blue,
-                        size: 20,
-                      ),
-                    ),
-                  );
-                },
+          borderRadius: BorderRadius.circular(40),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.blue.withOpacity(0.4),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.gavel, color: Colors.white, size: 20),
+            SizedBox(width: 12),
+            Text(
+              'Advocate Registration',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
               ),
-              const SizedBox(width: 12),
-              const Text(
-                'অ্যাডভোকেট রেজিস্ট্রেশন',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.arrow_forward,
-                  color: Colors.white,
-                  size: 16,
-                ),
-              ),
-            ],
-          ),
+            ),
+            SizedBox(width: 8),
+            Icon(Icons.arrow_forward, color: Colors.white, size: 16),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildAnimatedForm() {
-    return AnimatedPositioned(
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOutCubic,
-      bottom: showForm ? 0 : -MediaQuery.of(context).size.height,
-      left: 0,
-      right: 0,
-      height: MediaQuery.of(context).size.height * 0.85,
-      child: IgnorePointer(
-        ignoring: !showForm,
-        child: TweenAnimationBuilder(
-          tween: Tween<double>(begin: 0, end: showForm ? 1 : 0),
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeOutCubic,
-          builder: (context, value, child) {
-            return Transform.translate(
-              offset: Offset(0, (1 - value) * 100),
-              child: Opacity(
-                opacity: value,
-                child: child,
-              ),
-            );
-          },
-          child: Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(30),
-                topRight: Radius.circular(30),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black26,
-                  blurRadius: 20,
-                  offset: Offset(0, -5),
-                ),
-              ],
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.0,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(30),
+              topRight: Radius.circular(30),
             ),
-            child: Column(
-              children: [
-                GestureDetector(
-                  onVerticalDragUpdate: (details) {
-                    if (details.delta.dy > 10) {
-                      setState(() {
-                        showForm = false;
-                      });
-                    }
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.only(top: 12),
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 20,
+                offset: Offset(0, -5),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.blue, Colors.blueAccent],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Colors.blue, Colors.blueAccent],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.gavel, color: Colors.white, size: 24),
+                        SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Advocate Registration',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'Fill up your information',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(30),
-                      topRight: Radius.circular(30),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => setState(() => showForm = false),
                     ),
+                  ],
+                ),
+              ),
+
+              // Form Body
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  physics: const BouncingScrollPhysics(),
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                    left: 20,
+                    right: 20,
+                    top: 20,
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.gavel,
-                              color: Colors.blue,
-                              size: 24,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'অ্যাডভোকেট রেজিস্ট্রেশন',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              Text(
-                                'আপনার তথ্য পূরণ করুন',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                      _buildFormField(
+                        controller: fullNameController,
+                        label: "Full Name",
+                        icon: Icons.badge_outlined,
+                        hint: "Enter your full name",
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white),
-                        onPressed: () => setState(() => showForm = false),
+                      const SizedBox(height: 16),
+
+                      _buildFormField(
+                        controller: userNameController,
+                        label: "Username",
+                        icon: Icons.person_outline,
+                        hint: "Choose a unique username",
                       ),
+                      const SizedBox(height: 16),
+
+                      _buildFormField(
+                        controller: emailController,
+                        label: "Email",
+                        icon: Icons.email_outlined,
+                        hint: "Enter your email address",
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildFormField(
+                        controller: phoneController,
+                        label: "Phone Number",
+                        icon: Icons.phone_outlined,
+                        hint: "01XXXXXXXXX",
+                        keyboardType: TextInputType.phone,
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildPasswordField(),
+                      const SizedBox(height: 16),
+
+                      // ✅ NEW: Gender dropdown
+                      _buildGenderDropdown(),
+                      const SizedBox(height: 16),
+
+                      _buildFormField(
+                        controller: locationTextController,
+                        label: "Location",
+                        icon: Icons.location_on_outlined,
+                        hint: "Select from map",
+                        readOnly: true,
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildDistrictDropdown(),
+                      const SizedBox(height: 16),
+
+                      _buildFormField(
+                        controller: experienceController,
+                        label: "Experience (Years)",
+                        icon: Icons.work_outline,
+                        hint: "How many years of experience",
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildFormField(
+                        controller: licenseKeyController,
+                        label: "License Key",
+                        icon: Icons.key,
+                        hint: "Enter your license key",
+                      ),
+                      const SizedBox(height: 20),
+
+                      _buildDegreeSection(),
+                      const SizedBox(height: 20),
+
+                      _buildWorkingExperienceSection(),
+                      const SizedBox(height: 20),
+
+                      _buildSpecialistSection(),
+                      const SizedBox(height: 20),
+
+                      _buildCvPicker(),
+                      const SizedBox(height: 20),
+
+                      _buildImagePicker(),
+                      const SizedBox(height: 30),
+
+                      _buildSubmitButton(),
+                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: EdgeInsets.only(
-                      bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                      left: 20,
-                      right: 20,
-                      top: 20,
-                    ),
-                    child: Column(
-                      children: [
-                        _buildFormField(
-                          controller: nameController,
-                          label: "পূর্ণ নাম",
-                          icon: Icons.person_outline,
-                          hint: "আপনার পূর্ণ নাম লিখুন",
-                        ),
-                        const SizedBox(height: 16),
-                        _buildFormField(
-                          controller: emailController,
-                          label: "ইমেইল",
-                          icon: Icons.email_outlined,
-                          hint: "আপনার ইমেইল ঠিকানা",
-                          keyboardType: TextInputType.emailAddress,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildFormField(
-                          controller: phoneController,
-                          label: "মোবাইল নম্বর",
-                          icon: Icons.phone_outlined,
-                          hint: "০১XXXXXXXXX",
-                          keyboardType: TextInputType.phone,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildPasswordField(),
-                        const SizedBox(height: 16),
-                        _buildFormField(
-                          controller: locationTextController,
-                          label: "লোকেশন",
-                          icon: Icons.location_on_outlined,
-                          hint: "মানচিত্র থেকে সিলেক্ট করুন",
-                          readOnly: true,
-                        ),
-                        const SizedBox(height: 16),
-                        
-                        // ✅ District Dropdown Section
-                        _buildDistrictDropdown(),
-                        const SizedBox(height: 16),
-                        
-                        _buildFormField(
-                          controller: experienceController,
-                          label: "অভিজ্ঞতা (বছর)",
-                          icon: Icons.work_outline,
-                          hint: "কত বছর অভিজ্ঞতা",
-                          keyboardType: TextInputType.number,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildFormField(
-                          controller: licenseKeyController,
-                          label: "লাইসেন্স কী",
-                          icon: Icons.key,
-                          hint: "আপনার লাইসেন্স কী লিখুন",
-                        ),
-                        const SizedBox(height: 20),
-                        _buildDegreeSection(),
-                        const SizedBox(height: 20),
-                        _buildWorkingExperienceSection(),
-                        const SizedBox(height: 20),
-                        _buildSpecialistSection(),
-                        const SizedBox(height: 20),
-                        _buildCvPicker(),
-                        const SizedBox(height: 20),
-                        _buildImagePicker(),
-                        const SizedBox(height: 30),
-                        _buildSubmitButton(),
-                        const SizedBox(height: 20),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  // ✅ District Dropdown Widget
+  // ══════════════════════════════════════════════════════════════
+  // ✅ NEW: Gender dropdown widget
+  // ══════════════════════════════════════════════════════════════
+  Widget _buildGenderDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "Gender",
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey[200]!),
+          ),
+          child: DropdownButtonFormField<Gender>(
+            value: _selectedGender,
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.wc, color: Colors.blue),
+              border: InputBorder.none,
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            ),
+            hint: Text(
+              "Select your gender",
+              style: TextStyle(color: Colors.grey[400]),
+            ),
+            isExpanded: true,
+            icon: const Icon(Icons.arrow_drop_down, color: Colors.blue),
+            iconSize: 30,
+            dropdownColor: Colors.white,
+            style: const TextStyle(color: Colors.black87, fontSize: 16),
+            items: Gender.values.map((Gender g) {
+              return DropdownMenuItem<Gender>(
+                value: g,
+                child: Text(g.displayName),
+              );
+            }).toList(),
+            onChanged: (Gender? newValue) {
+              setState(() {
+                _selectedGender = newValue;
+              });
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildDistrictDropdown() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          "জেলা",
+          "District",
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -1112,10 +1064,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
             decoration: const InputDecoration(
               prefixIcon: Icon(Icons.location_city, color: Colors.blue),
               border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             ),
             hint: Text(
-              "আপনার জেলা নির্বাচন করুন",
+              "Select your district",
               style: TextStyle(color: Colors.grey[400]),
             ),
             isExpanded: true,
@@ -1134,30 +1087,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 _selectedDistrict = newValue;
               });
             },
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'দয়া করে একটি জেলা নির্বাচন করুন';
-              }
-              return null;
-            },
           ),
         ),
-        // ✅ Selected district display chip
-        if (_selectedDistrict != null && _selectedDistrict!.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Chip(
-              label: Text(_selectedDistrict!),
-              backgroundColor: Colors.blue.withOpacity(0.1),
-              labelStyle: const TextStyle(color: Colors.blue),
-              deleteIcon: const Icon(Icons.close, size: 18),
-              onDeleted: () {
-                setState(() {
-                  _selectedDistrict = null;
-                });
-              },
-            ),
-          ),
       ],
     );
   }
@@ -1215,9 +1146,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
         controller: passwordController,
         obscureText: !_showPassword,
         decoration: InputDecoration(
-          labelText: "পাসওয়ার্ড",
+          labelText: "Password",
           labelStyle: const TextStyle(color: Colors.blue),
-          hintText: "কমপক্ষে ৬ অক্ষর",
+          hintText: "At least 6 characters",
           hintStyle: TextStyle(color: Colors.grey[400]),
           prefixIcon: const Icon(Icons.lock_outline, color: Colors.blue),
           suffixIcon: IconButton(
@@ -1247,7 +1178,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          "ডিগ্রী সমূহ",
+          "Degrees",
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -1267,7 +1198,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 child: TextField(
                   controller: degreeController,
                   decoration: InputDecoration(
-                    hintText: "ডিগ্রী যোগ করুন",
+                    hintText: "Add a degree",
                     hintStyle: TextStyle(color: Colors.grey[400]),
                     prefixIcon: const Icon(Icons.school, color: Colors.blue),
                     border: OutlineInputBorder(
@@ -1299,7 +1230,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                child: const Text("যোগ করুন", style: TextStyle(color: Colors.white)),
+                child: const Text("Add", style: TextStyle(color: Colors.white)),
               ),
             ),
           ],
@@ -1329,7 +1260,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          "কর্ম অভিজ্ঞতা",
+          "Working Experience",
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -1349,9 +1280,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 child: TextField(
                   controller: workingExperienceController,
                   decoration: InputDecoration(
-                    hintText: "কর্ম অভিজ্ঞতা যোগ করুন",
+                    hintText: "Add working experience",
                     hintStyle: TextStyle(color: Colors.grey[400]),
-                    prefixIcon: const Icon(Icons.work_history, color: Colors.blue),
+                    prefixIcon:
+                        const Icon(Icons.work_history, color: Colors.blue),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide.none,
@@ -1381,7 +1313,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                child: const Text("যোগ করুন", style: TextStyle(color: Colors.white)),
+                child: const Text("Add", style: TextStyle(color: Colors.white)),
               ),
             ),
           ],
@@ -1411,7 +1343,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          "স্পেশালিস্ট এলাকা",
+          "Specialist Areas",
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -1434,11 +1366,13 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    selectedDistricts.isEmpty
-                        ? "স্পেশালিস্ট সিলেক্ট করুন"
-                        : "${selectedDistricts.length} টি স্পেশালিস্ট সিলেক্ট করা হয়েছে",
+                    selectedSpecialities.isEmpty
+                        ? "Select Specialities"
+                        : "${selectedSpecialities.length} Specialities Selected",
                     style: TextStyle(
-                      color: selectedDistricts.isEmpty ? Colors.grey[600] : Colors.black87,
+                      color: selectedSpecialities.isEmpty
+                          ? Colors.grey[600]
+                          : Colors.black87,
                     ),
                   ),
                 ),
@@ -1448,16 +1382,16 @@ class _RegistrationPageState extends State<RegistrationPage> {
           ),
         ),
         const SizedBox(height: 12),
-        if (selectedDistricts.isNotEmpty)
+        if (selectedSpecialities.isNotEmpty)
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: selectedDistricts.map((d) {
+            children: selectedSpecialities.map((d) {
               return Chip(
                 label: Text(d.apiValue),
                 onDeleted: () {
                   setState(() {
-                    selectedDistricts.remove(d);
+                    selectedSpecialities.remove(d);
                   });
                 },
                 backgroundColor: Colors.blue.withOpacity(0.1),
@@ -1475,7 +1409,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          "সিভি (PDF)",
+          "CV (PDF)",
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -1498,21 +1432,24 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    cvFileName ?? "PDF ফাইল আপলোড করুন",
+                    cvFileName ?? "Upload PDF File",
                     style: TextStyle(
-                      color: cvFileName != null ? Colors.black87 : Colors.grey[600],
+                      color: cvFileName != null
+                          ? Colors.black87
+                          : Colors.grey[600],
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.blue,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text(
-                    "ব্রাউজ",
+                    "Browse",
                     style: TextStyle(color: Colors.white, fontSize: 12),
                   ),
                 ),
@@ -1529,7 +1466,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          "প্রোফাইল ছবি",
+          "Profile Image",
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -1554,7 +1491,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       Icon(Icons.camera_alt, size: 40, color: Colors.grey[400]),
                       const SizedBox(height: 8),
                       Text(
-                        "ছবি যোগ করুন",
+                        "Add Image",
                         style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
                     ],
@@ -1598,23 +1535,23 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
-                content: Column(
+                content: const Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const CircularProgressIndicator(
+                    CircularProgressIndicator(
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     Text(
-                      "রেজিস্ট্রেশন হচ্ছে...",
+                      "Registering...",
                       style: TextStyle(
                         fontSize: 16,
                         color: Colors.blue,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     Text(
-                      "দয়া করে অপেক্ষা করুন",
+                      "Please wait",
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ],
@@ -1639,7 +1576,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
           elevation: 5,
         ),
         child: const Text(
-          "রেজিস্ট্রেশন সম্পন্ন করুন",
+          "Complete Registration",
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
@@ -1654,7 +1591,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        title: const Text("অ্যাডভোকেট রেজিস্ট্রেশন"),
+        title: const Text("Advocate Registration"),
         backgroundColor: Colors.blue,
         elevation: 0,
       ),
@@ -1679,7 +1616,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   ),
                   children: [
                     TileLayer(
-                      urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      urlTemplate:
+                          'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
                       subdomains: const ['a', 'b', 'c'],
                       userAgentPackageName: 'com.advocatechai.app',
                     ),
@@ -1726,9 +1664,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       child: TextField(
                         controller: searchController,
                         decoration: const InputDecoration(
-                          hintText: "লোকেশন খুঁজুন...",
+                          hintText: "Search location...",
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 14),
                         ),
                         onSubmitted: (value) => searchPlace(),
                       ),
@@ -1784,7 +1723,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
             ),
 
           // Animated Form
-          _buildAnimatedForm(),
+          if (showForm) _buildAnimatedForm(),
         ],
       ),
     );

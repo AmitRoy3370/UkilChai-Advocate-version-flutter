@@ -1,3 +1,4 @@
+//lib/CaseRelatedPages/CaseDetailsPage.dart
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -23,7 +24,7 @@ import 'edit_case_page.dart';
 class CaseDetailsPage extends StatelessWidget {
   final CaseModel caseModel;
   final String? userId;
-  final VoidCallback? onDeleted; // ← NEW
+  final VoidCallback? onDeleted;
 
   CaseDetailsPage({
     super.key,
@@ -50,20 +51,19 @@ class CaseDetailsPage extends StatelessWidget {
     if (response.statusCode == 200) {
       final bytes = response.bodyBytes;
 
-      // get temp directory
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/$attachmentId');
 
       await file.writeAsBytes(bytes);
 
-      // open the file
       await OpenFile.open(file.path);
     } else {
       throw Exception('Failed to download attachment: ${response.statusCode}');
     }
   }
 
-  Future<CaseJudgment?> loadJudgment() {
+  // ✅ FIXED: return type now matches CaseJudgmentService.getByCase
+  Future<CaseJudgmentResponse?> loadJudgment() {
     return CaseJudgmentService.getByCase(caseModel.id);
   }
 
@@ -73,7 +73,6 @@ class CaseDetailsPage extends StatelessWidget {
     return myUserId != null && myUserId == caseModel.userId;
   }
 
-  // ---------------- GET USER NAME ----------------
   Future<String> getNameFromUser(String userId) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('jwt_token') ?? '';
@@ -107,7 +106,6 @@ class CaseDetailsPage extends StatelessWidget {
     return advocateId == caseModel.advocateId;
   }
 
-  // ---------------- GET ADVOCATE NAME ----------------
   Future<String> getNameFromAdvocate(String advocateId) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('jwt_token') ?? '';
@@ -137,7 +135,6 @@ class CaseDetailsPage extends StatelessWidget {
     return "";
   }
 
-  // ---------------- DELETE CASE ----------------
   Future<bool> deleteCase(BuildContext context) async {
     final url = "$baseUrl/${caseModel.id}/${caseModel.userId}";
 
@@ -159,7 +156,7 @@ class CaseDetailsPage extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Case deleted successfully")),
         );
-        return true; // ✅ important
+        return true;
       } else {
         throw body["error"] ?? "Delete failed";
       }
@@ -167,7 +164,7 @@ class CaseDetailsPage extends StatelessWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.toString())));
-      return false; // ✅ important
+      return false;
     }
   }
 
@@ -187,9 +184,8 @@ class CaseDetailsPage extends StatelessWidget {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
-              Navigator.pop(dialogContext, true); // close confirm dialog
+              Navigator.pop(dialogContext, true);
 
-              // show loading
               if (context.mounted) {
                 showDialog(
                   context: context,
@@ -212,9 +208,8 @@ class CaseDetailsPage extends StatelessWidget {
 
                 final success = await deleteCase(context);
 
-                // Close loading dialog
                 if (context.mounted) {
-                  Navigator.pop(context); // close loading
+                  Navigator.pop(context);
 
                   print("result is case details page :- $success");
 
@@ -231,13 +226,9 @@ class CaseDetailsPage extends StatelessWidget {
                           builder: (_) => MyCasesPage(userId: userId),
                         ),
                       );
-
-                      // 🔥 THIS IS THE KEY CHANGE - return true to the previous page
-                      //Navigator.pop(context, true);
                     }
                   } else {
                     if (context.mounted) {
-                      // Return false if deletion failed
                       Navigator.pop(context, false);
                     }
                   }
@@ -251,7 +242,6 @@ class CaseDetailsPage extends StatelessWidget {
     );
   }
 
-  // ---------------- FUTURE INFO ROW ----------------
   Widget _futureInfo(String title, Future<String> future) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -286,7 +276,6 @@ class CaseDetailsPage extends StatelessWidget {
     );
   }
 
-  // ---------------- NORMAL INFO ROW ----------------
   Widget _info(String title, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -306,7 +295,6 @@ class CaseDetailsPage extends StatelessWidget {
     );
   }
 
-  // ---------------- UI ----------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -322,14 +310,8 @@ class CaseDetailsPage extends StatelessWidget {
               children: [
                 _info("Case Name", caseModel.caseName),
                 _info("Case Type", caseModel.caseType),
-
                 _info("User", caseModel.userName),
-
-                _info(
-                  "Advocate",
-                  caseModel.advocateName,
-                ),
-
+                _info("Advocate", caseModel.advocateName),
                 _info("Issued Time", caseModel.issuedTime),
 
                 const SizedBox(height: 16),
@@ -401,7 +383,7 @@ class CaseDetailsPage extends StatelessWidget {
                   future: isMyCase(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const SizedBox(); // no UI jump
+                      return const SizedBox();
                     }
 
                     if (snapshot.hasData && snapshot.data == true) {
@@ -419,12 +401,11 @@ class CaseDetailsPage extends StatelessWidget {
                       );
                     }
 
-                    return const SizedBox(); // hide button if not owner
+                    return const SizedBox();
                   },
                 ),
                 const SizedBox(height: 16),
 
-                // ==================== REPLACE THIS ENTIRE BUTTON ====================
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -440,10 +421,9 @@ class CaseDetailsPage extends StatelessWidget {
                       ),
                     ),
                     onPressed: () async {
-                      // Show loader immediately
                       showDialog(
                         context: context,
-                        barrierDismissible: false, // user can't close it
+                        barrierDismissible: false,
                         builder: (ctx) => const Center(
                           child: Card(
                             child: Padding(
@@ -519,18 +499,18 @@ class CaseDetailsPage extends StatelessWidget {
 
                 const SizedBox(height: 16),
 
-                // ===================================================================
                 FutureBuilder<bool>(
                   future: isMyCase(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const SizedBox(); // no UI jump
+                      return const SizedBox();
                     }
 
                     if (snapshot.hasData && snapshot.data == true) {
                       return SizedBox(
                         width: double.infinity,
-                        child: FutureBuilder<CaseJudgment?>(
+                        // ✅ FIXED: FutureBuilder generic type now CaseJudgmentResponse
+                        child: FutureBuilder<CaseJudgmentResponse?>(
                           future: loadJudgment(),
                           builder: (context, snapshot) {
                             if (!snapshot.hasData || snapshot.data == null) {
@@ -585,7 +565,7 @@ class CaseDetailsPage extends StatelessWidget {
                       );
                     }
 
-                    return const SizedBox(); // hide button if not owner
+                    return const SizedBox();
                   },
                 ),
 
@@ -595,7 +575,7 @@ class CaseDetailsPage extends StatelessWidget {
                   future: isMyFightingCase(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const SizedBox(); // no UI jump
+                      return const SizedBox();
                     }
                     if (snapshot.hasData && snapshot.data == true) {
                       return SizedBox(
@@ -625,11 +605,11 @@ class CaseDetailsPage extends StatelessWidget {
                               ),
                             );
                           },
-                          child: Text("Update Case"),
+                          child: const Text("Update Case"),
                         ),
                       );
                     } else {
-                      return const SizedBox(); // hide button if not owner
+                      return const SizedBox();
                     }
                   },
                 ),

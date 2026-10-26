@@ -1,26 +1,28 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'package:advocatechaiadvocate/QuestionPages/question_response.dart';
+
+import '../QuestionPages/question_response.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:html' as html;
 import '../Auth/AuthService.dart';
 import '../Utils/AdvocateSpeciality.dart';
 import '../Utils/BaseURL.dart' as baseURL;
 import '../Utils/BaseURL.dart' as BASE_URL;
-import 'AnswerModel.dart';
-import 'AnswerService.dart';
 import 'AnswerTile.dart';
 import 'QuestionModel.dart';
 import 'QuestionService.dart';
+import '../PageTransition.dart';
+import '../QuestionPages/QuestionAttachmentViewer.dart';
+import '../QuestionPages/question_attachment_widget.dart';
 
 class QuestionCard extends StatefulWidget {
   final QuestionResponse question;
@@ -38,17 +40,26 @@ class QuestionCard extends StatefulWidget {
 
 class _QuestionCardState extends State<QuestionCard> {
   String currentUserId = "";
+  String currentAdvocateId = "";
   bool isMyQuestion = false;
   bool isAdvocate = false;
 
   PlatformFile? selectedFile;
   String? fileName;
-  String? fileExtension;
+  String? fileExtension, myLoggedInToken;
 
+  // ✅ Answer State
+  TextEditingController answerController = TextEditingController();
   PlatformFile? answerFile;
   String? answerFileName;
   String? answerFileExtension;
-  TextEditingController answerController = TextEditingController();
+
+  final List<PageTransitionType> _smoothAnimations = AnimatedRoute.getCompanySafeAnimations();
+
+  PageTransitionType _getRandomAnimation() {
+    final random = Random().nextInt(_smoothAnimations.length);
+    return _smoothAnimations[random];
+  }
 
   Future<void> pickFile() async {
     final result = await FilePicker.platform.pickFiles(
@@ -68,6 +79,25 @@ class _QuestionCardState extends State<QuestionCard> {
     });
   }
 
+  // ✅ Pick answer file
+  Future<void> pickAnswerFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      withData: true,
+      type: FileType.any,
+    );
+
+    if (result == null) return;
+
+    final file = result.files.first;
+
+    setState(() {
+      answerFile = file;
+      answerFileName = file.name;
+      answerFileExtension = file.extension;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -77,7 +107,8 @@ class _QuestionCardState extends State<QuestionCard> {
   Future<void> loadUser() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     currentUserId = prefs.getString("userId") ?? "";
-    final currentAdvocateId = prefs.getString("advocateId") ?? "";
+    currentAdvocateId = prefs.getString("advocateId") ?? "";
+    myLoggedInToken = prefs.getString('jwt_token') ?? '';
 
     setState(() {
       isMyQuestion = currentUserId == widget.question.userId;
@@ -101,6 +132,7 @@ class _QuestionCardState extends State<QuestionCard> {
     try {
       final url = "${baseURL.Urls().baseURL}questions/downloadQuestionContent?attachmentId=$attachmentId";
       final token = await AuthService.getToken();
+
       final response = await http.get(
         Uri.parse(url),
         headers: {"Authorization": "Bearer $token"},
@@ -143,21 +175,6 @@ class _QuestionCardState extends State<QuestionCard> {
     }
   }
 
-  Future<String> getNameFromUser(String userId) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('jwt_token') ?? '';
-    final url = "${BASE_URL.Urls().baseURL}user/search?userId=$userId";
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {"content-type": "application/json", "Authorization": "Bearer $token"},
-    );
-    if (response.statusCode == 200) {
-      final body = jsonDecode(response.body);
-      return body["name"] ?? "";
-    }
-    return "";
-  }
-
   String? getMimeType(String? extension) {
     if (extension == null) return null;
     extension = extension.toLowerCase();
@@ -176,6 +193,7 @@ class _QuestionCardState extends State<QuestionCard> {
     }
   }
 
+  // ✅ Post the answer
   Future<void> answerQuestion() async {
     if (answerController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -194,7 +212,7 @@ class _QuestionCardState extends State<QuestionCard> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const CircularProgressIndicator(color: Colors.green),
+              const CircularProgressIndicator(color: Colors.purple),
               const SizedBox(height: 16),
               Text(
                 "Posting your answer...",
@@ -207,22 +225,17 @@ class _QuestionCardState extends State<QuestionCard> {
     );
 
     try {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('jwt_token') ?? '';
-      final userId = prefs.getString('userId') ?? '';
-      final currentAdvocateId = prefs.getString('advocateId') ?? '';
-
       var request = http.MultipartRequest(
         'POST',
         Uri.parse("${baseURL.Urls().baseURL}answers/add"),
       );
 
-      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Authorization'] = 'Bearer $myLoggedInToken';
 
       request.fields['advocateId'] = currentAdvocateId;
       request.fields['message'] = answerController.text.trim();
       request.fields['questionId'] = widget.question.id!;
-      request.fields['userId'] = userId;
+      request.fields['userId'] = currentUserId;
 
       if (answerFile != null) {
         final mimeTypeStr = getMimeType(answerFileExtension);
@@ -267,7 +280,7 @@ class _QuestionCardState extends State<QuestionCard> {
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
 
-      if (context.mounted) Navigator.pop(context);
+      if (context.mounted) Navigator.pop(context); // Close loading
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -305,24 +318,6 @@ class _QuestionCardState extends State<QuestionCard> {
         ),
       );
     }
-  }
-
-  Future<void> pickAnswerFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: false,
-      withData: true,
-      type: FileType.any,
-    );
-
-    if (result == null) return;
-
-    final file = result.files.first;
-
-    setState(() {
-      answerFile = file;
-      answerFileName = file.name;
-      answerFileExtension = file.extension;
-    });
   }
 
   void showEditDialog() {
@@ -374,7 +369,7 @@ class _QuestionCardState extends State<QuestionCard> {
                     icon: const Icon(Icons.attach_file),
                     label: const Text("Choose Attachment"),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: Colors.purple,
                       foregroundColor: Colors.white,
                     ),
                   ),
@@ -411,7 +406,7 @@ class _QuestionCardState extends State<QuestionCard> {
                           content: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const CircularProgressIndicator(color: Colors.green),
+                              const CircularProgressIndicator(color: Colors.purple),
                               const SizedBox(height: 10),
                               Text("Please wait...", style: GoogleFonts.inter()),
                             ],
@@ -437,7 +432,7 @@ class _QuestionCardState extends State<QuestionCard> {
                       if (widget.question.attachmentId != null && widget.question.attachmentId!.isNotEmpty && selectedFile == null) {
                         request.fields["attachmentId"] = widget.question.attachmentId!;
                       } else {
-                        request.fields["attachmentId"] = "";
+                        request.fields["attachmentId"] = "attachmentId";
                       }
 
                       if (selectedFile != null) {
@@ -559,21 +554,32 @@ class _QuestionCardState extends State<QuestionCard> {
                 // Header Row
                 Row(
                   children: [
+                    // ✅ User Panel Style Chip (Purple/Blue Gradient + Icon)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Colors.green.shade600, Colors.green.shade400],
+                          colors: [Colors.purple.shade600, Colors.blue.shade600],
                         ),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Text(
-                        widget.question.questionType.label,
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            widget.question.questionType.icon,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            widget.question.questionType.label,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const Spacer(),
@@ -641,27 +647,27 @@ class _QuestionCardState extends State<QuestionCard> {
                 ),
                 const SizedBox(height: 12),
 
-                // User Name
+                // ✅ User Panel Style User Info (Larger Avatar & Text)
                 Row(
                   children: [
                     CircleAvatar(
                       radius: 16,
-                      backgroundColor: Colors.green.withOpacity(0.1),
+                      backgroundColor: Colors.purple.withOpacity(0.1),
                       child: Text(
                         widget.question.userName.isNotEmpty ? widget.question.userName[0].toUpperCase() : "U",
                         style: GoogleFonts.inter(
-                          fontSize: 14,
+                          fontSize: 18, // ✅ Larger font
                           fontWeight: FontWeight.bold,
-                          color: Colors.green,
+                          color: Colors.purple, // ✅ Purple text
                         ),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        widget.question.userName,
+                        widget.question.fullName ?? widget.question.userName,
                         style: GoogleFonts.inter(
-                          fontSize: 14,
+                          fontSize: 18, // ✅ Larger font
                           fontWeight: FontWeight.w600,
                           color: Colors.grey[800],
                         ),
@@ -671,51 +677,28 @@ class _QuestionCardState extends State<QuestionCard> {
                 ),
                 const SizedBox(height: 12),
 
-                // Question Message
+                // ✅ User Panel Style Question Message
                 Text(
                   widget.question.message,
                   style: GoogleFonts.inter(
-                    fontSize: 15,
+                    fontSize: 18, // ✅ Larger font
                     color: Colors.grey[700],
                     height: 1.4,
                   ),
                 ),
                 const SizedBox(height: 12),
 
-                // Attachment Button
+                // Attachment
                 if (hasAttachment)
-                  InkWell(
-                    onTap: () => openAttachment(context, widget.question.attachmentId!),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.attach_file, size: 16, color: Colors.green),
-                          const SizedBox(width: 6),
-                          Text(
-                            "View Attachment",
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.green,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(Icons.open_in_new, size: 14, color: Colors.green),
-                        ],
-                      ),
-                    ),
+                  QuestionAttachmentWidget(
+                    attachmentId: widget.question.attachmentId!,
+                    height: 150,
+                    onViewAttachment: _navigateToAttachmentViewer,
                   ),
-
+                  
                 const Divider(color: Colors.grey, height: 24),
 
-                // Answers Section
+                // Answers Section Header
                 Row(
                   children: [
                     Icon(Icons.chat_bubble_outline, size: 16, color: Colors.grey[500]),
@@ -723,7 +706,7 @@ class _QuestionCardState extends State<QuestionCard> {
                     Text(
                       widget.question.answers.isEmpty ? "No answers yet" : "Answers (${widget.question.answers.length})",
                       style: GoogleFonts.inter(
-                        fontSize: 13,
+                        fontSize: 16, // ✅ Larger font
                         fontWeight: FontWeight.w600,
                         color: Colors.grey[600],
                       ),
@@ -743,7 +726,7 @@ class _QuestionCardState extends State<QuestionCard> {
                       child: Text(
                         "Be the first to answer this question",
                         style: GoogleFonts.inter(
-                          fontSize: 13,
+                          fontSize: 16, // ✅ Larger font
                           color: Colors.grey[500],
                         ),
                       ),
@@ -751,13 +734,12 @@ class _QuestionCardState extends State<QuestionCard> {
                   )
                 else
                   Column(
-                    children: widget.question.answers.map((a) => AnswerTile(answer: a, onRefresh: widget.refreshMethod)).toList(),
+                    children: widget.question.answers.map((a) => AnswerTile(answer: a)).toList(),
                   ),
-
-                const Divider(color: Colors.grey, height: 24),
-
-                // Answer Input Section (for advocates only)
+                
+                // ✅ Advocate Answer Input Section
                 if (isAdvocate) ...[
+                  const Divider(color: Colors.grey, height: 32),
                   Text(
                     "Your Answer",
                     style: GoogleFonts.inter(
@@ -838,6 +820,22 @@ class _QuestionCardState extends State<QuestionCard> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  // ========== অ্যাটাচমেন্ট ভিউয়ারের জন্য নেভিগেশন ==========
+  void _navigateToAttachmentViewer(String attachmentId) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token') ?? '';
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => QuestionAttachmentViewer(
+          attachmentId: attachmentId,
+          jwtToken: token,
         ),
       ),
     );

@@ -84,12 +84,12 @@ class _AskQuestionPageState extends State<AskQuestionPage> {
         elevation: 0,
         centerTitle: false,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
         flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
@@ -168,7 +168,7 @@ class _AskQuestionPageState extends State<AskQuestionPage> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.edit_note, size: 18, color: const Color(0xFF1A237E)),
+                      const Icon(Icons.edit_note, size: 18, color: Color(0xFF1A237E)),
                       const SizedBox(width: 8),
                       Text(
                         "Your Question",
@@ -211,7 +211,7 @@ class _AskQuestionPageState extends State<AskQuestionPage> {
 
             const SizedBox(height: 16),
 
-            // Speciality Selection
+            // ========== 🔥 স্পেশালিটি সিলেকশন (২টি সারিতে স্ক্রোলযোগ্য) ==========
             Container(
               padding: const EdgeInsets.all(16),
               decoration: _cardDecoration(),
@@ -220,7 +220,7 @@ class _AskQuestionPageState extends State<AskQuestionPage> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.category, size: 18, color: const Color(0xFF1A237E)),
+                      const Icon(Icons.category, size: 18, color: Color(0xFF1A237E)),
                       const SizedBox(width: 8),
                       Text(
                         "Select Speciality",
@@ -233,86 +233,9 @@ class _AskQuestionPageState extends State<AskQuestionPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: AdvocateSpeciality.values.length,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 1.4,
-                    ),
-                    itemBuilder: (context, index) {
-                      final speciality = AdvocateSpeciality.values[index];
-                      final isSelected = speciality == selectedSpeciality;
-
-                      return InkWell(
-                        onTap: () {
-                          setState(() => selectedSpeciality = speciality);
-                        },
-                        borderRadius: BorderRadius.circular(16),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: isSelected
-                                ? const LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      Color(0xFF1A237E), // Deep Navy
-                                      Color(0xFF283593), // Indigo
-                                    ],
-                                  )
-                                : null,
-                            color: isSelected ? null : Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: isSelected
-                                  ? Colors.transparent
-                                  : const Color(0xFF1A237E).withOpacity(0.3),
-                              width: 1.5,
-                            ),
-                            boxShadow: isSelected
-                                ? [
-                                    BoxShadow(
-                                      color: const Color(0xFF1A237E).withOpacity(0.3),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ]
-                                : [
-                                    BoxShadow(
-                                      color: Colors.grey.withOpacity(0.08),
-                                      blurRadius: 6,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                          ),
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                speciality.icon,
-                                color: isSelected ? Colors.white : const Color(0xFF1A237E),
-                                size: 30,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                speciality.label,
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: isSelected ? Colors.white : Colors.grey[700],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                  
+                  // 🔥 ২টি সারিতে স্ক্রোলযোগ্য স্পেশালিটি
+                  _buildSpecialitySelector(),
                 ],
               ),
             ),
@@ -328,7 +251,7 @@ class _AskQuestionPageState extends State<AskQuestionPage> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.attach_file, size: 18, color: const Color(0xFF1A237E)),
+                      const Icon(Icons.attach_file, size: 18, color: Color(0xFF1A237E)),
                       const SizedBox(width: 8),
                       Text(
                         "Attachment (Optional)",
@@ -367,7 +290,7 @@ class _AskQuestionPageState extends State<AskQuestionPage> {
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.check_circle, size: 14, color: Colors.green),
+                                const Icon(Icons.check_circle, size: 14, color: Colors.green),
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
@@ -487,6 +410,117 @@ class _AskQuestionPageState extends State<AskQuestionPage> {
             ),
 
             const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ========== 🔥 স্পেশালিটি সিলেক্টর (২টি সারিতে স্ক্রোলযোগ্য) ==========
+  Widget _buildSpecialitySelector() {
+    final allTypes = AdvocateSpeciality.values;
+    final totalTypes = allTypes.length;
+    
+    // প্রথম অর্ধেক এবং দ্বিতীয় অর্ধেকে ভাগ করা
+    final int midPoint = (totalTypes / 2).ceil();
+    final List<AdvocateSpeciality> firstHalf = allTypes.sublist(0, midPoint);
+    final List<AdvocateSpeciality> secondHalf = allTypes.sublist(midPoint);
+
+    return Column(
+      children: [
+        // 🔥 প্রথম সারি
+        _buildSpecialityRow(firstHalf),
+        const SizedBox(height: 10), // ২টি সারির মধ্যে গ্যাপ
+        // 🔥 দ্বিতীয় সারি
+        _buildSpecialityRow(secondHalf),
+      ],
+    );
+  }
+
+  // ========== 🔥 স্পেশালিটির সারি (স্ক্রোলযোগ্য) ==========
+  Widget _buildSpecialityRow(List<AdvocateSpeciality> items) {
+    return SizedBox(
+      height: 85, // সারির উচ্চতা
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal, // বাম-ডানে স্ক্রোল
+        physics: const BouncingScrollPhysics(), // স্মুথ স্ক্রোল
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final type = items[index];
+          final isSelected = selectedSpeciality == type;
+          
+          return Container(
+            width: 95, // প্রতিটি আইটেমের প্রস্থ
+            margin: const EdgeInsets.symmetric(horizontal: 6),
+            child: _buildTypeChip(type, isSelected),
+          );
+        },
+      ),
+    );
+  }
+
+  // ========== টাইপ চিপ ==========
+  Widget _buildTypeChip(AdvocateSpeciality type, bool isSelected) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (isSelected) {
+            selectedSpeciality = null; // ডিসিলেক্ট
+          } else {
+            selectedSpeciality = type; // সিলেক্ট
+          }
+        });
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: isSelected
+              ? const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF1A237E), // Deep Navy
+                    Color(0xFF283593), // Indigo
+                  ],
+                )
+              : null,
+          color: isSelected ? null : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected
+                ? Colors.transparent
+                : Colors.grey.shade300,
+            width: 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF1A237E).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : null,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              type.icon,
+              color: isSelected ? Colors.white : Colors.grey.shade700,
+              size: 26,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              type.label,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                color: isSelected ? Colors.white : Colors.grey.shade700,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ),
       ),
@@ -643,7 +677,7 @@ class _AskQuestionPageState extends State<AskQuestionPage> {
   Future<void> seeAllQuestion() async {
     await NavigationHelper.push(
       context,
-      const QuestionListPage(),
+      QuestionListPage(),
       transitionType: _getRandomAnimation(),
       duration: const Duration(milliseconds: 400),
     );

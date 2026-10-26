@@ -6,6 +6,7 @@ class PostReactionResponse {
   String? comment;
   final String userId;
   final String userName;
+  final String? fullName;
   final String advocatePostId;
 
   PostReactionResponse({
@@ -14,6 +15,7 @@ class PostReactionResponse {
     this.comment,
     required this.userId,
     required this.userName,
+    required this.fullName,
     required this.advocatePostId,
   });
 
@@ -25,6 +27,7 @@ class PostReactionResponse {
       comment: json['comment'],
       userId: json['userId'] ?? '',
       userName: json['userName'] ?? '',
+      fullName: json['fullName'],
       advocatePostId: json['advocatePostId'] ?? '',
     );
   }
@@ -37,6 +40,7 @@ class PostReactionResponse {
       if (comment != null) 'comment': comment,
       'userId': userId,
       'userName': userName,
+      'fullName': fullName,
       'advocatePostId': advocatePostId,
     };
   }
@@ -48,6 +52,7 @@ class PostReactionResponse {
     String? comment,
     String? userId,
     String? userName,
+    String? fullName,
     String? advocatePostId,
   }) {
     return PostReactionResponse(
@@ -56,6 +61,7 @@ class PostReactionResponse {
       comment: comment ?? this.comment,
       userId: userId ?? this.userId,
       userName: userName ?? this.userName,
+      fullName: fullName ?? this.fullName,
       advocatePostId: advocatePostId ?? this.advocatePostId,
     );
   }
@@ -74,6 +80,7 @@ class PostReactionResponse {
         other.comment == comment &&
         other.userId == userId &&
         other.userName == userName &&
+        other.fullName == fullName &&
         other.advocatePostId == advocatePostId;
   }
 
@@ -85,6 +92,7 @@ class PostReactionResponse {
       comment,
       userId,
       userName,
+      fullName,
       advocatePostId,
     );
   }

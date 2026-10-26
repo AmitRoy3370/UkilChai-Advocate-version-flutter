@@ -1,85 +1,76 @@
 import 'dart:convert';
-import 'package:advocatechaiadvocate/PostRelatedPages/post_response.dart';
+import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../Utils/AdvocateSpeciality.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../Utils/BaseURL.dart' as BASE_URL;
 import './AdvocatePost.dart';
 import 'PostAttachmentViewer.dart';
 import 'reaction_bar.dart';
+import '../PageTransition.dart';
+import 'attachment_widget.dart';
+import '../AdvocatePages/AdvocateDetails.dart';
+import '../AdvocatePages/AdvocateDetailsModel.dart';
+import '../Utils/AdvocateSpeciality.dart'; 
+import '../PostRelatedPages/post_response.dart';
 
 class PostCard extends StatefulWidget {
   final PostResponse post;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
-  final Function? onReactionChanged;
   final bool? canReact;
+  final Function? onReactionChanged;
 
   const PostCard({
-    super.key, 
-    required this.post, 
-    this.onEdit, 
-    this.onDelete, 
-    this.onReactionChanged, 
-    this.canReact
+    super.key,
+    required this.post,
+    this.onEdit,
+    this.onDelete,
+    this.canReact,
+    this.onReactionChanged,
   });
-
-  Future<String> getNameFromUser(String userId) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('jwt_token') ?? '';
-
-    final url = "${BASE_URL.Urls().baseURL}user/search?userId=$userId";
-
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {
-        "content-type": "application/json",
-        "Authorization": "Bearer $token",
-      },
-    );
-
-    if (response.statusCode == 200) {
-      final body = jsonDecode(response.body);
-      return body["name"] ?? "";
-    }
-    return "";
-  }
-
-  Future<String> getNameFromAdvocate(String advocateId) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('jwt_token') ?? '';
-
-    final url = "${BASE_URL.Urls().baseURL}advocate/$advocateId";
-
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {
-        "content-type": "application/json",
-        "Authorization": "Bearer $token",
-      },
-    );
-
-    if (response.statusCode == 200) {
-      final body = jsonDecode(response.body);
-      final userId = body["userId"];
-      return getNameFromUser(userId);
-    }
-    return "";
-  }
 
   @override
   State<StatefulWidget> createState() => _PostCardState();
 }
 
 class _PostCardState extends State<PostCard> {
-  // Check if attachment exists - moved inside state class
+  final List<PageTransitionType> _smoothAnimations = AnimatedRoute.getCompanySafeAnimations();
+  
+  bool _isExpanded = false;
+  static const int _maxLines = 3;
+  static const int _minCharLength = 100;
+
+  PageTransitionType _getRandomAnimation() {
+    final random = Random().nextInt(_smoothAnimations.length);
+    return _smoothAnimations[random];
+  }
+
   bool get hasAttachment {
     return widget.post.attachmentId != null &&
         widget.post.attachmentId!.isNotEmpty &&
         widget.post.attachmentId != "null" &&
         widget.post.attachmentId != "attachmentId";
+  }
+
+  bool get _isLongContent {
+    return widget.post.postContent.length > _minCharLength;
+  }
+
+  void _navigateToAttachmentViewer(String attachmentId) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token') ?? '';
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PostAttachmentView(
+          attachmentId: attachmentId,
+          jwtToken: token,
+        ),
+      ),
+    );
   }
 
   @override
@@ -105,7 +96,7 @@ class _PostCardState extends State<PostCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header Row
+                // ========== হেডার ==========
                 Row(
                   children: [
                     Container(
@@ -116,7 +107,7 @@ class _PostCardState extends State<PostCard> {
                         gradient: LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
-                          colors: [Colors.green.shade400, Colors.green.shade600],
+                          colors: [Colors.purple.shade400, Colors.blue.shade400],
                         ),
                       ),
                       child: Center(
@@ -137,39 +128,71 @@ class _PostCardState extends State<PostCard> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            widget.post.advocateName,
-                            style: GoogleFonts.inter(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey[800],
+                          GestureDetector(
+                            onTap: () async {
+                              final response = await http.get(
+                                Uri.parse("${BASE_URL.Urls().baseURL}advocate/${widget.post.advocateId}")
+                              );
+                              
+                              if (response.statusCode == 200) {
+                                final Map<String, dynamic> responseData = jsonDecode(response.body);
+                                final AdvocateDetailsModel advocate = AdvocateDetailsModel.fromJson(responseData);
+                                
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => AdvocateDetails(advocateDetailsModel: advocate),
+                                  ),
+                                );
+                              }
+                            },
+                            child: Text(
+                              widget.post.advocateFullName ?? widget.post.advocateName,
+                              style: GoogleFonts.inter(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[800],
+                              ),
                             ),
                           ),
                           const SizedBox(height: 4),
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: [Colors.green.shade400, Colors.green.shade600],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Colors.blue.shade600, 
+                                  Colors.blue.shade600,
+                                ],
                               ),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(16),
                             ),
-                            child: Text(
-                              widget.post.postType.label,
-                              style: GoogleFonts.inter(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  widget.post.postType.icon,
+                                  size: 12,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  widget.post.postType.label,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
                     ),
-                    // Edit/Delete buttons
+                    // ========== EDIT / DELETE BUTTONS (For Advocate Panel) ==========
                     if (widget.onEdit != null || widget.onDelete != null)
                       Row(
                         children: [
@@ -189,84 +212,28 @@ class _PostCardState extends State<PostCard> {
                 ),
                 const SizedBox(height: 12),
 
-                // Post Content
-                Text(
-                  widget.post.postContent,
-                  style: GoogleFonts.inter(
-                    fontSize: 15,
-                    color: Colors.grey[700],
-                    height: 1.4,
-                  ),
-                ),
+                // ========== পোস্ট কন্টেন্ট (See More/Less সহ) ==========
+                _buildPostContent(),
+                
                 const SizedBox(height: 12),
 
-                // Attachment Button - Only shows if attachment exists
+                // ========== অ্যাটাচমেন্ট উইজেট ==========
                 if (hasAttachment)
-                  InkWell(
-                    onTap: () async {
-                      SharedPreferences prefs = await SharedPreferences.getInstance();
-                      final token = prefs.getString('jwt_token') ?? '';
-
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => PostAttachmentView(
-                            attachmentId: widget.post.attachmentId!,
-                            jwtToken: token,
-                          ),
-                        ),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.attach_file, size: 16, color: Colors.green),
-                          const SizedBox(width: 6),
-                          Text(
-                            "View Attachment",
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.green,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(Icons.open_in_new, size: 14, color: Colors.green),
-                        ],
-                      ),
-                    ),
+                  AttachmentWidget(
+                    attachmentId: widget.post.attachmentId!,
+                    height: 150,
+                    onViewAttachment: _navigateToAttachmentViewer,
                   ),
 
                 const Divider(color: Colors.grey, height: 24),
 
-                // Reaction Bar
+                // ========== রিঅ্যাকশন বার ==========
                 ReactionBar(
                   postResponse: widget.post,
                   onReactionChanged: (reaction, action) {
                     setState(() {
-                      switch (action) {
-                        case 'add':
-                          widget.post.reactions.insert(0, reaction);
-                          break;
-                        case 'remove':
-                          widget.post.reactions.removeWhere((r) => r.id == reaction.id);
-                          break;
-                        case 'update':
-                          final index = widget.post.reactions.indexWhere((r) => r.id == reaction.id);
-                          if (index != -1) {
-                            widget.post.reactions[index] = reaction;
-                          }
-                          break;
-                      }
+                      widget.onReactionChanged?.call(reaction, action);
                     });
-                    widget.onReactionChanged?.call(reaction, action);
                   },
                   canReact: widget.canReact ?? true,
                 ),
@@ -275,6 +242,64 @@ class _PostCardState extends State<PostCard> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPostContent() {
+    final text = widget.post.postContent;
+    
+    if (!_isLongContent) {
+      return Text(
+        text,
+        style: GoogleFonts.inter(
+          fontSize: 15,
+          color: Colors.grey[700],
+          height: 1.4,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          text,
+          style: GoogleFonts.inter(
+            fontSize: 15,
+            color: Colors.grey[700],
+            height: 1.4,
+          ),
+          maxLines: _isExpanded ? null : _maxLines,
+          overflow: _isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 6),
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _isExpanded = !_isExpanded;
+            });
+          },
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _isExpanded ? 'See less' : 'See more',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blue.shade600,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                _isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                size: 18,
+                color: Colors.blue.shade600,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

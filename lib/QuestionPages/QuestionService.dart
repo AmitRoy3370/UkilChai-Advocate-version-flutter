@@ -1,6 +1,7 @@
+// lib/QuestionPages/QuestionService.dart
 import 'dart:convert';
 import 'dart:io';
-import 'package:advocatechaiadvocate/QuestionPages/question_response.dart';
+import '../QuestionPages/question_response.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -75,7 +76,6 @@ class QuestionService {
       throw Exception(body);
     }
   }
-
 
   /// -------------------------------------------------
   /// UPDATE QUESTION
@@ -165,11 +165,7 @@ class QuestionService {
       headers: await _headers(),
     );
 
-    List<QuestionResponse> questions = _parseList(res);
-
-    questions = questions.reversed.toList();
-
-    return questions;
+    return _parseList(res);
   }
 
   /// -------------------------------------------------
@@ -181,11 +177,7 @@ class QuestionService {
       headers: await _headers(),
     );
 
-    List<QuestionResponse> questions = _parseList(res);
-
-    questions = questions.reversed.toList();
-
-    return questions;
+    return _parseList(res);
   }
 
   /// -------------------------------------------------
@@ -197,11 +189,7 @@ class QuestionService {
       headers: await _headers(),
     );
 
-    List<QuestionResponse> questions = _parseList(res);
-
-    questions = questions.reversed.toList();
-
-    return questions;
+    return _parseList(res);
   }
 
   /// -------------------------------------------------
@@ -213,20 +201,16 @@ class QuestionService {
       headers: await _headers(),
     );
 
-    List<QuestionResponse> questions = _parseList(res);
-
-    questions = questions.reversed.toList();
-
-    return questions;
+    return _parseList(res);
   }
 
   /// -------------------------------------------------
   /// FILTER BETWEEN TIME
   /// -------------------------------------------------
   static Future<List<QuestionResponse>> findBetween(
-      DateTime start,
-      DateTime end,
-      ) async {
+    DateTime start,
+    DateTime end,
+  ) async {
     final res = await http.get(
       Uri.parse(
         "$_base/between?start=${start.toIso8601String()}&end=${end.toIso8601String()}",
@@ -234,11 +218,7 @@ class QuestionService {
       headers: await _headers(),
     );
 
-    List<QuestionResponse> questions = _parseList(res);
-
-    questions = questions.reversed.toList();
-
-    return questions;
+    return _parseList(res);
   }
 
   /// -------------------------------------------------
@@ -250,11 +230,7 @@ class QuestionService {
       headers: await _headers(),
     );
 
-    List<QuestionResponse> questions = _parseList(res);
-
-    questions = questions.reversed.toList();
-
-    return questions;
+    return _parseList(res);
   }
 
   /// -------------------------------------------------
@@ -266,24 +242,20 @@ class QuestionService {
       headers: await _headers(),
     );
 
-    List<QuestionResponse> questions = _parseList(res);
-
-    questions = questions.reversed.toList();
-
-    return questions;
+    return _parseList(res);
   }
 
   /// -------------------------------------------------
   /// FIND BY QUESTION ID
   /// -------------------------------------------------
-  static Future<QuestionResponse> findById(String id) async {
+  static Future<QuestionModel> findById(String id) async {
     final res = await http.get(
       Uri.parse("$_base/findByQuestionId?questionId=$id"),
       headers: await _headers(),
     );
 
     if (res.statusCode == 200) {
-      return QuestionResponse.fromJson(jsonDecode(res.body));
+      return QuestionModel.fromJson(jsonDecode(res.body));
     } else {
       throw Exception(res.body);
     }
@@ -297,6 +269,45 @@ class QuestionService {
       Uri.parse("$_base/downloadQuestionContent?attachmentId=$attachmentId"),
       headers: await _headers(),
     );
+  }
+
+  /// -------------------------------------------------
+  /// ✅ GET ALL PAGINATED (NEW)
+  /// -------------------------------------------------
+  static Future<QuestionPageModel> getAllPaginated({
+    int page = 0,
+    int size = 10,
+    String? sort,
+  }) async {
+    final query = {
+      "page": page.toString(),
+      "size": size.toString(),
+      if (sort != null && sort.isNotEmpty) "sort": sort,
+    };
+
+    final uri = Uri.parse("$_base/all/paginated").replace(queryParameters: query);
+    final res = await http.get(uri, headers: await _headers());
+
+    if (res.statusCode == 200) {
+      final decoded = jsonDecode(res.body);
+      
+      // Parse the list of questions into QuestionResponse objects
+      final responsesRaw = decoded['responses'] as List? ?? [];
+      final parsedResponses = responsesRaw
+          .map((e) => QuestionResponse.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      return QuestionPageModel(
+        responses: parsedResponses,
+        page: decoded['page'] ?? 0,
+        size: decoded['size'] ?? 10,
+        totalElement: decoded['totalElement'] ?? 0,
+        nextPage: decoded['nextPage']?.toString(),
+        previousPage: decoded['previousPage']?.toString(),
+      );
+    } else {
+      throw Exception(res.body);
+    }
   }
 
   /// -------------------------------------------------

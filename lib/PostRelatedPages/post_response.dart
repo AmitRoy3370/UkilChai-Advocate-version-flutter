@@ -9,6 +9,7 @@ class PostResponse {
   final String id;
   final String advocateId;
   final String advocateName;
+  final String? advocateFullName;
   final AdvocateSpeciality postType;
   final String postContent;
   final String? attachmentId;
@@ -18,6 +19,7 @@ class PostResponse {
     required this.id,
     required this.advocateId,
     required this.advocateName,
+    required this.advocateFullName,
     required this.postType,
     required this.postContent,
     this.attachmentId,
@@ -30,6 +32,7 @@ class PostResponse {
       id: json['id'] ?? '',
       advocateId: json['advocateId'] ?? '',
       advocateName: json['advocateName'] ?? '',
+      advocateFullName: json['advocateFullName'],
       postType: AdvocateSpecialityExt.fromApi(json['postType']),
       postContent: json['postContent'] ?? '',
       attachmentId: json['attachmentId'],
@@ -46,6 +49,7 @@ class PostResponse {
       'id': id,
       'advocateId': advocateId,
       'advocateName': advocateName,
+      'advocateFullName': advocateFullName,
       'postType': postType.apiValue,
       'postContent': postContent,
       if (attachmentId != null) 'attachmentId': attachmentId,
@@ -58,6 +62,7 @@ class PostResponse {
     String? id,
     String? advocateId,
     String? advocateName,
+    String? advocateFullName,
     AdvocateSpeciality? postType,
     String? postContent,
     String? attachmentId,
@@ -67,6 +72,7 @@ class PostResponse {
       id: id ?? this.id,
       advocateId: advocateId ?? this.advocateId,
       advocateName: advocateName ?? this.advocateName,
+      advocateFullName: advocateFullName ?? this.advocateFullName,
       postType: postType ?? this.postType,
       postContent: postContent ?? this.postContent,
       attachmentId: attachmentId ?? this.attachmentId,
@@ -113,6 +119,7 @@ class PostResponse {
         other.id == id &&
         other.advocateId == advocateId &&
         other.advocateName == advocateName &&
+        other.advocateFullName == advocateFullName &&
         other.postType == postType &&
         other.postContent == postContent &&
         other.attachmentId == attachmentId &&
@@ -121,6 +128,6 @@ class PostResponse {
 
   @override
   int get hashCode {
-    return Object.hash(id, advocateId, advocateName, postType, postContent, attachmentId, reactions.length);
+    return Object.hash(id, advocateId, advocateName, advocateFullName, postType, postContent, attachmentId, reactions.length);
   }
 }
