@@ -44,8 +44,6 @@ class PostCardHomePage extends StatelessWidget {
 
     final url = "${BASE_URL.Urls().baseURL}advocate/$advocateId";
 
-    //print("token from name of advocate :- $token");
-
     final response = await http.get(
       Uri.parse(url),
       headers: {
@@ -55,77 +53,94 @@ class PostCardHomePage extends StatelessWidget {
     );
 
     if (response.statusCode == 200) {
-      //print("find advocate ${advocateId} from name from advocate....");
-
       final body = jsonDecode(response.body);
       final userId = body["userId"];
-
-      //print("userId :- ${userId}");
-
       return getNameFromUser(userId);
     }
     return "";
   }
 
+  /// Returns true only when the post has a non-empty title.
+  bool get _hasTitle =>
+      post.postTitle != null && post.postTitle!.trim().isNotEmpty;
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Card(
       margin: const EdgeInsets.all(10),
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: SingleChildScrollView( child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            /*FutureBuilder<String>(
-              future: getNameFromAdvocate(post.advocateId),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Text("Loading...");
-                }
-                if (!snapshot.hasData || snapshot.hasError) {
-                  return const SizedBox.shrink();
-                }
-                return Text(snapshot.data!);
-              },
-            ),*/
-            Text(post.advocateName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),),
-            const SizedBox(height: 6),
-            Text(
-              post.postType.apiValue,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
-            Text(post.postContent),
-            const Divider(),
-            if (post.attachmentId != null)
-              ElevatedButton(
-                onPressed: () async {
-                  SharedPreferences prefs =
-                  await SharedPreferences.getInstance();
-                  final token = prefs.getString('jwt_token') ?? '';
-
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => PostAttachmentView(
-                        attachmentId: post.attachmentId!,
-                        jwtToken: token,
-                      ),
-                    ),
-                  );
-                },
-                child: Row(
-                  children: [
-                    const Icon(Icons.attachment),
-                    const SizedBox(width: 8),
-                    Text("View Attachment"),
-                  ],
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ---------- ADVOCATE NAME ----------
+              Text(
+                post.advocateName,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
                 ),
               ),
-            
-          ],
+              const SizedBox(height: 6),
+
+              // ---------- POST TITLE (conditional) ----------
+              if (_hasTitle) ...[
+                Text(
+                  post.postTitle!,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    height: 1.3,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 6),
+              ],
+
+              // ---------- POST TYPE ----------
+              Text(
+                post.postType.apiValue,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+
+              // ---------- POST CONTENT ----------
+              Text(post.postContent),
+
+              const Divider(),
+
+              // ---------- ATTACHMENT ----------
+              if (post.attachmentId != null)
+                ElevatedButton(
+                  onPressed: () async {
+                    SharedPreferences prefs =
+                        await SharedPreferences.getInstance();
+                    final token = prefs.getString('jwt_token') ?? '';
+
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => PostAttachmentView(
+                          attachmentId: post.attachmentId!,
+                          jwtToken: token,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Row(
+                    children: const [
+                      Icon(Icons.attachment),
+                      SizedBox(width: 8),
+                      Text("View Attachment"),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }

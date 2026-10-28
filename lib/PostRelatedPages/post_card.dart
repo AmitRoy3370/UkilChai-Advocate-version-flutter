@@ -54,6 +54,10 @@ class _PostCardState extends State<PostCard> {
         widget.post.attachmentId != "attachmentId";
   }
 
+  // Helper getter to check if title exists and is not empty
+  bool get _hasTitle =>
+      widget.post.postTitle != null && widget.post.postTitle!.trim().isNotEmpty;
+
   bool get _isLongContent {
     return widget.post.postContent.length > _minCharLength;
   }
@@ -210,6 +214,21 @@ class _PostCardState extends State<PostCard> {
                       ),
                   ],
                 ),
+
+                // ========== POST TITLE (Conditional) ==========
+                if (_hasTitle) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    widget.post.postTitle!,
+                    style: GoogleFonts.inter(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.grey[900],
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 12),
 
                 // ========== পোস্ট কন্টেন্ট (See More/Less সহ) ==========

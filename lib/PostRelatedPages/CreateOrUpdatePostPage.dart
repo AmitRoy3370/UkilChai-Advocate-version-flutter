@@ -25,6 +25,8 @@ class CreateOrUpdatePostPage extends StatefulWidget {
 
 class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
   final TextEditingController contentController = TextEditingController();
+  final TextEditingController titleController = TextEditingController();
+
   bool get isUpdate => widget.post != null;
 
   AdvocateSpeciality selectedType = AdvocateSpeciality.CRIMINAL_LAWYER;
@@ -41,6 +43,11 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
     super.initState();
     if (isUpdate) {
       contentController.text = widget.post!.postContent;
+      // Prefill title if it exists
+      if (widget.post!.postTitle != null &&
+          widget.post!.postTitle!.trim().isNotEmpty) {
+        titleController.text = widget.post!.postTitle!;
+      }
       selectedType = AdvocateSpecialityExt.fromApi(
         widget.post!.postType.apiValue,
       );
@@ -48,6 +55,13 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
         fileName = "Existing Attachment";
       }
     }
+  }
+
+  @override
+  void dispose() {
+    contentController.dispose();
+    titleController.dispose();
+    super.dispose();
   }
 
   String? getMimeType(String? extension) {
@@ -100,116 +114,119 @@ class _CreateOrUpdatePostPageState extends State<CreateOrUpdatePostPage> {
       });
     }
   }
-Future<void> submitPost() async {
-  final prefs = await SharedPreferences.getInstance();
-  final token = prefs.getString("jwt_token") ?? "";
-  final userId = prefs.getString("userId") ?? "";
-  final advocateId = prefs.getString("advocateId") ?? "";
 
-  final uri = isUpdate
-      ? Uri.parse(
-          "${baseURL.Urls().baseURL}advocate/posts/update/${widget.post!.id}/$userId",
-        )
-      : Uri.parse("${baseURL.Urls().baseURL}advocate/posts/upload/$userId");
+  Future<void> submitPost() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString("jwt_token") ?? "";
+    final userId = prefs.getString("userId") ?? "";
+    final advocateId = prefs.getString("advocateId") ?? "";
 
-  var request = http.MultipartRequest(isUpdate ? "PUT" : "POST", uri);
-  request.headers["Authorization"] = "Bearer $token";
+    final uri = isUpdate
+        ? Uri.parse(
+            "${baseURL.Urls().baseURL}advocate/posts/update/${widget.post!.id}/$userId",
+          )
+        : Uri.parse("${baseURL.Urls().baseURL}advocate/posts/upload/$userId");
 
-  request.fields["advocateId"] = advocateId;
-  request.fields["postContent"] = contentController.text.trim();
-  request.fields["postType"] = selectedType.apiValue;
+    var request = http.MultipartRequest(isUpdate ? "PUT" : "POST", uri);
+    request.headers["Authorization"] = "Bearer $token";
 
-  // ALWAYS send attachmentId for update requests
-  if (isUpdate) {
-    String? attachmentIdValue;
-    
-    if (selectedFile != null) {
-      // When uploading new file, send the existing attachmentId if it exists, otherwise send empty string
-      attachmentIdValue = hasExistingAttachment ? widget.post!.attachmentId! : "";
-    } else if (removeOldAttachment) {
-      // Removing attachment
-      //attachmentIdValue = "";
-    } else if (hasExistingAttachment) {
-      // Keeping existing attachment
-      attachmentIdValue = widget.post!.attachmentId!;
-    } else {
-      // No attachment
-      //attachmentIdValue = "";
-    }
-    
-    if(attachmentIdValue != null) {
+    request.fields["advocateId"] = advocateId;
+    request.fields["postContent"] = contentController.text.trim();
+    request.fields["postType"] = selectedType.apiValue;
 
-        request.fields["attachmentId"] = attachmentIdValue!;
-        print("Sending attachmentId: $attachmentIdValue");
-
+    // ---- TITLE (optional) ----
+    final titleText = titleController.text.trim();
+    if (titleText.isNotEmpty) {
+      request.fields["postTitle"] = titleText;
     }
 
-  }
+    // ALWAYS send attachmentId for update requests
+    if (isUpdate) {
+      String? attachmentIdValue;
 
-  // Add file if selected
-  if (selectedFile != null) {
-    final mimeTypeStr = getMimeType(fileExtension);
-    MediaType? contentType = mimeTypeStr != null
-        ? MediaType.parse(mimeTypeStr)
-        : null;
-
-    List<int> fileBytesToSend;
-    if (kIsWeb) {
-      fileBytesToSend = selectedFile!.bytes!;
-    } else {
-      if (selectedFile!.path != null) {
-        final file = File(selectedFile!.path!);
-        fileBytesToSend = await file.readAsBytes();
-      } else if (selectedFile!.bytes != null) {
-        fileBytesToSend = selectedFile!.bytes!;
+      if (selectedFile != null) {
+        attachmentIdValue =
+            hasExistingAttachment ? widget.post!.attachmentId! : "";
+      } else if (removeOldAttachment) {
+        // Removing attachment
+      } else if (hasExistingAttachment) {
+        // Keeping existing attachment
+        attachmentIdValue = widget.post!.attachmentId!;
       } else {
-        fileBytesToSend = [];
+        // No attachment
+      }
+
+      if (attachmentIdValue != null) {
+        request.fields["attachmentId"] = attachmentIdValue;
+        print("Sending attachmentId: $attachmentIdValue");
       }
     }
 
-    request.files.add(
-      http.MultipartFile.fromBytes(
-        "file",
-        fileBytesToSend,
-        filename: selectedFile!.name,
-        contentType: contentType,
-      ),
-    );
-    print("Adding file: ${selectedFile!.name}, size: ${selectedFile!.size}");
-  }
+    // Add file if selected
+    if (selectedFile != null) {
+      final mimeTypeStr = getMimeType(fileExtension);
+      MediaType? contentType =
+          mimeTypeStr != null ? MediaType.parse(mimeTypeStr) : null;
 
-  print("isUpdate: $isUpdate");
-  print("Has selectedFile: ${selectedFile != null}");
-  print("Fields: ${request.fields}");
-  print("Has file in request: ${request.files.isNotEmpty}");
+      List<int> fileBytesToSend;
+      if (kIsWeb) {
+        fileBytesToSend = selectedFile!.bytes!;
+      } else {
+        if (selectedFile!.path != null) {
+          final file = File(selectedFile!.path!);
+          fileBytesToSend = await file.readAsBytes();
+        } else if (selectedFile!.bytes != null) {
+          fileBytesToSend = selectedFile!.bytes!;
+        } else {
+          fileBytesToSend = [];
+        }
+      }
 
-  final response = await request.send();
-  final responseBody = await response.stream.bytesToString();
-
-  print("Status: ${response.statusCode}");
-  print("Body: $responseBody");
-
-  if (response.statusCode == 200 || response.statusCode == 201) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(isUpdate ? "Post updated successfully!" : "Post created successfully!"),
-          backgroundColor: Colors.green,
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          "file",
+          fileBytesToSend,
+          filename: selectedFile!.name,
+          contentType: contentType,
         ),
       );
-      Navigator.pop(context, true);
+      print("Adding file: ${selectedFile!.name}, size: ${selectedFile!.size}");
     }
-  } else {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Failed: $responseBody"), 
-          backgroundColor: Colors.red,
-        ),
-      );
+
+    print("isUpdate: $isUpdate");
+    print("Has selectedFile: ${selectedFile != null}");
+    print("Fields: ${request.fields}");
+    print("Has file in request: ${request.files.isNotEmpty}");
+
+    final response = await request.send();
+    final responseBody = await response.stream.bytesToString();
+
+    print("Status: ${response.statusCode}");
+    print("Body: $responseBody");
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isUpdate
+                ? "Post updated successfully!"
+                : "Post created successfully!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, true);
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed: $responseBody"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
-}
 
   void showSpecialityDialog() {
     showDialog(
@@ -248,7 +265,8 @@ Future<void> submitPost() async {
                     Navigator.pop(ctx);
                     setState(() {});
                   },
-                  child: Text("Done", style: GoogleFonts.inter(color: Colors.green)),
+                  child: Text("Done",
+                      style: GoogleFonts.inter(color: Colors.green)),
                 ),
               ],
             );
@@ -258,7 +276,6 @@ Future<void> submitPost() async {
     );
   }
 
-  // Check if attachment exists
   bool get hasExistingAttachment {
     if (!isUpdate) return false;
     final attachmentId = widget.post!.attachmentId;
@@ -294,7 +311,58 @@ Future<void> submitPost() async {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Post Content Field
+            // ================= POST TITLE FIELD =================
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: TextField(
+                controller: titleController,
+                maxLines: 1,
+                textInputAction: TextInputAction.next,
+                style: GoogleFonts.inter(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  height: 1.3,
+                ),
+                decoration: InputDecoration(
+                  hintText: "Post Title (optional)",
+                  hintStyle: GoogleFonts.inter(
+                    color: Colors.grey[400],
+                    fontWeight: FontWeight.w500,
+                  ),
+                  prefixIcon: Padding(
+                    padding: const EdgeInsets.only(left: 12, right: 8),
+                    child: Icon(
+                      Icons.title,
+                      color: Colors.green.shade600,
+                      size: 22,
+                    ),
+                  ),
+                  prefixIconConstraints:
+                      const BoxConstraints(minWidth: 0, minHeight: 0),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 18),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ================= POST CONTENT FIELD =================
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -326,7 +394,7 @@ Future<void> submitPost() async {
             ),
             const SizedBox(height: 20),
 
-            // Speciality Selection
+            // ================= SPECIALITY SELECTION =================
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -350,11 +418,15 @@ Future<void> submitPost() async {
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
-                              colors: [Colors.green.shade400, Colors.green.shade600],
+                              colors: [
+                                Colors.green.shade400,
+                                Colors.green.shade600
+                              ],
                             ),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.local_offer, color: Colors.white, size: 18),
+                          child: const Icon(Icons.local_offer,
+                              color: Colors.white, size: 18),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -397,7 +469,7 @@ Future<void> submitPost() async {
             ),
             const SizedBox(height: 20),
 
-            // Attachment Section
+            // ================= ATTACHMENT SECTION =================
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -421,11 +493,15 @@ Future<void> submitPost() async {
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
-                              colors: [Colors.blue.shade400, Colors.blue.shade600],
+                              colors: [
+                                Colors.blue.shade400,
+                                Colors.blue.shade600
+                              ],
                             ),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.attach_file, color: Colors.white, size: 18),
+                          child: const Icon(Icons.attach_file,
+                              color: Colors.white, size: 18),
                         ),
                         const SizedBox(width: 12),
                         Text(
@@ -441,7 +517,9 @@ Future<void> submitPost() async {
                     const SizedBox(height: 16),
 
                     // Show existing attachment
-                    if (hasExistingAttachment && !removeOldAttachment && selectedFile == null)
+                    if (hasExistingAttachment &&
+                        !removeOldAttachment &&
+                        selectedFile == null)
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -451,7 +529,8 @@ Future<void> submitPost() async {
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.insert_drive_file, color: Colors.green.shade700),
+                            Icon(Icons.insert_drive_file,
+                                color: Colors.green.shade700),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -476,7 +555,8 @@ Future<void> submitPost() async {
                               ),
                             ),
                             IconButton(
-                              icon: Icon(Icons.close, color: Colors.red.shade400, size: 20),
+                              icon: Icon(Icons.close,
+                                  color: Colors.red.shade400, size: 20),
                               onPressed: () {
                                 setState(() {
                                   removeOldAttachment = true;
@@ -490,7 +570,9 @@ Future<void> submitPost() async {
                       ),
 
                     // Show selected new file
-                    if (selectedFile != null && fileName != null && fileName!.isNotEmpty)
+                    if (selectedFile != null &&
+                        fileName != null &&
+                        fileName!.isNotEmpty)
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -500,7 +582,8 @@ Future<void> submitPost() async {
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.insert_drive_file, color: Colors.blue.shade700),
+                            Icon(Icons.insert_drive_file,
+                                color: Colors.blue.shade700),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -526,7 +609,8 @@ Future<void> submitPost() async {
                               ),
                             ),
                             IconButton(
-                              icon: Icon(Icons.close, color: Colors.red.shade400, size: 20),
+                              icon: Icon(Icons.close,
+                                  color: Colors.red.shade400, size: 20),
                               onPressed: () {
                                 setState(() {
                                   selectedFile = null;
@@ -542,8 +626,10 @@ Future<void> submitPost() async {
                       ),
 
                     // Add file button
-                    if (selectedFile == null && 
-                        (!hasExistingAttachment || removeOldAttachment || !isUpdate))
+                    if (selectedFile == null &&
+                        (!hasExistingAttachment ||
+                            removeOldAttachment ||
+                            !isUpdate))
                       Center(
                         child: ElevatedButton.icon(
                           onPressed: pickFiles,
@@ -552,7 +638,8 @@ Future<void> submitPost() async {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.grey[100],
                             foregroundColor: Colors.grey[700],
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 12),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                               side: BorderSide(color: Colors.grey[300]!),
@@ -560,11 +647,11 @@ Future<void> submitPost() async {
                           ),
                         ),
                       ),
-                    
+
                     // Show info text
-                    if (selectedFile == null && 
-                        isUpdate && 
-                        !hasExistingAttachment && 
+                    if (selectedFile == null &&
+                        isUpdate &&
+                        !hasExistingAttachment &&
                         !removeOldAttachment)
                       Padding(
                         padding: const EdgeInsets.all(12),
@@ -586,7 +673,7 @@ Future<void> submitPost() async {
 
             const SizedBox(height: 30),
 
-            // Submit Button
+            // ================= SUBMIT BUTTON =================
             SizedBox(
               width: double.infinity,
               height: 56,
@@ -614,10 +701,13 @@ Future<void> submitPost() async {
                         content: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const CircularProgressIndicator(color: Colors.green),
+                            const CircularProgressIndicator(
+                                color: Colors.green),
                             const SizedBox(height: 16),
                             Text(
-                              isUpdate ? "Updating post..." : "Creating post...",
+                              isUpdate
+                                  ? "Updating post..."
+                                  : "Creating post...",
                               style: GoogleFonts.inter(
                                 fontSize: 14,
                                 color: Colors.grey[600],

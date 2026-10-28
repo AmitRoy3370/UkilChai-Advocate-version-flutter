@@ -22,6 +22,8 @@ import '../AdvocatePages/advocate_home_page_pageview.dart';
 import '../CaseRelatedPages/CaseHomePage.dart';
 import '../CaseRelatedPages/hearing_calendar_page.dart';
 import 'HomePage/corporate_banner.dart';
+import 'package:provider/provider.dart';
+import '../LiveLocations/live_location_provider.dart';
 import '../Farayez/farayez_calculator.dart';
 import 'HomePage/today_hearings_card.dart';
 

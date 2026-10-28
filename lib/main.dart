@@ -11,7 +11,7 @@ import 'package:flutter/foundation.dart';
 import '../Auth/AuthService.dart';
 import 'ChatRelatedPages/AllUserChatListScreen.dart';
 import 'ChatRelatedPages/user_active_service.dart';
-import 'HomePage.dart';
+import 'HomePage.dart'; // Note: You might want to rename this file if it's the main scaffold
 import 'LifeCycles/LifecycleManager.dart';
 import 'LifeCycles/PresenceSocketService.dart';
 import 'LogInPage/LogIn.dart';
@@ -31,7 +31,12 @@ import 'splash_screen.dart';
 import '../Auth/AuthGate.dart';
 import '../AdvocatePages/AdvocateProfilePage.dart';
 
-// 👇 ADD THESE IMPORTS (Adjust paths if necessary based on your project structure)
+// 👇 ADDED IMPORT FOR LIVE LOCATION
+import '../LiveLocations/live_location_screen.dart';
+import 'package:provider/provider.dart';
+import 'LiveLocations/live_location_provider.dart';
+
+// 👇 ADD THESE IMPORTS
 import '../DirectorsPages/director_profile_page.dart';
 import '../ShareholderPages/shareholder_profile_page.dart';
 import '../DirectorsPages/director_list_page.dart';
@@ -106,6 +111,7 @@ class _MyHomePageState extends State<MyHomePage> {
   // 👇 ADDED MISSING IDS
   String? _directorId;
   String? _shareHolderId;
+  String? _advocateId; // 👈 Added to pass to Live Location
 
   // 👇 ADDED: advocate flag for drawer label + routing
   bool _isAdvocate = false;
@@ -294,6 +300,7 @@ class _MyHomePageState extends State<MyHomePage> {
             _userName = data['name'] ?? "User";
             _directorId = directorId;
             _shareHolderId = shareHolderId;
+            _advocateId = advocateId.isNotEmpty ? advocateId : null; // 👈 Stored
             _isAdvocate = advocateId.isNotEmpty;
           });
           print('User loaded: $_userName');
@@ -309,6 +316,7 @@ class _MyHomePageState extends State<MyHomePage> {
         _isAdvocate = false;
         _directorId = null;
         _shareHolderId = null;
+        _advocateId = null;
       });
     }
   }
@@ -401,10 +409,6 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // Helpers: profile routing (advocate vs user), open login
-  // ═══════════════════════════════════════════════════════════════════════
-
   Future<void> _openProfileTarget() async {
     final loggedIn = await AuthGate.isLoggedIn();
     if (!loggedIn) {
@@ -466,7 +470,6 @@ class _MyHomePageState extends State<MyHomePage> {
               IconButton(
                 icon: const Icon(Icons.notifications, color: Colors.white),
                 onPressed: () async {
-                  // Optional: gate notifications behind login too
                   final loggedIn = await AuthGate.isLoggedIn();
                   if (!loggedIn) {
                     await Navigator.push(
@@ -564,6 +567,14 @@ class _MyHomePageState extends State<MyHomePage> {
                       title: "Chat",
                       index: 3,
                     ),
+
+                    // 👇 ADDED LIVE LOCATION BUTTON HERE
+                    _buildModernDrawerItem(
+                      icon: Icons.map,
+                      title: "Live Location",
+                      index: 15, 
+                    ),
+
                     const Divider(
                         color: Colors.white38, height: 20, thickness: 1),
 
@@ -625,7 +636,6 @@ class _MyHomePageState extends State<MyHomePage> {
                       index: 5,
                     ),
 
-                    // NOTE: Terms & Privacy uses index 12 in _onItemTapped
                     _buildModernDrawerItem(
                       icon: Icons.description,
                       title: "Terms & Privacy",
@@ -730,7 +740,8 @@ class _MyHomePageState extends State<MyHomePage> {
         index == 11 ||
         index == 12 ||
         index == 13 ||
-        index == 14);
+        index == 14 ||
+        index == 15); // Added 15
     final isSelected = isSpecialPage ? false : (_selectedIndex == index);
 
     return AnimatedContainer(
@@ -796,9 +807,6 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  // Central drawer tap handler
-  // ═══════════════════════════════════════════════════════════════════
   void _onItemTapped(int newIndex) async {
     // ─── Auth gate ────────────────────────────────────────────────
     // Home (0), About Ukil (5), Terms & Privacy (12) are public.
@@ -821,6 +829,34 @@ class _MyHomePageState extends State<MyHomePage> {
       }
     }
     // ───────────────────────────────────────────────────────────────
+    // 👇 HANDLE LIVE LOCATION (index 15)
+    if (newIndex == 15) {
+      Navigator.pop(context);
+      if (_userId == null || _userId!.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Please login first'),
+              backgroundColor: Colors.orange),
+        );
+        return;
+      }
+      
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          // FIX: Wrap the screen with the required Provider
+          builder: (context) => ChangeNotifierProvider(
+            create: (_) => LiveLocationProvider(), // <--- This will now be recognized
+            child: LiveLocationScreen(
+              userId: _userId!,
+              userName: _userName ?? "User",
+              advocateId: _advocateId, // Passes null if not an advocate
+            ),
+          ),
+        ),
+      );
+      return;
+    }
 
     // Handle Company Registration (index 13)
     if (newIndex == 13) {

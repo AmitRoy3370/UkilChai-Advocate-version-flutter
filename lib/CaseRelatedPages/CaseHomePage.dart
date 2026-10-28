@@ -173,7 +173,7 @@ class CaseHomePage extends StatelessWidget {
                         );
                       },
                     ),
-                    _buildAnimatedCaseCard(
+                    /*_buildAnimatedCaseCard(
                       context,
                       title: "All Cases",
                       icon: Icons.cases,
@@ -186,7 +186,7 @@ class CaseHomePage extends StatelessWidget {
                           const SeeAllCasesPage(),
                         );
                       },
-                    ),
+                    ),*/
                   ],
                 ),
               ),

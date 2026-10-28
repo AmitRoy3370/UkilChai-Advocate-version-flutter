@@ -1,11 +1,11 @@
-import '../PostRelatedPages/post_reaction.dart';
+import 'post_reaction.dart';
 
 class PostReactionResponse {
   final String id;
-  PostReactions? postReaction;
-  String? comment;
+  final PostReactions? postReaction;
+  final String? comment;
   final String userId;
-  final String userName;
+  final String? userName;
   final String? fullName;
   final String advocatePostId;
 
@@ -14,42 +14,48 @@ class PostReactionResponse {
     this.postReaction,
     this.comment,
     required this.userId,
-    required this.userName,
-    required this.fullName,
+    this.userName,
+    this.fullName,
     required this.advocatePostId,
   });
 
-  // From JSON Factory Constructor
   factory PostReactionResponse.fromJson(Map<String, dynamic> json) {
     return PostReactionResponse(
       id: json['id'] ?? '',
-      postReaction: PostReactions.fromString(json['postReaction'] ?? 'LIKE'),
+      postReaction: json['postReaction'] != null
+          ? PostReactions.fromString(json['postReaction'])
+          : null,
       comment: json['comment'],
       userId: json['userId'] ?? '',
-      userName: json['userName'] ?? '',
+      userName: json['userName'],
       fullName: json['fullName'],
       advocatePostId: json['advocatePostId'] ?? '',
     );
   }
 
-  // To JSON Method
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'postReaction': postReaction?.value,
+      if (postReaction != null) 'postReaction': postReaction!.value,
       if (comment != null) 'comment': comment,
       'userId': userId,
-      'userName': userName,
-      'fullName': fullName,
+      if (userName != null) 'userName': userName,
+      if (fullName != null) 'fullName': fullName,
       'advocatePostId': advocatePostId,
     };
   }
 
-  // Copy With Method (State Update এর জন্য)
+  // ---------------- copyWith ----------------
+  // NOTE: To explicitly clear `comment` or `postReaction`, use
+  // `copyWith(clearComment: true)` / `copyWith(clearPostReaction: true)`,
+  // because a plain `?? this.comment` would preserve the old value
+  // when you pass `null`.
   PostReactionResponse copyWith({
     String? id,
     PostReactions? postReaction,
+    bool clearPostReaction = false,
     String? comment,
+    bool clearComment = false,
     String? userId,
     String? userName,
     String? fullName,
@@ -57,8 +63,9 @@ class PostReactionResponse {
   }) {
     return PostReactionResponse(
       id: id ?? this.id,
-      postReaction: postReaction ?? this.postReaction,
-      comment: comment ?? this.comment,
+      postReaction:
+          clearPostReaction ? null : (postReaction ?? this.postReaction),
+      comment: clearComment ? null : (comment ?? this.comment),
       userId: userId ?? this.userId,
       userName: userName ?? this.userName,
       fullName: fullName ?? this.fullName,
@@ -68,32 +75,6 @@ class PostReactionResponse {
 
   @override
   String toString() {
-    return 'PostReactionResponse(id: $id, postReaction: ${postReaction?.label}, userId: $userId, advocatePostId: $advocatePostId)';
-  }
-
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is PostReactionResponse &&
-        other.id == id &&
-        other.postReaction == postReaction &&
-        other.comment == comment &&
-        other.userId == userId &&
-        other.userName == userName &&
-        other.fullName == fullName &&
-        other.advocatePostId == advocatePostId;
-  }
-
-  @override
-  int get hashCode {
-    return Object.hash(
-      id,
-      postReaction,
-      comment,
-      userId,
-      userName,
-      fullName,
-      advocatePostId,
-    );
+    return 'PostReactionResponse(id: $id, postReaction: $postReaction, comment: $comment, userId: $userId, userName: $userName, advocatePostId: $advocatePostId)';
   }
 }

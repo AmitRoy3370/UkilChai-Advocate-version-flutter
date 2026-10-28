@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../Utils/BaseURL.dart' as BASE_URL;
 import './ReactionService.dart';
-import './PostReaction.dart';
+// REMOVED: import './PostReaction.dart';  ← was causing duplicate PostReaction
 
 class ReactionBar extends StatefulWidget {
   final PostResponse postResponse;
@@ -58,8 +58,10 @@ class _ReactionBarState extends State<ReactionBar> {
   Future<void> _loadReactions() async {
     final prefs = await SharedPreferences.getInstance();
     myUserId ??= prefs.getString('userId');
-    myName = await getNameFromUser(myUserId!);
-    
+    if (myUserId != null) {
+      myName = await getNameFromUser(myUserId!);
+    }
+
     setState(() {
       reactions = widget.postResponse.reactions;
     });
@@ -71,13 +73,16 @@ class _ReactionBarState extends State<ReactionBar> {
     final url = "${BASE_URL.Urls().baseURL}user/search?userId=$userId";
     final response = await http.get(
       Uri.parse(url),
-      headers: {"content-type": "application/json", "Authorization": "Bearer $token"},
+      headers: {
+        "content-type": "application/json",
+        "Authorization": "Bearer $token",
+      },
     );
     if (response.statusCode == 200) {
       final body = jsonDecode(response.body);
 
       setState(() {
-         myFullName = body["fullName"];
+        myFullName = body["fullName"];
       });
 
       return body["name"] ?? "User";
@@ -89,7 +94,8 @@ class _ReactionBarState extends State<ReactionBar> {
   Widget build(BuildContext context) {
     Map<String, int> reactionCounts = {};
     for (var r in reactions.where((r) => r.postReaction?.value != null)) {
-      reactionCounts[r.postReaction!.value] = (reactionCounts[r.postReaction?.value] ?? 0) + 1;
+      reactionCounts[r.postReaction!.value] =
+          (reactionCounts[r.postReaction?.value] ?? 0) + 1;
     }
 
     return Column(
@@ -104,7 +110,8 @@ class _ReactionBarState extends State<ReactionBar> {
               runSpacing: 4,
               children: reactionCounts.entries.map((entry) {
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.grey[100],
                     borderRadius: BorderRadius.circular(20),
@@ -112,11 +119,13 @@ class _ReactionBarState extends State<ReactionBar> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(reactionIcons[entry.key] ?? Icons.help_outline, size: 14),
+                      Icon(reactionIcons[entry.key] ?? Icons.help_outline,
+                          size: 14),
                       const SizedBox(width: 4),
                       Text(
                         entry.value.toString(),
-                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500),
+                        style: GoogleFonts.inter(
+                            fontSize: 12, fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),
@@ -139,14 +148,18 @@ class _ReactionBarState extends State<ReactionBar> {
               itemCount: reactions.length,
               itemBuilder: (context, index) {
                 var r = reactions[index];
-                final userName = r.fullName ?? r.userName;
+                // FIX: coalesce to non-null String
+                final String userName =
+                    (r.fullName ?? r.userName ?? "User");
                 final isOwn = r.userId == myUserId;
                 final hasReaction = r.postReaction != null;
                 final reactionValue = hasReaction ? r.postReaction!.value : '';
-                final hasContent = hasReaction || (r.comment != null && r.comment!.isNotEmpty);
+                final hasContent = hasReaction ||
+                    (r.comment != null && r.comment!.isNotEmpty);
 
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     border: Border(
                       bottom: BorderSide(color: Colors.grey[200]!, width: 0.5),
@@ -159,8 +172,13 @@ class _ReactionBarState extends State<ReactionBar> {
                         radius: 16,
                         backgroundColor: Colors.purple.withOpacity(0.1),
                         child: Text(
-                          userName.isNotEmpty ? userName[0].toUpperCase() : "?",
-                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.purple),
+                          userName.isNotEmpty
+                              ? userName[0].toUpperCase()
+                              : "?",
+                          style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.purple),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -169,21 +187,28 @@ class _ReactionBarState extends State<ReactionBar> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              userName,
-                              style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                              userName, // now non-null String
+                              style: GoogleFonts.inter(
+                                  fontSize: 13, fontWeight: FontWeight.w600),
                             ),
                             if (hasContent) ...[
                               const SizedBox(height: 4),
                               Row(
                                 children: [
                                   if (hasReaction && reactionValue.isNotEmpty)
-                                    Icon(reactionIcons[reactionValue] ?? Icons.help_outline, size: 14),
-                                  if (r.comment != null && r.comment!.isNotEmpty) ...[
+                                    Icon(
+                                        reactionIcons[reactionValue] ??
+                                            Icons.help_outline,
+                                        size: 14),
+                                  if (r.comment != null &&
+                                      r.comment!.isNotEmpty) ...[
                                     if (hasReaction) const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
                                         r.comment!,
-                                        style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[600]),
+                                        style: GoogleFonts.inter(
+                                            fontSize: 12,
+                                            color: Colors.grey[600]),
                                       ),
                                     ),
                                   ],
@@ -195,17 +220,20 @@ class _ReactionBarState extends State<ReactionBar> {
                       ),
                       if (isOwn && widget.canReact == true)
                         PopupMenuButton<String>(
-                          icon: Icon(Icons.more_vert, size: 16, color: Colors.grey[500]),
+                          icon: Icon(Icons.more_vert,
+                              size: 16, color: Colors.grey[500]),
                           onSelected: (value) {
                             if (value == 'Edit') {
                               _editReaction(r);
                             } else if (value == 'Delete') {
-                              _deleteReaction(r.id!, r);
+                              _deleteReaction(r.id, r);
                             }
                           },
                           itemBuilder: (context) => [
-                            const PopupMenuItem(value: 'Edit', child: Text('Edit')),
-                            const PopupMenuItem(value: 'Delete', child: Text('Delete')),
+                            const PopupMenuItem(
+                                value: 'Edit', child: Text('Edit')),
+                            const PopupMenuItem(
+                                value: 'Delete', child: Text('Delete')),
                           ],
                         ),
                     ],
@@ -221,7 +249,9 @@ class _ReactionBarState extends State<ReactionBar> {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: reactionIcons.keys.map((reaction) => _reactionBtn(reaction)).toList(),
+              children: reactionIcons.keys
+                  .map((reaction) => _reactionBtn(reaction))
+                  .toList(),
             ),
           ),
           const SizedBox(height: 10),
@@ -253,7 +283,10 @@ class _ReactionBarState extends State<ReactionBar> {
             width: double.infinity,
             child: ElevatedButton.icon(
               icon: submitting
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.send, size: 18),
               label: Text(submitting ? "Submitting..." : "Submit"),
               onPressed: submitting ? null : _submitNew,
@@ -261,7 +294,8 @@ class _ReactionBarState extends State<ReactionBar> {
                 backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ),
@@ -296,7 +330,9 @@ class _ReactionBarState extends State<ReactionBar> {
     final comment = _commentController.text.trim();
     if (selectedReaction == null && comment.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Please add a reaction or write a comment"), backgroundColor: Colors.orange),
+        SnackBar(
+            content: Text("Please add a reaction or write a comment"),
+            backgroundColor: Colors.orange),
       );
       return;
     }
@@ -317,35 +353,42 @@ class _ReactionBarState extends State<ReactionBar> {
 
       if (reaction != null) {
         final reactionResponse = PostReactionResponse(
-          id: reaction.id,
-          postReaction: reaction.reaction != null ? PostReactions.fromString(reaction.reaction!) : null,
+          id: reaction.id ?? '',
+          postReaction: reaction.postReaction != null
+              ? reaction.postReaction!
+              : null,
           comment: reaction.comment,
           userId: reaction.userId,
-          userName: myName!,
+          userName: myName ?? "User",
           fullName: myFullName,
           advocatePostId: reaction.advocatePostId,
         );
 
         widget.onReactionChanged?.call(reactionResponse, "add");
-        
+
         setState(() {
           reactions.insert(0, reactionResponse);
         });
-        
+
         _commentController.clear();
         selectedReaction = null;
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Submitted successfully"), backgroundColor: Colors.green),
+          SnackBar(
+              content: Text("Submitted successfully"),
+              backgroundColor: Colors.green),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Failed to submit"), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text("Failed to submit"), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Submission failed: $e"), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text("Submission failed: $e"),
+            backgroundColor: Colors.red),
       );
     } finally {
       setState(() => submitting = false);
@@ -353,8 +396,9 @@ class _ReactionBarState extends State<ReactionBar> {
   }
 
   Future<void> _editReaction(PostReactionResponse r) async {
-    String? editReaction = r.postReaction!.value;
-    final editCommentController = TextEditingController(text: r.comment ?? '');
+    String? editReaction = r.postReaction?.value;
+    final editCommentController =
+        TextEditingController(text: r.comment ?? '');
 
     final result = await showDialog<bool>(
       context: context,
@@ -363,8 +407,10 @@ class _ReactionBarState extends State<ReactionBar> {
           builder: (context, setDialogState) {
             return AlertDialog(
               backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: Text("Edit Reaction", style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: Text("Edit Reaction",
+                  style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -376,7 +422,10 @@ class _ReactionBarState extends State<ReactionBar> {
                         return Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: FilterChip(
-                            avatar: Icon(reactionIcons[reaction] ?? Icons.help_outline, size: 16),
+                            avatar: Icon(
+                                reactionIcons[reaction] ??
+                                    Icons.help_outline,
+                                size: 16),
                             label: const SizedBox.shrink(),
                             selected: isSelected,
                             onSelected: (_) {
@@ -397,14 +446,19 @@ class _ReactionBarState extends State<ReactionBar> {
                     style: GoogleFonts.inter(fontSize: 14),
                     decoration: InputDecoration(
                       hintText: "Edit comment",
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
                 ],
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
-                ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text("Save")),
+                TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text("Cancel")),
+                ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text("Save")),
               ],
             );
           },
@@ -416,7 +470,9 @@ class _ReactionBarState extends State<ReactionBar> {
       final comment = editCommentController.text.trim();
       if (editReaction == null && comment.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Please add a reaction or write a comment"), backgroundColor: Colors.orange),
+          SnackBar(
+              content: Text("Please add a reaction or write a comment"),
+              backgroundColor: Colors.orange),
         );
         editCommentController.dispose();
         return;
@@ -437,31 +493,42 @@ class _ReactionBarState extends State<ReactionBar> {
         );
 
         if (postReaction != null) {
-          final updatedResponse = r.copyWith(
-            postReaction: PostReactions.fromString(postReaction.reaction!),
+          // FIX: build a fresh response so an empty comment can be cleared.
+          // (copyWith(comment: null) would keep the old comment.)
+          final updatedResponse = PostReactionResponse(
+            id: r.id,
+            postReaction: postReaction.postReaction,
             comment: postReaction.comment,
+            userId: r.userId,
+            userName: r.userName,
+            fullName: r.fullName,
+            advocatePostId: r.advocatePostId,
           );
-          
+
           widget.onReactionChanged?.call(updatedResponse, "update");
-          
+
           setState(() {
             final index = reactions.indexWhere((item) => item.id == r.id);
             if (index != -1) {
               reactions[index] = updatedResponse;
             }
           });
-          
+
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Updated successfully"), backgroundColor: Colors.green),
+            SnackBar(
+                content: Text("Updated successfully"),
+                backgroundColor: Colors.green),
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Update failed"), backgroundColor: Colors.red),
+            SnackBar(
+                content: Text("Update failed"), backgroundColor: Colors.red),
           );
         }
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Update failed: $e"), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text("Update failed: $e"), backgroundColor: Colors.red),
         );
       } finally {
         setState(() => submitting = false);
@@ -470,16 +537,20 @@ class _ReactionBarState extends State<ReactionBar> {
     editCommentController.dispose();
   }
 
-  Future<void> _deleteReaction(String reactionId, PostReactionResponse postReactionResponse) async {
+  Future<void> _deleteReaction(
+      String reactionId, PostReactionResponse postReactionResponse) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text("Delete Reaction", style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+        title: Text("Delete Reaction",
+            style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
         content: const Text("Are you sure you want to delete this?"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -496,23 +567,28 @@ class _ReactionBarState extends State<ReactionBar> {
     final token = prefs.getString('jwt_token') ?? '';
 
     try {
-      bool deleted = await ReactionService.deleteReaction(reactionId, myUserId!, token);
+      bool deleted =
+          await ReactionService.deleteReaction(reactionId, myUserId!, token);
       if (deleted) {
         widget.onReactionChanged?.call(postReactionResponse, "remove");
         setState(() {
           reactions.removeWhere((item) => item.id == reactionId);
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Deleted successfully"), backgroundColor: Colors.green),
+          SnackBar(
+              content: Text("Deleted successfully"),
+              backgroundColor: Colors.green),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Delete failed"), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text("Delete failed"), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Delete failed: $e"), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text("Delete failed: $e"), backgroundColor: Colors.red),
       );
     } finally {
       setState(() => submitting = false);

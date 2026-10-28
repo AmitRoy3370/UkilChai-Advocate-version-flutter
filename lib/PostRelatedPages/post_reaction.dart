@@ -11,7 +11,6 @@ enum PostReactions {
   surprise,
   sad;
 
-  // Enum থেকে String এ কনভার্ট
   String get value {
     switch (this) {
       case PostReactions.like:
@@ -35,7 +34,6 @@ enum PostReactions {
     }
   }
 
-  // String থেকে Enum এ কনভার্ট
   static PostReactions fromString(String value) {
     switch (value.toUpperCase()) {
       case 'LIKE':
@@ -61,7 +59,6 @@ enum PostReactions {
     }
   }
 
-  // UI দেখানোর জন্য আইকন
   IconData get icon {
     switch (this) {
       case PostReactions.like:
@@ -85,7 +82,6 @@ enum PostReactions {
     }
   }
 
-  // UI দেখানোর জন্য রঙ
   Color get color {
     switch (this) {
       case PostReactions.like:
@@ -109,7 +105,6 @@ enum PostReactions {
     }
   }
 
-  // UI দেখানোর জন্য লেবেল
   String get label {
     switch (this) {
       case PostReactions.like:
@@ -131,5 +126,48 @@ enum PostReactions {
       case PostReactions.sad:
         return 'Sad';
     }
+  }
+}
+
+class PostReaction {
+  final String? id;
+  final PostReactions? postReaction;
+  final String? comment;
+  final String userId;
+  final String advocatePostId;
+
+  PostReaction({
+    this.id,
+    this.postReaction,
+    this.comment,
+    required this.userId,
+    required this.advocatePostId,
+  });
+
+  factory PostReaction.fromJson(Map<String, dynamic> json) {
+    return PostReaction(
+      id: json['id'],
+      postReaction: json['postReaction'] != null
+          ? PostReactions.fromString(json['postReaction'])
+          : null,
+      comment: json['comment'],
+      userId: json['userId'] ?? '',
+      advocatePostId: json['advocatePostId'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      if (id != null) 'id': id,
+      if (postReaction != null) 'postReaction': postReaction!.value,
+      if (comment != null) 'comment': comment,
+      'userId': userId,
+      'advocatePostId': advocatePostId,
+    };
+  }
+
+  @override
+  String toString() {
+    return 'PostReaction [id=$id, postReaction=$postReaction, comment=$comment, userId=$userId, advocatePostId=$advocatePostId]';
   }
 }

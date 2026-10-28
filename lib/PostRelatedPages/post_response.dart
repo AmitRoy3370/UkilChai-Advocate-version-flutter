@@ -1,8 +1,6 @@
-import 'dart:ui';
-
+import 'package:flutter/material.dart';
 import '../PostRelatedPages/post_reaction.dart';
 import '../PostRelatedPages/post_reaction_response.dart';
-
 import '../Utils/AdvocateSpeciality.dart';
 
 class PostResponse {
@@ -12,6 +10,7 @@ class PostResponse {
   final String? advocateFullName;
   final AdvocateSpeciality postType;
   final String postContent;
+  final String? postTitle;
   final String? attachmentId;
   final List<PostReactionResponse> reactions;
 
@@ -22,11 +21,11 @@ class PostResponse {
     required this.advocateFullName,
     required this.postType,
     required this.postContent,
+    this.postTitle,
     this.attachmentId,
     required this.reactions,
   });
 
-  // From JSON Factory Constructor
   factory PostResponse.fromJson(Map<String, dynamic> json) {
     return PostResponse(
       id: json['id'] ?? '',
@@ -35,15 +34,15 @@ class PostResponse {
       advocateFullName: json['advocateFullName'],
       postType: AdvocateSpecialityExt.fromApi(json['postType']),
       postContent: json['postContent'] ?? '',
+      postTitle: json['postTitle'],
       attachmentId: json['attachmentId'],
       reactions: (json['reactions'] as List?)
-          ?.map((reaction) => PostReactionResponse.fromJson(reaction))
-          .toList() ??
+              ?.map((reaction) => PostReactionResponse.fromJson(reaction))
+              .toList() ??
           [],
     );
   }
 
-  // To JSON Method
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -52,12 +51,12 @@ class PostResponse {
       'advocateFullName': advocateFullName,
       'postType': postType.apiValue,
       'postContent': postContent,
+      if (postTitle != null) 'postTitle': postTitle,
       if (attachmentId != null) 'attachmentId': attachmentId,
       'reactions': reactions.map((reaction) => reaction.toJson()).toList(),
     };
   }
 
-  // Copy With Method (State Update এর জন্য)
   PostResponse copyWith({
     String? id,
     String? advocateId,
@@ -65,6 +64,7 @@ class PostResponse {
     String? advocateFullName,
     AdvocateSpeciality? postType,
     String? postContent,
+    String? postTitle,
     String? attachmentId,
     List<PostReactionResponse>? reactions,
   }) {
@@ -75,24 +75,26 @@ class PostResponse {
       advocateFullName: advocateFullName ?? this.advocateFullName,
       postType: postType ?? this.postType,
       postContent: postContent ?? this.postContent,
+      postTitle: postTitle ?? this.postTitle,
       attachmentId: attachmentId ?? this.attachmentId,
       reactions: reactions ?? this.reactions,
     );
   }
 
-  // Computed Properties
   int get totalReactions => reactions.length;
 
   Map<PostReactions, int> get reactionCounts {
     final Map<PostReactions, int> counts = {};
     for (var reaction in reactions) {
-      counts[reaction.postReaction!] = (counts[reaction.postReaction] ?? 0) + 1;
+      if (reaction.postReaction != null) {
+        counts[reaction.postReaction!] =
+            (counts[reaction.postReaction] ?? 0) + 1;
+      }
     }
     return counts;
   }
 
   bool get hasAttachment => attachmentId != null && attachmentId!.isNotEmpty;
-
   String get formattedPostType => postType.label;
 
   bool isReactedByUser(String userId) {
@@ -109,7 +111,7 @@ class PostResponse {
 
   @override
   String toString() {
-    return 'PostResponse(id: $id, advocateName: $advocateName, postType: ${postType.label}, reactions: ${reactions.length})';
+    return 'PostResponse(id: $id, advocateName: $advocateName, postType: ${postType.label}, postTitle: $postTitle, reactions: ${reactions.length})';
   }
 
   @override
@@ -122,12 +124,14 @@ class PostResponse {
         other.advocateFullName == advocateFullName &&
         other.postType == postType &&
         other.postContent == postContent &&
+        other.postTitle == postTitle &&
         other.attachmentId == attachmentId &&
         other.reactions.length == reactions.length;
   }
 
   @override
   int get hashCode {
-    return Object.hash(id, advocateId, advocateName, advocateFullName, postType, postContent, attachmentId, reactions.length);
+    return Object.hash(id, advocateId, advocateName, advocateFullName,
+        postType, postContent, postTitle, attachmentId, reactions.length);
   }
 }
