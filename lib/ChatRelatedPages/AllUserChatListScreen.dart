@@ -51,7 +51,6 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
     });
 
     try {
-      // Load token
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('jwt_token');
       String? userId = prefs.getString('userId');
@@ -60,8 +59,6 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
         throw Exception('Need to login first to load chat list');
       }
 
-
-      // Step 1: Get all center admins
       final centerAdminResponse = await http.get(
         Uri.parse('${BASE_URL.Urls().baseURL}chat/users/$userId'),
         headers: {
@@ -73,16 +70,10 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
 
       if (centerAdminResponse.statusCode == 200) {
         final decodedResponse = jsonDecode(centerAdminResponse.body);
-        //print('Loaded ${_centerAdmins.length} Users');
-
         chatResponses = List<ChatResponse>.from(
           decodedResponse.map((item) => ChatResponse.fromJson(item)),
         );
 
-        // Step 2: Get user details for each admin
-        //await _loadUserDetails(token);
-
-        // Step 3: Build chat list
         await _buildChatList(token);
       } else {
         throw Exception(
@@ -96,32 +87,6 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
         _errorMessage = e.toString();
         _isLoading = false;
       });
-    }
-  }
-
-  Future<void> _loadUserDetails(String token) async {
-    try {
-      // Get user details for all userIds in center admins
-      for (var admin in _centerAdmins) {
-        String userId = admin['id'];
-        if (userId != widget.currentUserId) {
-          // Skip current user
-          final userResponse = await http.get(
-            Uri.parse('${BASE_URL.Urls().baseURL}user/search?userId=$userId'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-          );
-
-          if (userResponse.statusCode == 200) {
-            _userDetails[userId] = jsonDecode(userResponse.body);
-          }
-        }
-      }
-    } catch (e) {
-      print('Error loading user details: $e');
     }
   }
 
@@ -140,7 +105,6 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
     if (response.statusCode == 200) {
       return true;
     }
-
     return false;
   }
 
@@ -156,45 +120,27 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
       },
     );
 
-    print("active users :- ${activeResponse.body}");
-
     Map<String, bool> activeness = {};
 
     if (activeResponse.statusCode == 200) {
       List<dynamic> activeUsers = jsonDecode(activeResponse.body);
 
-      print("active users :- $activeUsers");
-
       for (var user in activeUsers) {
         String userId = user['userId'];
         bool active = user['active'];
-
         activeness[userId] = active;
       }
     }
-
-    bool val = false;
-
-
 
     try {
       for (var admin in chatResponses) {
         try {
           DateTime? timeStamp = admin.timeStamp;
-
-          print("time stamp setted :- $timeStamp");
-
           SenderInfo? senderInfo = admin.senderInfo;
           ReceiverInfo? receiverInfo = admin.receiverInfo;
 
-          print(
-            "collect the sender info and receiver info :- ${senderInfo != null ? senderInfo.toString() : null} , ${receiverInfo != null ? receiverInfo.toString() : null}",
-          );
-
           String? lateMessage;
-
           String? otherUserId, otherUserName;
-
           bool readChat = true;
 
           if (senderInfo != null && senderInfo.receiverId != null) {
@@ -211,26 +157,14 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
             continue;
           }
 
-          print(
-            "other user id :- $otherUserId , other user name :- $otherUserName",
-          );
-
           if (otherUserId == null || otherUserName == null) {
             continue;
           }
 
-          print("other user id :- $otherUserId");
-
           String userAvatar = otherUserName[0].toString();
 
-          bool? isOnline =
-              activeness.isNotEmpty && activeness.containsKey(otherUserId);
-          bool? isUnread =
-              readChat == false;
-
-          print(
-            "userId :- $otherUserId , userName :- $otherUserName , isOnline :- $isOnline , isUnread :- $isUnread , timeStamp :- $timeStamp , lateMessage :- $lateMessage , userAvatar :- $userAvatar",
-          );
+          bool? isOnline = activeness.isNotEmpty && activeness.containsKey(otherUserId);
+          bool? isUnread = readChat == false;
 
           try {
             ChatListItem listItem = ChatListItem(
@@ -243,8 +177,6 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
               isOnline: isOnline ? true : false,
             );
 
-            print("chat list item :- ${listItem.userName}");
-
             tempList.add(listItem);
           } catch (e) {
             print("error :- $e");
@@ -255,7 +187,6 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
       }
 
       try {
-        // Sort by last message time (most recent first)
         tempList.sort((a, b) {
           if (a.lastMessageTime == null && b.lastMessageTime == null) return 0;
           if (a.lastMessageTime == null) return 1;
@@ -291,8 +222,7 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
 
     final filtered = _chatList.where((chat) {
       return chat.userName.toLowerCase().contains(query.toLowerCase()) ||
-          (chat.lastMessage?.toLowerCase().contains(query.toLowerCase()) ??
-              false);
+          (chat.lastMessage?.toLowerCase().contains(query.toLowerCase()) ?? false);
     }).toList();
 
     setState(() {
@@ -310,9 +240,7 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
       String? token = prefs.getString('jwt_token');
 
       final historyResponse = await http.get(
-        Uri.parse(
-          '${BASE_URL.Urls().baseURL}chat/history/${widget.currentUserId}/$otherUserId',
-        ),
+        Uri.parse('${BASE_URL.Urls().baseURL}chat/history/${widget.currentUserId}/$otherUserId'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
@@ -322,9 +250,7 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
         for (var msg in messages) {
           if (msg['receiver'] == widget.currentUserId) {
             await http.put(
-              Uri.parse(
-                '${BASE_URL.Urls().baseURL}readable-chat/update/${msg['id']}/${widget.currentUserId}',
-              ),
+              Uri.parse('${BASE_URL.Urls().baseURL}readable-chat/update/${msg['id']}/${widget.currentUserId}'),
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer $token',
@@ -342,7 +268,8 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
   void _navigateToChat(String userId, String userName) async {
     await _markChatAsRead(userId);
 
-    Navigator.push(
+    // 👇 RELOAD ON RETURN
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ChatScreen(
@@ -353,6 +280,9 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
         ),
       ),
     );
+    
+    // This triggers when you come back from ChatScreen
+    _refreshChatList();
   }
 
   Widget _buildChatListItem(ChatListItem chat) {
@@ -435,7 +365,6 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
               ),
           ],
         ),
-
         onTap: () => _navigateToChat(chat.userId, chat.userName),
       ),
     );
@@ -554,7 +483,6 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
       ),
       body: Column(
         children: [
-          // Search Bar
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: TextField(
@@ -577,7 +505,6 @@ class _AllUserChatListScreenState extends State<AllUserChatListScreen> {
             ),
           ),
           Divider(height: 1),
-          // Chat List
           Expanded(
             child: _isLoading
                 ? _buildLoadingState()

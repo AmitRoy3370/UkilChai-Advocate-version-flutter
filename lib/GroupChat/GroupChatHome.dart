@@ -1,10 +1,10 @@
 // GroupChatHome.dart
 
 import 'package:flutter/material.dart';
-import 'package:advocatechai/GroupChat/GroupChatModels.dart';
-import 'package:advocatechai/GroupChat/GroupChatServices.dart';
-import 'package:advocatechai/GroupChat/GroupChatScreen.dart';
-import 'package:advocatechai/GroupChat/CreateGroupScreen.dart';
+import '../GroupChat/GroupChatModels.dart';
+import '../GroupChat/GroupChatServices.dart';
+import '../GroupChat/GroupChatScreen.dart';
+import '../GroupChat/CreateGroupScreen.dart';
 
 class GroupChatHome extends StatefulWidget {
   final String currentUserId;

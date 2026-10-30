@@ -14,6 +14,10 @@ import 'package:advocatechaiadvocate/Utils/BaseURL.dart' as baseURL;
 import 'package:file_picker/file_picker.dart';
 import '../Utils/AdvocateSpeciality.dart';
 import '../LogInPage/LogIn.dart';
+import '../AdvocatePages/AdvocateJoinRequestDetailsPage.dart'; 
+import '../AdvocatePages/advocate_join_request_dto_model.dart';
+
+
 
 // ✅ Gender imports
 import 'Gender.dart';
@@ -40,6 +44,25 @@ class _RegistrationPageState extends State<RegistrationPage> {
   final TextEditingController licenseKeyController = TextEditingController();
   final TextEditingController degreeController = TextEditingController();
   final TextEditingController workingExperienceController = TextEditingController();
+
+  // New Text Controllers for Working Experience & Additional Info
+  final TextEditingController barAssociationController = TextEditingController();
+  final TextEditingController barEnrolmentController = TextEditingController();
+  final TextEditingController primaryPracticeController = TextEditingController();
+  final TextEditingController chamberController = TextEditingController();
+  final TextEditingController practiceYearsController = TextEditingController();
+  final TextEditingController profExpController = TextEditingController();
+  final TextEditingController practicingCoatController = TextEditingController();
+
+  final TextEditingController addressController = TextEditingController();
+  final TextEditingController cityController = TextEditingController();
+  final TextEditingController nidController = TextEditingController();
+  final TextEditingController whatsAppController = TextEditingController();
+
+  // New States for Documents
+  List<PlatformFile> _documentFiles = [];
+  DateTime? _enrollmentDate;
+  DateTime? _dateOfBirth;
 
   bool _showPassword = false;
 
@@ -437,320 +460,259 @@ class _RegistrationPageState extends State<RegistrationPage> {
     try {
       final uri = Uri.parse("${baseURL.Urls().baseURL}auth/register");
 
-      if (userNameController.text.isEmpty) {
+      // Validation
+      if (userNameController.text.isEmpty ||
+          passwordController.text.isEmpty ||
+          emailController.text.isEmpty ||
+          phoneController.text.isEmpty ||
+          locationTextController.text.isEmpty ||
+          _selectedDistrict == null ||
+          _selectedGender == null ||
+          selectedSpecialities.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Please enter username")));
-        return;
-      } else if (passwordController.text.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Please enter password")));
-        return;
-      } else if (emailController.text.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Please enter email")));
-        return;
-      } else if (phoneController.text.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Please enter phone")));
-        return;
-      } else if (locationTextController.text.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Please enter location")));
-        return;
-      } else if (_selectedDistrict == null || _selectedDistrict!.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Please select your district")));
-        return;
-      } else if (_selectedGender == null) {
-        // ✅ NEW validation
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Please select your gender")));
-        return;
-      } else if (selectedSpecialities.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Please select at least one speciality")));
+            const SnackBar(content: Text("Please fill all required fields.")));
         return;
       }
 
-      String loginURL = "${baseURL.Urls().baseURL}auth/login";
-      Uri uri1 = Uri.parse(loginURL);
-
-      var logInResponse = await http.post(
-        uri1,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "userName": userNameController.text,
-          "password": passwordController.text,
-        }),
-      );
-
-      final bool loginOk =
-          logInResponse.statusCode == 200 || logInResponse.statusCode == 201;
-
-      Map<String, dynamic>? loginJson;
-      if (loginOk) {
-        try {
-          final decodedLogin = jsonDecode(logInResponse.body);
-          if (decodedLogin is Map<String, dynamic>) {
-            loginJson = decodedLogin;
-          }
-        } catch (e) {
-          if (kDebugMode) print("Login JSON decode error: $e");
-        }
-      }
-
-      var request = loginOk
-          ? http.MultipartRequest(
-              "PUT",
-              Uri.parse(
-                  "${baseURL.Urls().baseURL}user/update/${loginJson?['userId']?.toString() ?? ''}"))
-          : http.MultipartRequest("POST", uri);
-
-      // -------- Text fields ----------
+      // 1. Register User
+      var request = http.MultipartRequest("POST", uri);
       request.fields["name"] = userNameController.text.trim();
       request.fields["password"] = passwordController.text.trim();
-
-      if (fullNameController.text.trim().isNotEmpty) {
-        request.fields["FullName"] = fullNameController.text.trim();
-      }
-
-      if (loginOk) {
-        final loginToken = loginJson?['token']?.toString();
-        if (loginToken != null && loginToken.isNotEmpty) {
-          request.headers["Authorization"] = "Bearer $loginToken";
-        }
-      }
-
+      request.fields["FullName"] = fullNameController.text.trim();
       request.fields["profileImageId"] = "profileImageId";
 
-      // -------- File upload ----------
       if (kIsWeb && webImageBytes != null) {
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'file',
-            webImageBytes!,
-            filename: '${userNameController.text.trim()}.png',
-            contentType: http.MediaType('image', 'png'),
-          ),
-        );
+        request.files.add(http.MultipartFile.fromBytes('file', webImageBytes!,
+            filename: 'profile.png',
+            contentType: http.MediaType('image', 'png')));
       } else if (!kIsWeb && pickedImage != null) {
         request.files.add(
-          await http.MultipartFile.fromPath("file", pickedImage!.path),
-        );
+            await http.MultipartFile.fromPath("file", pickedImage!.path));
       }
 
       final response = await request.send();
       final responseBody = await response.stream.bytesToString();
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        Map<String, dynamic>? decoded;
-        try {
-          final d = jsonDecode(responseBody);
-          if (d is Map<String, dynamic>) decoded = d;
-        } catch (e) {
-          if (kDebugMode) print("Register/Update JSON decode error: $e");
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("Registration failed: $responseBody")));
         }
+        return;
+      }
 
-        final String? token = loginOk
-            ? (loginJson?['token']?.toString() ??
-                loginJson?['jwt']?.toString() ??
-                loginJson?['accessToken']?.toString())
-            : (decoded?['token']?.toString() ??
-                decoded?['jwt']?.toString() ??
-                decoded?['accessToken']?.toString());
+      final decoded = jsonDecode(responseBody);
+      final String? token = decoded['token'];
+      final String? userId = decoded['id'] ?? decoded['userId'];
 
-        final String? userId = loginOk
-            ? (loginJson?['userId']?.toString() ??
-                loginJson?['id']?.toString())
-            : (decoded?['id']?.toString() ??
-                decoded?['userId']?.toString());
+      if (token == null || userId == null) return;
 
-        if (token == null || token.isEmpty || userId == null || userId.isEmpty) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                    "Registration succeeded but server did not return token/userId"),
-              ),
-            );
+      // Save token immediately
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString("jwt_token", token);
+      await prefs.setString("userId", userId);
+
+      // 2. Save Gender
+      if (_selectedGender != null) {
+        final genderUri = Uri.parse(
+            "${baseURL.Urls().baseURL}user-gender/create?userId=$userId");
+        await http.post(genderUri,
+            headers: {
+              "Authorization": "Bearer $token",
+              "Content-Type": "application/json"
+            },
+            body: jsonEncode(
+                {"userId": userId, "gender": _selectedGender!.name}));
+      }
+
+      // 3. Save Contact Info
+      await http.post(
+        Uri.parse(
+            "${baseURL.Urls().baseURL}user/contact-info/add?userId=$userId"),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json"
+        },
+        body: jsonEncode({
+          "userId": userId,
+          "email": emailController.text.trim(),
+          "phone": phoneController.text.trim()
+        }),
+      );
+
+      // 4. Save Location
+      await http.post(
+        Uri.parse("${baseURL.Urls().baseURL}userLocation/add"),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json"
+        },
+        body: jsonEncode({
+          "userId": userId,
+          "locationName": locationTextController.text.trim(),
+          "lattitude": lattitude,
+          "longitude": longititude
+        }),
+      );
+
+      // 5. ADVOCATE JOIN REQUEST (Main)
+      final joinUri =
+          Uri.parse("${baseURL.Urls().baseURL}advocateJoinRequest");
+      var joinRequest = http.MultipartRequest("POST", joinUri);
+      joinRequest.headers["Authorization"] = "Bearer $token";
+      joinRequest.fields["userId"] = userId;
+      joinRequest.fields["experience"] = experienceController.text.trim().isEmpty
+          ? "0"
+          : experienceController.text.trim();
+      joinRequest.fields["licenseKey"] = licenseKeyController.text.trim();
+      joinRequest.fields["district"] = _selectedDistrict ?? "Dhaka";
+      joinRequest.fields["advocateSpeciality"] =
+          jsonEncode(selectedSpecialities.map((e) => e.name).toList());
+      joinRequest.fields["degrees"] = jsonEncode(degrees);
+      joinRequest.fields["workingExperiences"] =
+          jsonEncode(workingExperiences);
+
+      if (kIsWeb && webCvBytes != null) {
+        joinRequest.files.add(http.MultipartFile.fromBytes(
+            "file", webCvBytes!,
+            filename: cvFileName ?? "cv.pdf",
+            contentType: http.MediaType("application", "pdf")));
+      } else if (!kIsWeb && cvFile != null) {
+        joinRequest.files
+            .add(await http.MultipartFile.fromPath("file", cvFile!.path));
+      }
+
+      final joinResponse = await joinRequest.send();
+      final joinResBody = await joinResponse.stream.bytesToString();
+
+      if (joinResponse.statusCode == 200 || joinResponse.statusCode == 201) {
+        final joinData = jsonDecode(joinResBody);
+        final String joinRequestId = joinData['id']; // Join Request ID
+
+        // 6. Save Working Experience Details
+        // URL requires userId, Body requires advocateId (which is joinRequestId)
+        if (barAssociationController.text.isNotEmpty ||
+            chamberController.text.isNotEmpty) {
+          final weUri = Uri.parse(
+              "${baseURL.Urls().baseURL}advocate-working-experience-in-join-request/add/$userId");
+          final weRes = await http.post(
+            weUri,
+            headers: {
+              "Authorization": "Bearer $token",
+              "Content-Type": "application/json"
+            },
+            body: jsonEncode({
+              "advocateId": joinRequestId,
+              "barAssociation": barAssociationController.text.trim(),
+              "barControllEnrolment": barEnrolmentController.text.trim(),
+              "enrollmentDate": _enrollmentDate?.toUtc().toIso8601String(),
+              "practicingCoat": practicingCoatController.text.trim(),
+              "primaryPractice": primaryPracticeController.text.trim(),
+              "yearOfLegalPractice":
+                  int.tryParse(practiceYearsController.text.trim()) ?? 0,
+              "currentChemberName": chamberController.text.trim(),
+              "professionalExperience":
+                  int.tryParse(profExpController.text.trim()) ?? 0,
+            }),
+          );
+          if (weRes.statusCode != 200 && weRes.statusCode != 201) {
+            debugPrint("WE Error: ${weRes.body}");
           }
-          return;
         }
 
-        // ✅ SAVE TOKEN FIRST so subsequent API calls work
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString("jwt_token", token);
-        await prefs.setString("userId", userId);
-
-        final _token = prefs.getString("jwt_token");
-
-        if (_token == null || _token.isEmpty) {
-          if (kDebugMode) print("No token found in prefs.");
-          return;
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        // ✅ NEW: SAVE USER GENDER (before contact-info & join-request)
-        // ═══════════════════════════════════════════════════════════
-        if (_selectedGender != null) {
-          final genderSaved = await _saveUserGender(
-            userId: userId,
-            gender: _selectedGender!,
-            token: _token,
+        // 7. Save Additional Info
+        if (nidController.text.isNotEmpty ||
+            addressController.text.isNotEmpty) {
+          final aiUri = Uri.parse(
+              "${baseURL.Urls().baseURL}advocate-additional-info-in-join-request/add/$userId");
+          final aiRes = await http.post(
+            aiUri,
+            headers: {
+              "Authorization": "Bearer $token",
+              "Content-Type": "application/json"
+            },
+            body: jsonEncode({
+              "advocateId": joinRequestId,
+              "parmanentAdress": addressController.text.trim(),
+              "cityOfUpozila": cityController.text.trim(),
+              "nidNumber": nidController.text.trim(),
+              "dateOfBirth": _dateOfBirth?.toUtc().toIso8601String(),
+              "whatsAppNumber": whatsAppController.text.trim(),
+            }),
           );
-
-          if (!genderSaved && kDebugMode) {
-            print("⚠️ Gender save failed but continuing registration flow");
+          if (aiRes.statusCode != 200 && aiRes.statusCode != 201) {
+            debugPrint("AI Error: ${aiRes.body}");
           }
         }
 
-        // ---------- CONTACT INFO ----------
-        String contactInfoUri =
-            "${baseURL.Urls().baseURL}user/contact-info/add?userId=$userId";
-        final url = Uri.parse(contactInfoUri);
+        // 8. Save Documents
+        if (_documentFiles.isNotEmpty) {
+          final docUri = Uri.parse(
+              "${baseURL.Urls().baseURL}advocate-documents-in-join-request/add/$joinRequestId");
+          var docRequest = http.MultipartRequest('POST', docUri);
+          docRequest.headers['Authorization'] = 'Bearer $token';
 
-        await http.post(
-          url,
-          headers: {
-            "Authorization": "Bearer $_token",
-            "Content-Type": "application/json",
-          },
-          body: jsonEncode({
-            "userId": userId,
-            "email": emailController.text.trim(),
-            "phone": phoneController.text.trim(),
-          }),
-        );
-
-        // ---------- LOCATION ----------
-        final String locationUrl =
-            "${baseURL.Urls().baseURL}userLocation/add";
-        final loaction = Uri.parse(locationUrl);
-
-        await http.post(
-          loaction,
-          headers: {
-            "Authorization": "Bearer $_token",
-            "Content-Type": "application/json",
-          },
-          body: jsonEncode({
-            "userId": userId,
-            "locationName": locationTextController.text.trim(),
-            "lattitude": lattitude,
-            "longitude": longititude,
-          }),
-        );
-
-        // ---------------- ADVOCATE JOIN REQUEST ----------------
-        final joinUri =
-            Uri.parse("${baseURL.Urls().baseURL}advocateJoinRequest");
-        var joinRequest = http.MultipartRequest("POST", joinUri);
-
-        joinRequest.headers["Authorization"] = "Bearer $_token";
-        joinRequest.fields["userId"] = userId;
-        joinRequest.fields["experience"] =
-            experienceController.text.trim().isEmpty
-                ? "0"
-                : experienceController.text.trim();
-        joinRequest.fields["licenseKey"] = licenseKeyController.text.trim();
-
-        joinRequest.fields["district"] = _selectedDistrict ?? "Dhaka";
-
-        List<String> specialityList =
-            selectedSpecialities.map((e) => e.name).toList();
-        joinRequest.fields["advocateSpeciality"] = jsonEncode(specialityList);
-
-        joinRequest.fields["degrees"] = jsonEncode(degrees);
-        joinRequest.fields["workingExperiences"] =
-            jsonEncode(workingExperiences);
-
-        if (kIsWeb && webCvBytes != null) {
-          joinRequest.files.add(
-            http.MultipartFile.fromBytes(
-              "file",
-              webCvBytes!,
-              filename: cvFileName ?? "cv.pdf",
-              contentType: http.MediaType("application", "pdf"),
-            ),
-          );
-        } else if (!kIsWeb && cvFile != null) {
-          joinRequest.files.add(
-            await http.MultipartFile.fromPath("file", cvFile!.path),
-          );
+          for (var file in _documentFiles) {
+            if (kIsWeb && file.bytes != null) {
+              docRequest.files.add(http.MultipartFile.fromBytes(
+                  'files', file.bytes!,
+                  filename: file.name));
+            } else if (!kIsWeb && file.path != null) {
+              docRequest.files.add(await http.MultipartFile.fromPath(
+                  'files', file.path!,
+                  filename: file.name));
+            }
+          }
+          final docRes = await docRequest.send();
+          if (docRes.statusCode != 200 && docRes.statusCode != 201) {
+            debugPrint("Doc Error: ${await docRes.stream.bytesToString()}");
+          }
         }
 
-        final joinResponse = await joinRequest.send();
-        final joinResponseBody = await joinResponse.stream.bytesToString();
+        // 9. Fetch the complete DTO to show in Details Page
+        final fetchUri = Uri.parse(
+            "${baseURL.Urls().baseURL}advocateJoinRequest/user/$userId");
+        final fetchRes = await http.get(fetchUri,
+            headers: {"Authorization": "Bearer $token"});
 
-        if (joinResponse.statusCode == 200 ||
-            joinResponse.statusCode == 201) {
+        if (fetchRes.statusCode == 200) {
+          final dto =
+              AdvocateJoinRequestDTO.fromJson(jsonDecode(fetchRes.body));
+
+          // Clear token so user cannot access app until approved
+          await prefs.remove("jwt_token");
+          await prefs.remove("userId");
+
           if (mounted) {
-            // Clear token so user cannot access app until approved
-            await prefs.remove("jwt_token");
-            await prefs.remove("userId");
-            await prefs.remove("advocateId");
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                    "Join Request Sent Successfully! Please wait for admin approval."),
-                duration: Duration(seconds: 4),
-              ),
-            );
-
-            setState(() {
-              showForm = false;
-            });
-
-            fullNameController.clear();
-            userNameController.clear();
-            passwordController.clear();
-            emailController.clear();
-            phoneController.clear();
-            locationTextController.clear();
-            experienceController.clear();
-            licenseKeyController.clear();
-            degrees.clear();
-            workingExperiences.clear();
-            selectedSpecialities.clear();
-            _selectedDistrict = null;
-            _selectedGender = null; // ✅ reset gender
-            pickedImage = null;
-            webImageBytes = null;
-            cvFile = null;
-            webCvBytes = null;
-            cvFileName = null;
+            // Ensure the loading dialog is closed before pushing
+            Navigator.of(context, rootNavigator: true).pop();
 
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => const LogIn()),
+              MaterialPageRoute(
+                  builder: (context) =>
+                      AdvocateJoinRequestDetailsPage(request: dto)),
             );
           }
         } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content:
-                      Text("Join Request Failed: $joinResponseBody")),
-            );
-          }
+          throw Exception("Failed to load final details.");
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Registration failed")),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text("Join Request Failed: $joinResBody")));
         }
       }
     } catch (e) {
-      if (kDebugMode) print("Error: $e");
+      // Close loading dialog on error
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${e.toString()}')),
-        );
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
       }
     }
   }
+
 
   Widget _buildOpenFormButton() {
     return GestureDetector(
@@ -965,6 +927,17 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       _buildSpecialistSection(),
                       const SizedBox(height: 20),
 
+
+// --- NEW ADDED SECTIONS ---
+_buildWorkingExperienceDetailsSection(),
+const SizedBox(height: 20),
+
+_buildAdditionalInfoSection(),
+const SizedBox(height: 20),
+
+_buildDocumentsSection(),
+const SizedBox(height: 20),
+
                       _buildCvPicker(),
                       const SizedBox(height: 20),
 
@@ -982,6 +955,178 @@ class _RegistrationPageState extends State<RegistrationPage> {
         );
       },
     );
+  }
+
+  // ─── NEW UI WIDGETS ───
+
+  Widget _buildWorkingExperienceDetailsSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.blue.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Working Experience Details", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+          const SizedBox(height: 12),
+          _buildFormField(controller: barAssociationController, label: "Bar Association", icon: Icons.account_balance),
+          const SizedBox(height: 12),
+          _buildFormField(controller: barEnrolmentController, label: "Bar Council Enrolment", icon: Icons.badge),
+          const SizedBox(height: 12),
+          _buildDatePickerField(
+            label: "Enrolment Date",
+            selectedDate: _enrollmentDate,
+            onPick: (d) => setState(() => _enrollmentDate = d),
+          ),
+          const SizedBox(height: 12),
+          _buildFormField(controller: primaryPracticeController, label: "Primary Practice", icon: Icons.gavel),
+          const SizedBox(height: 12),
+          _buildFormField(controller: practicingCoatController, label: "Practicing Court", icon: Icons.account_balance_rounded),
+          const SizedBox(height: 12),
+          _buildFormField(controller: chamberController, label: "Current Chamber", icon: Icons.business),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: _buildFormField(controller: practiceYearsController, label: "Legal Practice Years", icon: Icons.timeline, keyboardType: TextInputType.number)),
+              const SizedBox(width: 12),
+              Expanded(child: _buildFormField(controller: profExpController, label: "Professional Experience", icon: Icons.timeline, keyboardType: TextInputType.number)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdditionalInfoSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.blue.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Additional Information", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+          const SizedBox(height: 12),
+          _buildFormField(controller: addressController, label: "Permanent Address", icon: Icons.home),
+          const SizedBox(height: 12),
+          _buildFormField(controller: cityController, label: "City / Upazila", icon: Icons.location_city),
+          const SizedBox(height: 12),
+          _buildFormField(controller: nidController, label: "NID Number", icon: Icons.credit_card, keyboardType: TextInputType.number),
+          const SizedBox(height: 12),
+          _buildDatePickerField(
+            label: "Date of Birth",
+            selectedDate: _dateOfBirth,
+            onPick: (d) => setState(() => _dateOfBirth = d),
+          ),
+          const SizedBox(height: 12),
+          _buildFormField(controller: whatsAppController, label: "WhatsApp Number", icon: Icons.chat, keyboardType: TextInputType.phone),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDocumentsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("Other Documents", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.blue)),
+        const SizedBox(height: 8),
+        if (_documentFiles.isNotEmpty) ...[
+          ..._documentFiles.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final f = entry.value;
+            return ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.add_circle, color: Colors.green),
+              title: Text(f.name, style: const TextStyle(fontSize: 13)),
+              trailing: IconButton(
+                icon: const Icon(Icons.remove_circle, color: Colors.red),
+                onPressed: () => setState(() => _documentFiles.removeAt(idx)),
+              ),
+            );
+          }),
+          const SizedBox(height: 8),
+        ],
+        OutlinedButton.icon(
+          icon: const Icon(Icons.attach_file),
+          label: const Text("Upload Documents"),
+          onPressed: _pickDocumentFiles,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.blue,
+            side: const BorderSide(color: Colors.blue),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDatePickerField({
+    required String label,
+    required DateTime? selectedDate,
+    required void Function(DateTime) onPick,
+  }) {
+    return InkWell(
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: selectedDate ?? DateTime(1990),
+          firstDate: DateTime(1950),
+          lastDate: DateTime.now(),
+        );
+        if (picked != null) onPick(picked);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: Colors.grey[50],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[200]!),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_today, color: Colors.blue),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                selectedDate == null
+                    ? label
+                    : "${selectedDate.day}/${selectedDate.month}/${selectedDate.year}",
+                style: TextStyle(
+                  color: selectedDate == null ? Colors.grey[600] : Colors.black87,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            const Icon(Icons.arrow_drop_down, color: Colors.blue),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickDocumentFiles() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        withData: kIsWeb,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          _documentFiles.addAll(
+            result.files.where((f) => kIsWeb ? f.bytes != null : f.path != null),
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint('Pick docs error: $e');
+    }
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -1527,6 +1672,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
       child: ElevatedButton(
         onPressed: () async {
           FocusScope.of(context).unfocus();
+          
+          // Show loading dialog
           showDialog(
             context: context,
             barrierDismissible: false,
@@ -1560,11 +1707,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
             },
           );
 
+          // Run the form submission
           await _submitForm();
-
-          if (mounted) {
-            Navigator.pop(context);
-          }
+          
+          // Note: We removed the `Navigator.pop(context)` here because 
+          // the _submitForm method handles closing the dialog upon success or failure.
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.blue,

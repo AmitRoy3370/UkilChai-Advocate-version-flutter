@@ -46,6 +46,12 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
     _loadChatList();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadChatList() async {
     setState(() {
       _isLoading = true;
@@ -338,10 +344,12 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
     }
   }
 
+  // 👇 FIXED NAVIGATION METHOD
   void _navigateToChat(String userId, String userName) async {
     await _markChatAsRead(userId);
 
-    Navigator.push(
+    // Wait for the user to return from the ChatScreen
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ChatScreen(
@@ -352,6 +360,9 @@ class _CenterAdminChatListScreenState extends State<CenterAdminChatListScreen> {
         ),
       ),
     );
+
+    // Once returned, refresh the list automatically
+    _refreshChatList();
   }
 
   Widget _buildChatListItem(ChatListItem chat) {

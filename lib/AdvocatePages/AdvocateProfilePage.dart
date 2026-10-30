@@ -144,8 +144,6 @@ class _AdvocateProfilePageState extends State<AdvocateProfilePage> {
 
   void _setScreen(String s) => setState(() => _screen = s);
 
-  // ✅ FIX: UpdateProfile takes no arguments — it self-loads from the
-  // logged-in user via AuthService, exactly what we want here.
   Future<void> _openEditProfile() async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const UpdateProfile()),
@@ -438,6 +436,15 @@ class _AdvocateProfilePageState extends State<AdvocateProfilePage> {
                     ? "None added"
                     : a.advocateSpeciality.join(", "),
                 onTap: () => _setScreen("specialities"),
+              ),
+              // 👇 ADDED CV SECTION HERE
+              _MenuRow(
+                icon: "📄",
+                label: "Curriculum Vitae (CV)",
+                sub: (a.cvHexKey ?? '').isNotEmpty ? "View CV" : "No CV uploaded",
+                onTap: (a.cvHexKey ?? '').isNotEmpty
+                    ? () => _openAttachment(a.cvHexKey!)
+                    : null,
               ),
             ]),
 

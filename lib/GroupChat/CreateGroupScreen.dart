@@ -1,7 +1,19 @@
 // CreateGroupScreen.dart
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:advocatechai/GroupChat/GroupChatServices.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import '../Utils/BaseURL.dart' as BASE_URL;
+import '../GroupChat/GroupChatServices.dart';
+
+class UserModel {
+  final String id;
+  final String name;
+  final String? fullName;
+
+  UserModel({required this.id, required this.name, this.fullName});
+}
 
 class CreateGroupScreen extends StatefulWidget {
   final String currentUserId;
@@ -20,9 +32,13 @@ class CreateGroupScreen extends StatefulWidget {
 class _CreateGroupScreenState extends State<CreateGroupScreen> {
   final TextEditingController _groupNameController = TextEditingController();
   final TextEditingController _memberSearchController = TextEditingController();
-  final List<String> _selectedMembers = [];
-  final List<String> _availableUsers = [];
+  
+  // Changed to hold UserModels instead of Strings to get the correct user ID for group creation
+  final List<UserModel> _selectedMembers = [];
+  List<UserModel> _availableUsers = [];
+  
   bool _isLoading = false;
+  bool _isSearching = false;
   final GroupChatServices _services = GroupChatServices();
 
   @override
@@ -35,13 +51,19 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         elevation: 0,
         actions: [
           TextButton(
-            onPressed: _selectedMembers.isNotEmpty && _groupNameController.text.isNotEmpty
+            onPressed: _selectedMembers.isNotEmpty && _groupNameController.text.isNotEmpty && !_isLoading
                 ? _createGroup
                 : null,
-            child: const Text(
-              'Create',
-              style: TextStyle(color: Colors.white),
-            ),
+            child: _isLoading 
+                ? const SizedBox(
+                    width: 20, 
+                    height: 20, 
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                  )
+                : const Text(
+                    'Create',
+                    style: TextStyle(color: Colors.white),
+                  ),
           ),
         ],
       ),
@@ -52,6 +74,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
             // গ্রুপ নাম
             TextField(
               controller: _groupNameController,
+              onChanged: (val) => setState(() {}), // To update the Create button state
               decoration: const InputDecoration(
                 labelText: 'Group Name',
                 border: OutlineInputBorder(),
@@ -63,25 +86,36 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
             // সদস্য সার্চ
             TextField(
               controller: _memberSearchController,
-              decoration: const InputDecoration(
+              onChanged: (query) => _searchUsers(query),
+              decoration: InputDecoration(
                 labelText: 'Search members',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.search),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _isSearching 
+                  ? const Padding(
+                      padding: EdgeInsets.all(12.0),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : null,
               ),
             ),
             const SizedBox(height: 16),
 
             // নির্বাচিত সদস্য
             if (_selectedMembers.isNotEmpty) ...[
-              const Text(
-                'Selected Members:',
-                style: TextStyle(fontWeight: FontWeight.bold),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Selected Members:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
+                runSpacing: 8,
                 children: _selectedMembers.map((member) => Chip(
-                  label: Text(member),
+                  label: Text(member.fullName ?? member.name),
                   onDeleted: () {
                     setState(() {
                       _selectedMembers.remove(member);
@@ -99,7 +133,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
               child: _availableUsers.isEmpty
                   ? Center(
                       child: Text(
-                        'Search users to add',
+                        _isSearching ? 'Searching...' : 'Search users to add',
                         style: TextStyle(color: Colors.grey[500]),
                       ),
                     )
@@ -107,25 +141,30 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                       itemCount: _availableUsers.length,
                       itemBuilder: (context, index) {
                         final user = _availableUsers[index];
-                        final isSelected = _selectedMembers.contains(user);
+                        // Ignore current user
+                        if (user.id == widget.currentUserId) return const SizedBox.shrink();
+
+                        final isSelected = _selectedMembers.any((m) => m.id == user.id);
+                        
                         return ListTile(
                           leading: CircleAvatar(
                             backgroundColor: isSelected ? Colors.green[700] : Colors.grey[300],
                             child: Text(
-                              user.substring(0, 1).toUpperCase(),
+                              user.name.substring(0, 1).toUpperCase(),
                               style: TextStyle(
                                 color: isSelected ? Colors.white : Colors.black,
                               ),
                             ),
                           ),
-                          title: Text(user),
+                          title: Text(user.fullName ?? user.name),
+                          subtitle: Text("@${user.name}"),
                           trailing: isSelected
                               ? Icon(Icons.check_circle, color: Colors.green[700])
                               : null,
                           onTap: () {
                             setState(() {
                               if (isSelected) {
-                                _selectedMembers.remove(user);
+                                _selectedMembers.removeWhere((m) => m.id == user.id);
                               } else {
                                 _selectedMembers.add(user);
                               }
@@ -141,15 +180,71 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     );
   }
 
+  // 🔍 Search Users via Backend
+  Future<void> _searchUsers(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _availableUsers = [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    setState(() => _isSearching = true);
+
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('jwt_token');
+
+      // Using your backend endpoint for fullName partial search
+      final url = Uri.parse('${BASE_URL.Urls().baseURL}user/find/fullName/$query');
+
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        
+        setState(() {
+          _availableUsers = data.map((json) => UserModel(
+            id: json['id'],
+            name: json['name'],
+            fullName: json['fullName'],
+          )).toList();
+        });
+      } else {
+        // If 404 (no user found), clear the list
+        setState(() {
+          _availableUsers = [];
+        });
+      }
+    } catch (e) {
+      debugPrint("Error searching users: $e");
+      setState(() {
+        _availableUsers = [];
+      });
+    } finally {
+      setState(() => _isSearching = false);
+    }
+  }
+
   void _createGroup() async {
     setState(() {
       _isLoading = true;
     });
 
     try {
+      // Extracting IDs from the selected UserModels
+      final memberIds = _selectedMembers.map((m) => m.id).toList();
+
       final group = await _services.createGroup(
         groupName: _groupNameController.text.trim(),
-        members: _selectedMembers,
+        members: memberIds, // Send list of IDs
         creatorId: widget.currentUserId,
       );
 

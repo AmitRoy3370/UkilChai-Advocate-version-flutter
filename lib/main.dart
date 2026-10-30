@@ -30,7 +30,7 @@ import 'splash_screen.dart';
 
 import '../Auth/AuthGate.dart';
 import '../AdvocatePages/AdvocateProfilePage.dart';
-
+import '../QuestionPages/AskQuestionPage.dart';
 // 👇 ADDED IMPORT FOR LIVE LOCATION
 import '../LiveLocations/live_location_screen.dart';
 import 'package:provider/provider.dart';
@@ -43,6 +43,7 @@ import '../DirectorsPages/director_list_page.dart';
 import '../ShareholderPages/shareholder_list_page.dart';
 import '../CompanyPages/company_registration_screen.dart';
 import '../CompanyPages/my_company_page.dart';
+import '../GroupChat/GroupChatHome.dart';
 
 // Global key to access MyHomePage state from anywhere
 final GlobalKey<_MyHomePageState> homePageKey = GlobalKey<_MyHomePageState>();
@@ -568,6 +569,13 @@ class _MyHomePageState extends State<MyHomePage> {
                       index: 3,
                     ),
 
+                    // 👇 ADDED GROUP CHAT BUTTON HERE
+                    _buildModernDrawerItem(
+                      icon: Icons.group,
+                      title: "Group Chat",
+                      index: 16, // Using 16 as the new unique index
+                    ),
+
                     // 👇 ADDED LIVE LOCATION BUTTON HERE
                     _buildModernDrawerItem(
                       icon: Icons.map,
@@ -625,6 +633,12 @@ class _MyHomePageState extends State<MyHomePage> {
                       icon: Icons.business_center,
                       title: "My Companies",
                       index: 14,
+                    ),
+                    // 👇 ADDED ASK QUESTION BUTTON HERE
+                    _buildModernDrawerItem(
+                      icon: Icons.help_outline, // or Icons.question_answer
+                      title: "Ask Question",
+                      index: 17, 
                     ),
 
                     const Divider(
@@ -741,7 +755,9 @@ class _MyHomePageState extends State<MyHomePage> {
         index == 12 ||
         index == 13 ||
         index == 14 ||
-        index == 15); // Added 15
+        index == 15 ||
+        index == 16 ||
+        index == 17); // Added 15
     final isSelected = isSpecialPage ? false : (_selectedIndex == index);
 
     return AnimatedContainer(
@@ -828,6 +844,58 @@ class _MyHomePageState extends State<MyHomePage> {
         return;
       }
     }
+
+    // 👇 HANDLE ASK QUESTION (index 17)
+    if (newIndex == 17) {
+      Navigator.pop(context);
+      if (_userId == null || _userId!.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Please login first'),
+              backgroundColor: Colors.orange),
+        );
+        return;
+      }
+      
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => AskQuestionPage(
+            userId: _userId!,
+          ),
+        ),
+      );
+      return;
+    }
+
+
+
+    // 👇 HANDLE GROUP CHAT (index 16)
+    if (newIndex == 16) {
+      Navigator.pop(context);
+      if (_userId == null || _userId!.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Please login first'),
+              backgroundColor: Colors.orange),
+        );
+        return;
+      }
+      
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => GroupChatHome(
+            currentUserId: _userId!,
+            currentUserName: _userName ?? "User",
+          ),
+        ),
+      );
+      return;
+    }
+
+
+
     // ───────────────────────────────────────────────────────────────
     // 👇 HANDLE LIVE LOCATION (index 15)
     if (newIndex == 15) {

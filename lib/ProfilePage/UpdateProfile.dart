@@ -31,6 +31,9 @@ import '../AdvocatePages/advocate_documents_service.dart';
 import '../AdvocatePages/advocate_additional_info_model.dart';
 import '../AdvocatePages/advocate_additional_info_service.dart';
 
+// 👇 Add import for the Viewer
+import '../CaseRelatedPages/AttachmentViewer.dart';
+
 class UpdateProfile extends StatefulWidget {
   const UpdateProfile({super.key});
 
@@ -83,6 +86,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
   String? cvFileName, selectedDistrict;
 
   String? advocateId;
+  String? _existingCvHexKey; // 👈 Variable to store the existing CV key
 
   final TextEditingController experienceController = TextEditingController();
   final TextEditingController licenseKeyController = TextEditingController();
@@ -165,11 +169,6 @@ class _UpdateProfileState extends State<UpdateProfile> {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // ✅ RESILIENT PRELOAD — every sub-fetch is guarded individually
-  //    so one failure never blocks the rest. `loading` is set to
-  //    `false` ONLY after every sub-fetch has been attempted.
-  // ══════════════════════════════════════════════════════════════
   Future<void> loadPreviousData() async {
     try {
       final token = await AuthService.getToken();
@@ -196,6 +195,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
 
         if (userRes.statusCode == 200) {
           final data = jsonDecode(userRes.body);
+          print('user old response :- $data');
           if (mounted) {
             setState(() {
               oldNameController.text = (data["name"] ?? '').toString();
@@ -326,6 +326,9 @@ class _UpdateProfileState extends State<UpdateProfile> {
         if (advocateRes.statusCode == 200) {
           final d = jsonDecode(advocateRes.body);
           resolvedAdvocateId = d["id"]?.toString();
+          
+          // 👈 Store the CV HexKey if it exists
+          _existingCvHexKey = d["cvHexKey"]?.toString();
 
           if (mounted) {
             setState(() {
@@ -353,13 +356,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
         debugPrint('advocate/findByUser failed (non-fatal): $e');
       }
 
-      // ── 6. CV (FIXED) — always fetch by the LOGGED-IN userId.
-      //    The backend endpoint is advocate/cv/{userId}, which is the
-      //    same id used by downloadCv(). Previously we used the
-      //    advocate's `userId` field (sometimes null) — that's why
-      //    the CV never appeared. Now we try the logged-in userId
-      //    first, and fall back to the advocate's userId only if the
-      //    first attempt fails.
+      // ── 6. CV (FIXED) ────────────────────────────────────────
       await _loadCvBytes(userId, token, fallbackUserId: null);
 
       // ── 7. Gender (guarded) ──────────────────────────────────
@@ -378,10 +375,6 @@ class _UpdateProfileState extends State<UpdateProfile> {
     }
   }
 
-  /// ✅ NEW HELPER — loads the CV by the given `userId` (the logged-in
-  /// one). If a `fallbackUserId` is passed and the first attempt fails,
-  /// we try again with the fallback (usually the advocate record's
-  /// `userId`, in case the backend keys CVs by that instead).
   Future<void> _loadCvBytes(
     String userId,
     String token, {
@@ -970,7 +963,7 @@ class _UpdateProfileState extends State<UpdateProfile> {
       request.fields["name"] = nameController.text.trim();
       request.fields["password"] = passwordController.text.trim();
       if (fullNameController.text.trim().isNotEmpty) {
-        request.fields["fullName"] = fullNameController.text.trim();
+        request.fields["FullName"] = fullNameController.text.trim();
       }
 
       if (_selectedDistrict != null && _selectedDistrict!.isNotEmpty) {
@@ -1310,9 +1303,6 @@ class _UpdateProfileState extends State<UpdateProfile> {
   }
 Future<void> _updateDocuments(
     String advocateId, String userId, String token) async {
-  // ══════════════════════════════════════════════════════════════
-  // LOG ENTRY — everything we know at the start
-  // ══════════════════════════════════════════════════════════════
   debugPrint('══════════ _updateDocuments START ══════════');
   debugPrint('▶ advocateId          : $advocateId');
   debugPrint('▶ userId              : $userId');
@@ -1813,29 +1803,7 @@ Future<void> _updateDocuments(
           _buildWorkingExperienceSection(),
           const SizedBox(height: 20),
           _buildSpecialistSection(),
-          if (cvFileName != null)
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.picture_as_pdf, color: Colors.red),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(cvFileName!, overflow: TextOverflow.ellipsis),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.download),
-                    onPressed: downloadCv,
-                  ),
-                ],
-              ),
-            ),
-
+          
           const SizedBox(height: 20),
           _buildCvSection(),
           const SizedBox(height: 24),
@@ -2719,16 +2687,96 @@ Future<void> _updateDocuments(
     );
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // 👇 NEW/UPDATED CV SECTION
+  // ══════════════════════════════════════════════════════════════
   Widget _buildCvSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          "CV (PDF)",
-          style: TextStyle(
-              fontSize: 14, fontWeight: FontWeight.w500, color: Colors.blue),
+        const Divider(thickness: 1),
+        const SizedBox(height: 12),
+        Row(
+          children: const [
+            Icon(Icons.description, color: Colors.blue, size: 20),
+            SizedBox(width: 8),
+            Text(
+              "Curriculum Vitae (CV)",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
+
+        // 👇 DISPLAY EXISTING CV
+        if (_existingCvHexKey != null && _existingCvHexKey!.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.blue.withOpacity(0.2)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.picture_as_pdf, color: Colors.red, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Current CV",
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      Text(
+                        "Uploaded previously",
+                        style:
+                            TextStyle(color: Colors.grey[600], fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () async {
+                    // 👇 FIX: Get the token directly before navigating
+                    final token = await AuthService.getToken();
+                    if (!mounted) return;
+                    
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => Scaffold(
+                          backgroundColor: Colors.black,
+                          appBar: AppBar(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            title: const Text("Current CV"),
+                          ),
+                          body: CaseAttachmentView(
+                            attachmentId: _existingCvHexKey!,
+                            jwtToken: token ?? '',
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.remove_red_eye, size: 18),
+                  label: const Text("View"),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.blue,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // 👇 UPLOAD NEW CV
         GestureDetector(
           onTap: pickCv,
           child: Container(
@@ -2741,32 +2789,27 @@ Future<void> _updateDocuments(
             ),
             child: Row(
               children: [
-                const Icon(Icons.picture_as_pdf, color: Colors.red),
+                const Icon(Icons.upload_file, color: Colors.green),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    cvFileName ?? "Upload PDF File",
+                    cvFileName == null || cvFileName == "previous_cv.pdf"
+                        ? "Upload New CV (PDF)"
+                        : cvFileName!,
                     style: TextStyle(
-                      color: cvFileName != null
+                      color: (cvFileName != null &&
+                              cvFileName != "previous_cv.pdf")
                           ? Colors.black87
                           : Colors.grey[600],
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (cvFileName != null)
-                  IconButton(
-                    icon: const Icon(Icons.download, color: Colors.blue),
-                    onPressed: downloadCv,
-                    constraints: const BoxConstraints(),
-                    padding: EdgeInsets.zero,
-                    iconSize: 20,
-                  ),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.blue,
+                    color: Colors.green,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text(
