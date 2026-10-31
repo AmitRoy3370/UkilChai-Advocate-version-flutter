@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'advocate_join_request_dto_model.dart';
 import '../LogInPage/LogIn.dart';
+import '../CaseRelatedPages/AttachmentViewer.dart'; // 👈 Import the viewer
 
 class AdvocateJoinRequestDetailsPage extends StatelessWidget {
   final AdvocateJoinRequestDTO request;
@@ -111,39 +112,52 @@ class AdvocateJoinRequestDetailsPage extends StatelessWidget {
               _buildSectionTitle("Uploaded Documents"),
               _buildCard([
                 for (var doc in request.documents!.attachments)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.attach_file, color: Colors.blue, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(doc, style: const TextStyle(fontSize: 13))),
-                      ],
+                  InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => Scaffold(
+                            backgroundColor: Colors.black,
+                            appBar: AppBar(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              title: const Text("Document Viewer"),
+                            ),
+                            // 👈 Using the CaseAttachmentView widget here
+                            body: CaseAttachmentView(
+                              attachmentId: doc,
+                              jwtToken: '', // Passing empty token since this is before login
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.attach_file, color: Colors.blue, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              doc, 
+                              style: const TextStyle(
+                                fontSize: 13, 
+                                color: Colors.blue, 
+                                decoration: TextDecoration.underline
+                              )
+                            ),
+                          ),
+                          const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+                        ],
+                      ),
                     ),
                   ),
               ]),
             ],
 
             const SizedBox(height: 30),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LogIn()),
-                    (route) => false,
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text("Go to Login", style: TextStyle(fontSize: 16)),
-              ),
-            ),
             const SizedBox(height: 20),
           ],
         ),
