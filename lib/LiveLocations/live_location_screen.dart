@@ -697,20 +697,23 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
   }
 
   Widget _buildStats(LiveLocationProvider provider) {
-    // Count only what is actually rendered on the map for this user.
-    // - "Advocates" = ONLY the current user's own marker, when they are an advocate.
-    //   No other advocate is ever shown as an advocate to this user.
-    // - "Users"     = everyone else (other advocates + regular users).
-    final myLoc = provider.myLocation;
-    final bool iAmAdvocate =
-        myLoc != null && myLoc.advocateId != null && myLoc.advocateId!.isNotEmpty;
+    // ✅ REAL advocate count = number of advocates in the backend list
+    //    (excluding the current user, since we don't want to double-count
+    //    and we always show "You" separately).
+    final myUserId = provider.myLocation?.userId ?? widget.userId;
 
-    final int visibleAdvocates = iAmAdvocate ? 1 : 0;
-    final int visibleUsers =
-        (myLoc != null ? 1 : 0) - visibleAdvocates +
-            provider.allLocations
-                .where((l) => l.userId != myLoc?.userId)
-                .length;
+    final int realAdvocateCount = provider.allLocations
+        .where((l) =>
+            l.advocateId != null &&
+            l.advocateId!.isNotEmpty)
+        .length;
+
+    // ✅ Real user count = non-advocate entries (excluding me)
+    final int realUserCount = provider.allLocations
+        .where((l) =>
+            l.userId != myUserId &&
+            (l.advocateId == null || l.advocateId!.isEmpty))
+        .length;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -724,9 +727,9 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _statRow(Colors.purple, 'Advocates', visibleAdvocates),
+          _statRow(Colors.purple, 'Advocates', realAdvocateCount),
           const SizedBox(height: 4),
-          _statRow(Colors.blue, 'Users', visibleUsers),
+          _statRow(Colors.blue, 'Users', realUserCount),
           const SizedBox(height: 4),
           Row(
             children: [
@@ -883,8 +886,6 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
   void _showAdvocateList() {
     try {
       final provider = context.read<LiveLocationProvider>();
-      // Show only real other users (no advocate), since advocate cannot
-      // see other advocates here.
       final myId = provider.myLocation?.userId;
       final others = provider.allLocations
           .where((l) => l.userId != myId && l.advocateId == null)

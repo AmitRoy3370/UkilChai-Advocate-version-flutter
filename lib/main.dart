@@ -33,6 +33,7 @@ import '../AdvocatePages/AdvocateProfilePage.dart';
 import '../QuestionPages/AskQuestionPage.dart';
 // 👇 ADDED IMPORT FOR LIVE LOCATION
 import '../LiveLocations/live_location_screen.dart';
+import '../LiveLocations/live_location_provider.dart';
 import 'package:provider/provider.dart';
 import 'LiveLocations/live_location_provider.dart';
 
@@ -53,6 +54,7 @@ void main() {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => NotificationService()),
+        ChangeNotifierProvider(create: (_) => LiveLocationProvider()),
       ],
       child: LifecycleManager(child: MyApp()),
     ),
@@ -72,7 +74,7 @@ class MyApp extends StatelessWidget {
       navigatorObservers: [routeObserver],
       home: MyHomePage(
         key: homePageKey,
-        title: 'উকিল চাই',
+        title: 'উকিল',
       ),
       debugShowCheckedModeBanner: false,
     );
