@@ -107,7 +107,7 @@ class _MyHomePageState extends State<MyHomePage> {
   int _selectedIndex = 0;
   Timer? _heartbeatTimer;
   String? _userId;
-  String? _userName;
+  String? _userName, fullName;
 
   // 👇 ADDED MISSING IDS
   String? _directorId;
@@ -299,6 +299,7 @@ class _MyHomePageState extends State<MyHomePage> {
           setState(() {
             _userId = userId;
             _userName = data['name'] ?? "User";
+            fullName = data['fullName'];
             _directorId = directorId;
             _shareHolderId = shareHolderId;
             _advocateId = advocateId.isNotEmpty ? advocateId : null; // 👈 Stored
@@ -919,6 +920,7 @@ class _MyHomePageState extends State<MyHomePage> {
               userId: _userId!,
               userName: _userName ?? "User",
               advocateId: _advocateId, // Passes null if not an advocate
+              fullName: fullName
             ),
           ),
         ),
