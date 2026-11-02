@@ -9,7 +9,7 @@ class LiveLocationProvider extends ChangeNotifier {
   final LocationService _locationService = LocationService();
   
   List<UserLiveLocationDataResponse> _allLocations = [];
-  UserLiveLocationDataResponse? _myLocation; // ✅ Changed to Response type
+  UserLiveLocationDataResponse? _myLocation; 
   bool _isLoading = false;
   bool _isTracking = false;
   Timer? _heartbeatTimer;
@@ -40,7 +40,6 @@ class LiveLocationProvider extends ChangeNotifier {
     String? advocateId,
   }) async {
     if (_isTracking && _currentUserId == userId) {
-      print('⚠️ Already tracking user: $userId');
       return;
     }
     
@@ -80,15 +79,15 @@ class LiveLocationProvider extends ChangeNotifier {
   }
 
   Future<void> _updateLocation() async {
-    if (_currentUserId == null || !_isTracking) {
-      print('⚠️ Cannot update location - not tracking');
-      return;
-    }
+    if (_currentUserId == null || !_isTracking) return;
 
     try {
       final position = await _locationService.getCurrentLocation();
+      
+      // ✅ If position is null, the browser blocked GPS. 
+      // Don't fake it. Just skip this heartbeat and try again on the next cycle.
       if (position == null) {
-        print('❌ No position available');
+        print('⚠️ No position available. Will retry on next heartbeat.');
         return;
       }
 
@@ -97,7 +96,6 @@ class LiveLocationProvider extends ChangeNotifier {
         position.longitude,
       );
 
-      // ✅ Send heartbeat and get LiveLocationData
       final result = await LiveLocationService.sendHeartbeat(
         userId: _currentUserId!,
         latitude: position.latitude,
@@ -107,21 +105,31 @@ class LiveLocationProvider extends ChangeNotifier {
       );
 
       if (result != null) {
-        // ✅ Convert LiveLocationData to UserLiveLocationDataResponse
-        _myLocation = result/*.toResponse(userName: _myUserName)*/;
-        notifyListeners();
-        print('📍 Location updated: $locationName');
+        _myLocation = result;
+      } else {
+        // ✅ Fallback if backend fails to return data, so the map still shows your pin
+        _myLocation = UserLiveLocationDataResponse(
+          userId: _currentUserId!,
+          userName: _myUserName,
+          fullName: _myFullName,
+          locationName: locationName,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          active: true,
+          lastHeartbeat: DateTime.now(),
+          advocateId: _advocateId,
+        );
       }
+      
+      notifyListeners();
+      print('📍 Location updated: $locationName');
     } catch (e) {
       print('❌ Error updating location: $e');
     }
   }
 
   Future<void> refreshLocations() async {
-    if (!_isTracking) {
-      print('⚠️ Cannot refresh - not tracking');
-      return;
-    }
+    if (!_isTracking) return;
     
     try {
       _isLoading = true;
@@ -157,35 +165,6 @@ class LiveLocationProvider extends ChangeNotifier {
     }
   }
 
-  Future<UserLiveLocationDataResponse?> getLocationByUserId(String userId) async {
-    try {
-      return await LiveLocationService.getLocationByUserId(userId);
-    } catch (e) {
-      print('❌ Error getting location by user ID: $e');
-      return null;
-    }
-  }
-
-  Future<UserLiveLocationDataResponse?> getLocationByAdvocateId(String advocateId) async {
-    try {
-      return await LiveLocationService.getLocationByAdvocateId(advocateId);
-    } catch (e) {
-      print('❌ Error getting location by advocate ID: $e');
-      return null;
-    }
-  }
-
-  Future<List<UserLiveLocationDataResponse>> getLocationsByAdvocates(
-    List<String> advocateIds,
-  ) async {
-    try {
-      return await LiveLocationService.getLocationsByAdvocates(advocateIds);
-    } catch (e) {
-      print('❌ Error getting locations by advocates: $e');
-      return [];
-    }
-  }
-
   void stopTracking() {
     print('⏹️ Stopping tracking');
     _isTracking = false;
@@ -193,7 +172,6 @@ class LiveLocationProvider extends ChangeNotifier {
     _refreshTimer?.cancel();
     _isInitialized = false;
     notifyListeners();
-    print('⏹️ Live Location Tracking Stopped');
   }
 
   @override

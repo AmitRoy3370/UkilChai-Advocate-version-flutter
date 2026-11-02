@@ -18,7 +18,7 @@ class LiveLocationScreen extends StatefulWidget {
   final String userName;
   final String? fullName;
 
-   const LiveLocationScreen({
+  const LiveLocationScreen({
     super.key,
     required this.userId,
     this.advocateId,
@@ -31,7 +31,6 @@ class LiveLocationScreen extends StatefulWidget {
 }
 
 class _LiveLocationScreenState extends State<LiveLocationScreen> {
-  // Always initialized — never null, so .move() always works
   final MapController _mapController = MapController();
 
   LatLng? _cameraPosition;
@@ -186,7 +185,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
           children: [
             CircleAvatar(
               radius: 30,
-              backgroundColor: /*user.isAdvocate ? Colors.purple : */Colors.blue,
+              backgroundColor: user.isAdvocate ? Colors.purple : Colors.blue,
               child: Text(
                 user.userName.substring(0, 1).toUpperCase(),
                 style: const TextStyle(color: Colors.white, fontSize: 24),
@@ -198,9 +197,9 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             Text(
-              /*user.isAdvocate ? 'Advocate' : */'User',
+              user.isAdvocate ? 'Advocate' : 'User',
               style: TextStyle(
-                color: /*user.isAdvocate ? Colors.purple : */Colors.blue,
+                color: user.isAdvocate ? Colors.purple : Colors.blue,
               ),
             ),
             const SizedBox(height: 8),
@@ -211,10 +210,8 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
             const SizedBox(height: 16),
             const Divider(),
 
-            // FIX: All four ListTiles now have correct title: labels
             ListTile(
               leading: const Icon(Icons.directions, color: Colors.blue),
-
               subtitle: const Text('Open in Google Maps'),
               onTap: () {
                 Navigator.pop(context);
@@ -252,7 +249,6 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
     );
   }
 
-  // Add this method
   void _startLiveNavigation(UserLiveLocationDataResponse targetUser) {
     final provider = context.read<LiveLocationProvider>();
     final myLocation = provider.myLocation;
@@ -262,7 +258,6 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
       return;
     }
 
-    // ✅ Pass required data to navigation screen
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -277,7 +272,6 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
       ),
     );
   }
-
 
   void _openGoogleMaps(double lat, double lng) async {
     final url =
@@ -325,21 +319,17 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
       final provider = context.read<LiveLocationProvider>();
       final List<Marker> newMarkers = [];
 
+      // 1. Add your own marker
       if (provider.myLocation != null) {
         newMarkers.add(
           _createMarkerFromLiveLocation(provider.myLocation!, true),
         );
       }
 
+      // 2. Add everyone else's marker (users and advocates)
       for (var location in provider.allLocations) {
         if (location.userId != provider.myLocation?.userId) {
-
-          if(location.advocateId != null) {
-
-              newMarkers.add(_createMarkerFromLiveLocation(location, false));
-
-          }
-
+          newMarkers.add(_createMarkerFromLiveLocation(location, false));
         }
       }
 
@@ -375,9 +365,9 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: isMyLocation ? Colors.purple : location.isAdvocate
-                    ? Colors.blue
-                    : (isMyLocation ? Colors.purple : Colors.blue),
+                color: location.isAdvocate
+                    ? Colors.purple
+                    : (isMyLocation ? Colors.green : Colors.blue),
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
                 boxShadow: [
@@ -391,7 +381,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
               child: Icon(
                 isMyLocation
                     ? Icons.my_location
-                    : (/*location.isAdvocate ? Icons.gavel : */Icons.person),
+                    : (location.isAdvocate ? Icons.gavel : Icons.person),
                 color: Colors.white,
                 size: 20,
               ),
@@ -420,7 +410,6 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        // FIX: was `Text('Live Location')` — missing `title:` named parameter
         backgroundColor: Colors.green,
         foregroundColor: Colors.white,
         actions: [
@@ -759,7 +748,6 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
             const SizedBox(height: 16),
             Row(
               children: [
-                // ✅ Live Navigation Button (In-App)
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
@@ -776,7 +764,6 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // ✅ External Maps Button
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
@@ -896,8 +883,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dedicated StatefulWidget dialog for location search.
-// Uses its own setState() so results rebuild without touching the parent tree.
+// Search Location Dialog
 // ─────────────────────────────────────────────────────────────────────────────
 class _SearchLocationDialog extends StatefulWidget {
   final void Function(LatLng location, String name) onLocationSelected;
@@ -907,6 +893,7 @@ class _SearchLocationDialog extends StatefulWidget {
   @override
   State<_SearchLocationDialog> createState() => _SearchLocationDialogState();
 }
+
 class _SearchLocationDialogState extends State<_SearchLocationDialog> {
   final TextEditingController _controller = TextEditingController();
   bool _isSearching = false;
@@ -920,9 +907,7 @@ class _SearchLocationDialogState extends State<_SearchLocationDialog> {
     super.dispose();
   }
 
-  // ✅ Debounced search for better UX
   Future<void> _search(String query) async {
-    // Cancel previous timer
     _debounceTimer?.cancel();
 
     if (query.trim().isEmpty) {
@@ -933,17 +918,15 @@ class _SearchLocationDialogState extends State<_SearchLocationDialog> {
       return;
     }
 
-    // ✅ Show loading immediately
     setState(() {
       _isSearching = true;
     });
 
-    // ✅ Debounce: wait 300ms after user stops typing
     _debounceTimer = Timer(const Duration(milliseconds: 300), () async {
       try {
         final raw = await NominatimSearchService.searchLocation(
           query.trim(),
-          limit: 15, // ✅ More results for partial matches
+          limit: 15,
         );
 
         if (!mounted) return;
@@ -952,19 +935,18 @@ class _SearchLocationDialogState extends State<_SearchLocationDialog> {
           _results = raw
               .map(
                 (item) => LocationResult(
-              name: item['name'] as String? ?? 'Unknown Location',
-              displayName: item['display_name'] as String? ?? '',
-              locationType: item['location_type'] as String? ?? 'Location',
-              latitude: (item['latitude'] as num?)?.toDouble() ?? 0.0,
-              longitude: (item['longitude'] as num?)?.toDouble() ?? 0.0,
-            ),
-          )
+                  name: item['name'] as String? ?? 'Unknown Location',
+                  displayName: item['display_name'] as String? ?? '',
+                  locationType: item['location_type'] as String? ?? 'Location',
+                  latitude: (item['latitude'] as num?)?.toDouble() ?? 0.0,
+                  longitude: (item['longitude'] as num?)?.toDouble() ?? 0.0,
+                ),
+              )
               .toList();
           _isSearching = false;
         });
 
         print('✅ Found ${_results.length} results for: "$query"');
-
       } catch (e) {
         if (!mounted) return;
         print('❌ Search error: $e');
@@ -988,12 +970,11 @@ class _SearchLocationDialogState extends State<_SearchLocationDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ✅ Search Input with clear button
             TextField(
               controller: _controller,
               autofocus: true,
               decoration: InputDecoration(
-                hintText: 'Type partial location name...',
+                hintText: 'Type location name...',
                 hintStyle: TextStyle(color: Colors.grey.shade400),
                 border: const OutlineInputBorder(
                   borderRadius: BorderRadius.all(Radius.circular(12)),
@@ -1001,44 +982,35 @@ class _SearchLocationDialogState extends State<_SearchLocationDialog> {
                 prefixIcon: const Icon(Icons.search, color: Colors.green),
                 suffixIcon: _controller.text.isNotEmpty
                     ? IconButton(
-                  icon: const Icon(Icons.clear, size: 20),
-                  onPressed: () {
-                    _controller.clear();
-                    setState(() {
-                      _results = [];
-                      _isSearching = false;
-                    });
-                  },
-                )
+                        icon: const Icon(Icons.clear, size: 20),
+                        onPressed: () {
+                          _controller.clear();
+                          setState(() {
+                            _results = [];
+                            _isSearching = false;
+                          });
+                        },
+                      )
                     : null,
               ),
               onChanged: _search,
             ),
-
             const SizedBox(height: 8),
-
-            // ✅ Helper text for partial search
             if (_controller.text.isNotEmpty && !_isSearching && _results.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
                   children: [
-                    Icon(Icons.search_off, size: 40, color: Colors.grey.shade400),
+                    Icon(Icons.search_off,
+                        size: 40, color: Colors.grey.shade400),
                     const SizedBox(height: 8),
                     Text(
                       'No results found for "${_controller.text}"',
                       style: TextStyle(color: Colors.grey.shade600),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Try typing a different name or check spelling',
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                    ),
                   ],
                 ),
               ),
-
-            // ✅ Loading indicator
             if (_isSearching)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
@@ -1050,8 +1022,6 @@ class _SearchLocationDialogState extends State<_SearchLocationDialog> {
                   ],
                 ),
               ),
-
-            // ✅ Results list with location type badge
             if (_results.isNotEmpty)
               ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: 280),
@@ -1081,10 +1051,12 @@ class _SearchLocationDialogState extends State<_SearchLocationDialog> {
                             : result.locationType,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                        style:
+                            TextStyle(color: Colors.grey.shade600, fontSize: 12),
                       ),
                       trailing: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
                           color: Colors.green.shade100,
                           borderRadius: BorderRadius.circular(12),
@@ -1121,7 +1093,6 @@ class _SearchLocationDialogState extends State<_SearchLocationDialog> {
     );
   }
 
-  // ✅ Get icon based on location type
   IconData _getLocationIcon(String type) {
     switch (type.toLowerCase()) {
       case 'city':
@@ -1142,7 +1113,6 @@ class _SearchLocationDialogState extends State<_SearchLocationDialog> {
   }
 }
 
-// ✅ Updated LocationResult with more fields
 class LocationResult {
   final String name;
   final String displayName;

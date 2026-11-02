@@ -911,22 +911,18 @@ class _MyHomePageState extends State<MyHomePage> {
         );
         return;
       }
-      
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          // FIX: Wrap the screen with the required Provider
-          builder: (context) => ChangeNotifierProvider(
-            create: (_) => LiveLocationProvider(), // <--- This will now be recognized
-            child: LiveLocationScreen(
-              userId: _userId!,
-              userName: _userName ?? "User",
-              advocateId: _advocateId, // Passes null if not an advocate
-              fullName: fullName
-            ),
-          ),
-        ),
-      );
+      // main.dart -> _onItemTapped -> index 15
+Navigator.push(
+  context,
+  MaterialPageRoute(
+    builder: (context) => LiveLocationScreen(
+      userId: _userId!,
+      userName: _userName ?? "User",
+      advocateId: _advocateId,
+      fullName: fullName,
+    ),
+  ),
+);
       return;
     }
 
