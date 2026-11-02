@@ -17,8 +17,6 @@ import '../LogInPage/LogIn.dart';
 import '../AdvocatePages/AdvocateJoinRequestDetailsPage.dart'; 
 import '../AdvocatePages/advocate_join_request_dto_model.dart';
 
-
-
 // ✅ Gender imports
 import 'Gender.dart';
 import 'UserGender.dart';
@@ -42,7 +40,12 @@ class _RegistrationPageState extends State<RegistrationPage> {
   final TextEditingController locationTextController = TextEditingController();
   final TextEditingController experienceController = TextEditingController();
   final TextEditingController licenseKeyController = TextEditingController();
-  final TextEditingController degreeController = TextEditingController();
+  
+  // ✅ Updated Degree Controllers
+  final TextEditingController degreeNameController = TextEditingController();
+  final TextEditingController institutionController = TextEditingController();
+  final TextEditingController degreeYearController = TextEditingController();
+
   final TextEditingController workingExperienceController = TextEditingController();
 
   // New Text Controllers for Working Experience & Additional Info
@@ -374,11 +377,30 @@ class _RegistrationPageState extends State<RegistrationPage> {
     }
   }
 
+  // ✅ Updated addDegree logic
   void addDegree() {
-    if (degreeController.text.trim().isNotEmpty) {
-      degrees.add(degreeController.text.trim());
-      degreeController.clear();
+    final degreeName = degreeNameController.text.trim();
+    final institution = institutionController.text.trim();
+    final year = degreeYearController.text.trim();
+
+    if (degreeName.isNotEmpty && institution.isNotEmpty) {
+      String formattedDegree = "$degreeName from $institution";
+      if (year.isNotEmpty) {
+        formattedDegree += " in $year";
+      }
+      
+      degrees.add(formattedDegree);
+      
+      // Clear the fields for the next entry
+      degreeNameController.clear();
+      institutionController.clear();
+      degreeYearController.clear();
+      
       setState(() {});
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter both Degree and Institution")),
+      );
     }
   }
 
@@ -400,16 +422,12 @@ class _RegistrationPageState extends State<RegistrationPage> {
     setState(() {});
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // ✅ SAVE GENDER after user creation
-  // ══════════════════════════════════════════════════════════════
   Future<bool> _saveUserGender({
     required String userId,
     required Gender gender,
     required String token,
   }) async {
     try {
-      // Prefer using the service (respects Dio configuration + interceptors)
       final service = UserGenderService();
       final created = await service.createUserGender(
         userId: userId,
@@ -421,8 +439,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
       }
       return true;
     } catch (e) {
-      // Fallback: if the service fails because it uses the persisted token from
-      // prefs (which we just saved), try a direct HTTP call to be safe.
       if (kDebugMode) {
         print('⚠️ UserGenderService failed, trying raw http: $e');
       }
@@ -439,7 +455,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
           },
           body: jsonEncode({
             "userId": userId,
-            "gender": gender.name, // "MALE", "FEMALE", "OTHER"
+            "gender": gender.name, 
           }),
         );
 
@@ -460,7 +476,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
     try {
       final uri = Uri.parse("${baseURL.Urls().baseURL}auth/register");
 
-      // Validation
       if (userNameController.text.isEmpty ||
           passwordController.text.isEmpty ||
           emailController.text.isEmpty ||
@@ -474,7 +489,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
         return;
       }
 
-      // 1. Register User
       var request = http.MultipartRequest("POST", uri);
       request.fields["name"] = userNameController.text.trim();
       request.fields["password"] = passwordController.text.trim();
@@ -507,12 +521,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
       if (token == null || userId == null) return;
 
-      // Save token immediately
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString("jwt_token", token);
       await prefs.setString("userId", userId);
 
-      // 2. Save Gender
       if (_selectedGender != null) {
         final genderUri = Uri.parse(
             "${baseURL.Urls().baseURL}user-gender/create?userId=$userId");
@@ -525,7 +537,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 {"userId": userId, "gender": _selectedGender!.name}));
       }
 
-      // 3. Save Contact Info
       await http.post(
         Uri.parse(
             "${baseURL.Urls().baseURL}user/contact-info/add?userId=$userId"),
@@ -540,7 +551,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
         }),
       );
 
-      // 4. Save Location
       await http.post(
         Uri.parse("${baseURL.Urls().baseURL}userLocation/add"),
         headers: {
@@ -555,7 +565,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
         }),
       );
 
-      // 5. ADVOCATE JOIN REQUEST (Main)
       final joinUri =
           Uri.parse("${baseURL.Urls().baseURL}advocateJoinRequest");
       var joinRequest = http.MultipartRequest("POST", joinUri);
@@ -587,10 +596,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
       if (joinResponse.statusCode == 200 || joinResponse.statusCode == 201) {
         final joinData = jsonDecode(joinResBody);
-        final String joinRequestId = joinData['id']; // Join Request ID
+        final String joinRequestId = joinData['id'];
 
-        // 6. Save Working Experience Details
-        // URL requires userId, Body requires advocateId (which is joinRequestId)
         if (barAssociationController.text.isNotEmpty ||
             chamberController.text.isNotEmpty) {
           final weUri = Uri.parse(
@@ -620,7 +627,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
           }
         }
 
-        // 7. Save Additional Info
         if (nidController.text.isNotEmpty ||
             addressController.text.isNotEmpty) {
           final aiUri = Uri.parse(
@@ -645,7 +651,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
           }
         }
 
-        // 8. Save Documents
         if (_documentFiles.isNotEmpty) {
           final docUri = Uri.parse(
               "${baseURL.Urls().baseURL}advocate-documents-in-join-request/add/$joinRequestId");
@@ -669,7 +674,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
           }
         }
 
-        // 9. Fetch the complete DTO to show in Details Page
         final fetchUri = Uri.parse(
             "${baseURL.Urls().baseURL}advocateJoinRequest/user/$userId");
         final fetchRes = await http.get(fetchUri,
@@ -679,12 +683,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
           final dto =
               AdvocateJoinRequestDTO.fromJson(jsonDecode(fetchRes.body));
 
-          // Clear token so user cannot access app until approved
           await prefs.remove("jwt_token");
           await prefs.remove("userId");
 
           if (mounted) {
-            // Ensure the loading dialog is closed before pushing
             Navigator.of(context, rootNavigator: true).pop();
 
             Navigator.pushReplacement(
@@ -704,7 +706,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
         }
       }
     } catch (e) {
-      // Close loading dialog on error
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop();
         ScaffoldMessenger.of(context)
@@ -712,7 +713,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
       }
     }
   }
-
 
   Widget _buildOpenFormButton() {
     return GestureDetector(
@@ -885,7 +885,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       _buildPasswordField(),
                       const SizedBox(height: 16),
 
-                      // ✅ NEW: Gender dropdown
                       _buildGenderDropdown(),
                       const SizedBox(height: 16),
 
@@ -927,16 +926,14 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       _buildSpecialistSection(),
                       const SizedBox(height: 20),
 
+                      _buildWorkingExperienceDetailsSection(),
+                      const SizedBox(height: 20),
 
-// --- NEW ADDED SECTIONS ---
-_buildWorkingExperienceDetailsSection(),
-const SizedBox(height: 20),
+                      _buildAdditionalInfoSection(),
+                      const SizedBox(height: 20),
 
-_buildAdditionalInfoSection(),
-const SizedBox(height: 20),
-
-_buildDocumentsSection(),
-const SizedBox(height: 20),
+                      _buildDocumentsSection(),
+                      const SizedBox(height: 20),
 
                       _buildCvPicker(),
                       const SizedBox(height: 20),
@@ -1129,9 +1126,6 @@ const SizedBox(height: 20),
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // ✅ NEW: Gender dropdown widget
-  // ══════════════════════════════════════════════════════════════
   Widget _buildGenderDropdown() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1318,6 +1312,7 @@ const SizedBox(height: 20),
     );
   }
 
+  // ✅ Updated Degree Section
   Widget _buildDegreeSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1331,35 +1326,44 @@ const SizedBox(height: 20),
           ),
         ),
         const SizedBox(height: 8),
+        
+        // First row: Degree Name + Institution
         Row(
           children: [
             Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey[200]!),
-                ),
-                child: TextField(
-                  controller: degreeController,
-                  decoration: InputDecoration(
-                    hintText: "Add a degree",
-                    hintStyle: TextStyle(color: Colors.grey[400]),
-                    prefixIcon: const Icon(Icons.school, color: Colors.blue),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 16,
-                    ),
-                  ),
-                ),
+              child: _buildFormField(
+                controller: degreeNameController,
+                label: "Degree (e.g. BSC)",
+                icon: Icons.school,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildFormField(
+                controller: institutionController,
+                label: "Institution (e.g. EWU)",
+                icon: Icons.account_balance,
+              ),
+            ),
+          ],
+        ),
+        
+        const SizedBox(height: 8),
+        
+        // Second row: Year + Add Button
+        Row(
+          children: [
+            Expanded(
+              child: _buildFormField(
+                controller: degreeYearController,
+                label: "Year (Optional)",
+                icon: Icons.calendar_today,
+                keyboardType: TextInputType.number,
               ),
             ),
             const SizedBox(width: 12),
             Container(
+              height: 55,
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [Colors.blue, Colors.blueAccent],
@@ -1380,7 +1384,10 @@ const SizedBox(height: 20),
             ),
           ],
         ),
+        
         const SizedBox(height: 12),
+        
+        // List of added degrees
         if (degrees.isNotEmpty)
           Wrap(
             spacing: 8,
@@ -1673,7 +1680,6 @@ const SizedBox(height: 20),
         onPressed: () async {
           FocusScope.of(context).unfocus();
           
-          // Show loading dialog
           showDialog(
             context: context,
             barrierDismissible: false,
@@ -1707,11 +1713,7 @@ const SizedBox(height: 20),
             },
           );
 
-          // Run the form submission
           await _submitForm();
-          
-          // Note: We removed the `Navigator.pop(context)` here because 
-          // the _submitForm method handles closing the dialog upon success or failure.
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.blue,
@@ -1744,7 +1746,6 @@ const SizedBox(height: 20),
       ),
       body: Stack(
         children: [
-          // Map
           LayoutBuilder(
             builder: (context, constraints) {
               return SizedBox(
@@ -1775,7 +1776,6 @@ const SizedBox(height: 20),
             },
           ),
 
-          // Gradient Overlay
           IgnorePointer(
             child: Container(
               decoration: BoxDecoration(
@@ -1792,7 +1792,6 @@ const SizedBox(height: 20),
             ),
           ),
 
-          // Search Bar
           Positioned(
             top: MediaQuery.of(context).padding.top + 10,
             left: 16,
@@ -1837,7 +1836,6 @@ const SizedBox(height: 20),
             ),
           ),
 
-          // My Location Button
           Positioned(
             bottom: 20,
             right: 16,
@@ -1858,7 +1856,6 @@ const SizedBox(height: 20),
             ),
           ),
 
-          // Open Form Button
           if (!showForm)
             Positioned(
               bottom: 20,
@@ -1869,7 +1866,6 @@ const SizedBox(height: 20),
               ),
             ),
 
-          // Animated Form
           if (showForm) _buildAnimatedForm(),
         ],
       ),
