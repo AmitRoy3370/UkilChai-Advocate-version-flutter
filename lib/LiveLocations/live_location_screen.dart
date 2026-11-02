@@ -6,8 +6,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:geolocator/geolocator.dart';
 import '../LiveLocations/live_location_provider.dart';
 import '../LiveLocations/live_location_model.dart';
 import 'advocate_location_screen.dart';
@@ -20,12 +18,12 @@ class LiveLocationScreen extends StatefulWidget {
   final String userName;
   final String? fullName;
 
-  const LiveLocationScreen({
+   const LiveLocationScreen({
     super.key,
     required this.userId,
     this.advocateId,
     required this.userName,
-    this.fullName,
+    required this.fullName,
   });
 
   @override
@@ -33,6 +31,7 @@ class LiveLocationScreen extends StatefulWidget {
 }
 
 class _LiveLocationScreenState extends State<LiveLocationScreen> {
+  // Always initialized — never null, so .move() always works
   final MapController _mapController = MapController();
 
   LatLng? _cameraPosition;
@@ -211,6 +210,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
             ),
             const SizedBox(height: 16),
             const Divider(),
+
             ListTile(
               leading: const Icon(Icons.directions, color: Colors.blue),
               subtitle: const Text('Open in Google Maps'),
@@ -274,6 +274,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
     );
   }
 
+
   void _openGoogleMaps(double lat, double lng) async {
     final url =
         'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving';
@@ -327,16 +328,15 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
       }
 
       for (var location in provider.allLocations) {
-        if (location.userId == provider.myLocation?.userId) continue;
+        if (location.userId != provider.myLocation?.userId) {
 
-        final UserLiveLocationDataResponse display;
-        if (location.advocateId != null) {
-          display = location.copyWith(isAdvocate: false);
-        } else {
-          display = location;
+          if(location.advocateId != null) {
+
+              newMarkers.add(_createMarkerFromLiveLocation(location, false));
+
+          }
+
         }
-
-        newMarkers.add(_createMarkerFromLiveLocation(display, false));
       }
 
       if (_markers.length != newMarkers.length || _markers.isEmpty) {
@@ -400,9 +400,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                isMyLocation
-                    ? 'You'
-                    : (location.fullName ?? location.userName),
+                isMyLocation ? 'You' : (location.fullName ?? location.userName),
                 style: const TextStyle(color: Colors.white, fontSize: 10),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -414,54 +412,13 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
     );
   }
 
-  void _requestWebLocation() async {
-    if (!kIsWeb) return;
-
-    try {
-      _showSnackBar('📡 Requesting location permission...', Colors.blue);
-
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      ).timeout(const Duration(seconds: 10));
-
-      if (position != null &&
-          (position.latitude != 0 || position.longitude != 0)) {
-        _showSnackBar('✅ Location permission granted!', Colors.green);
-        final provider = context.read<LiveLocationProvider>();
-        await provider.refreshLocations();
-      } else {
-        _showSnackBar(
-            '⚠️ Please allow location in browser settings', Colors.orange);
-      }
-    } catch (e) {
-      _showSnackBar(
-        '🔧 Click lock icon in address bar → Allow location',
-        Colors.orange,
-      );
-      print('❌ Web location request error: $e');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Live Location',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
         backgroundColor: Colors.green,
         foregroundColor: Colors.white,
         actions: [
-          if (kIsWeb)
-            IconButton(
-              icon: const Icon(Icons.location_searching),
-              tooltip: 'Allow Location Access',
-              onPressed: _requestWebLocation,
-            ),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: _showSearchDialog,
@@ -519,36 +476,6 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
                   child: _buildLocationInfo(provider),
                 ),
               Positioned(top: 16, right: 16, child: _buildStats(provider)),
-              if (kIsWeb && provider.myLocation == null)
-                Positioned(
-                  top: 80,
-                  left: 20,
-                  right: 20,
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.orange.shade300),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline,
-                            color: Colors.orange.shade800),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '🔧 Allow location: Click lock icon → Allow location',
-                            style: TextStyle(
-                              color: Colors.orange.shade800,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
             ],
           );
         },
@@ -634,7 +561,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.fullName ?? widget.userName,
+                      widget.userName,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -697,24 +624,6 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
   }
 
   Widget _buildStats(LiveLocationProvider provider) {
-    // ✅ REAL advocate count = number of advocates in the backend list
-    //    (excluding the current user, since we don't want to double-count
-    //    and we always show "You" separately).
-    final myUserId = provider.myLocation?.userId ?? widget.userId;
-
-    final int realAdvocateCount = provider.allLocations
-        .where((l) =>
-            l.advocateId != null &&
-            l.advocateId!.isNotEmpty)
-        .length;
-
-    // ✅ Real user count = non-advocate entries (excluding me)
-    final int realUserCount = provider.allLocations
-        .where((l) =>
-            l.userId != myUserId &&
-            (l.advocateId == null || l.advocateId!.isEmpty))
-        .length;
-
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -727,9 +636,9 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _statRow(Colors.purple, 'Advocates', realAdvocateCount),
+          _statRow(Colors.purple, 'Advocates', provider.onlineAdvocates.length),
           const SizedBox(height: 4),
-          _statRow(Colors.blue, 'Users', realUserCount),
+          _statRow(Colors.blue, 'Users', provider.onlineUsers.length),
           const SizedBox(height: 4),
           Row(
             children: [
@@ -787,8 +696,9 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
           children: [
             CircleAvatar(
               radius: 30,
-              backgroundColor:
-                  location.isAdvocate ? Colors.purple : Colors.blue,
+              backgroundColor: location.isAdvocate
+                  ? Colors.purple
+                  : Colors.blue,
               child: Text(
                 location.userName.substring(0, 1).toUpperCase(),
                 style: const TextStyle(
@@ -886,13 +796,10 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
   void _showAdvocateList() {
     try {
       final provider = context.read<LiveLocationProvider>();
-      final myId = provider.myLocation?.userId;
-      final others = provider.allLocations
-          .where((l) => l.userId != myId && l.advocateId == null)
-          .toList();
+      final advocates = provider.onlineAdvocates;
 
-      if (others.isEmpty) {
-        _showSnackBar('No users online', Colors.grey);
+      if (advocates.isEmpty) {
+        _showSnackBar('No advocates online', Colors.grey);
         return;
       }
 
@@ -907,42 +814,41 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Online Users',
+                'Online Advocates',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
               Expanded(
                 child: ListView.builder(
-                  itemCount: others.length,
+                  itemCount: advocates.length,
                   itemBuilder: (context, index) {
-                    final user = others[index];
+                    final advocate = advocates[index];
                     double distance = 0;
                     final myLoc = provider.myLocation;
                     if (myLoc != null) {
                       distance = _calculateDistance(
                         myLoc.latitude,
                         myLoc.longitude,
-                        user.latitude,
-                        user.longitude,
+                        advocate.latitude,
+                        advocate.longitude,
                       );
                     }
                     return ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: Colors.blue,
+                        backgroundColor: Colors.purple,
                         child: Text(
-                          user.userName.substring(0, 1).toUpperCase(),
+                          advocate.userName.substring(0, 1).toUpperCase(),
                           style: const TextStyle(color: Colors.white),
                         ),
                       ),
-                      title: Text(user.fullName ?? user.userName),
                       subtitle: Text(
-                        '${user.locationName} • '
+                        '${advocate.locationName} • '
                         '${distance.toStringAsFixed(1)} km',
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () {
                         Navigator.pop(context);
-                        _showUserInfo(user);
+                        _showUserInfo(advocate);
                       },
                     );
                   },
@@ -953,7 +859,7 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
         ),
       );
     } catch (e) {
-      debugPrint('Warning: Error showing user list: $e');
+      debugPrint('Warning: Error showing advocate list: $e');
     }
   }
 
