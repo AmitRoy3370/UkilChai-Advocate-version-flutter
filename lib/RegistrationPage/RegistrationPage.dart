@@ -14,8 +14,9 @@ import 'package:advocatechaiadvocate/Utils/BaseURL.dart' as baseURL;
 import 'package:file_picker/file_picker.dart';
 import '../Utils/AdvocateSpeciality.dart';
 import '../LogInPage/LogIn.dart';
-import '../AdvocatePages/AdvocateJoinRequestDetailsPage.dart'; 
+import '../AdvocatePages/AdvocateJoinRequestDetailsPage.dart';
 import '../AdvocatePages/advocate_join_request_dto_model.dart';
+import 'dart:async';
 
 // ✅ Gender imports
 import 'Gender.dart';
@@ -40,22 +41,26 @@ class _RegistrationPageState extends State<RegistrationPage> {
   final TextEditingController locationTextController = TextEditingController();
   final TextEditingController experienceController = TextEditingController();
   final TextEditingController licenseKeyController = TextEditingController();
-  
+
   // ✅ Updated Degree Controllers
   final TextEditingController degreeNameController = TextEditingController();
   final TextEditingController institutionController = TextEditingController();
   final TextEditingController degreeYearController = TextEditingController();
 
-  final TextEditingController workingExperienceController = TextEditingController();
+  final TextEditingController workingExperienceController =
+      TextEditingController();
 
   // New Text Controllers for Working Experience & Additional Info
-  final TextEditingController barAssociationController = TextEditingController();
+  final TextEditingController barAssociationController =
+      TextEditingController();
   final TextEditingController barEnrolmentController = TextEditingController();
-  final TextEditingController primaryPracticeController = TextEditingController();
+  final TextEditingController primaryPracticeController =
+      TextEditingController();
   final TextEditingController chamberController = TextEditingController();
   final TextEditingController practiceYearsController = TextEditingController();
   final TextEditingController profExpController = TextEditingController();
-  final TextEditingController practicingCoatController = TextEditingController();
+  final TextEditingController practicingCoatController =
+      TextEditingController();
 
   final TextEditingController addressController = TextEditingController();
   final TextEditingController cityController = TextEditingController();
@@ -109,6 +114,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
   List<String> workingExperiences = [];
   Set<AdvocateSpeciality> selectedSpecialities = {};
 
+  bool _isSubmitting = false;
+
   final List<String> bangladeshDistricts = AdvocateSpeciality.values
       .map((e) => e.name)
       .toList();
@@ -119,85 +126,164 @@ class _RegistrationPageState extends State<RegistrationPage> {
     _startLocationUpdates();
   }
 
-  void _startLocationUpdates() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Please enable location service")),
-        );
-      }
-      return;
-    }
+  @override
+  void dispose() {
+    _positionStream?.listen(null).cancel();
+    searchController.dispose();
+    fullNameController.dispose();
+    userNameController.dispose();
+    passwordController.dispose();
+    emailController.dispose();
+    phoneController.dispose();
+    locationTextController.dispose();
+    experienceController.dispose();
+    licenseKeyController.dispose();
+    degreeNameController.dispose();
+    institutionController.dispose();
+    degreeYearController.dispose();
+    workingExperienceController.dispose();
+    barAssociationController.dispose();
+    barEnrolmentController.dispose();
+    primaryPracticeController.dispose();
+    chamberController.dispose();
+    practiceYearsController.dispose();
+    profExpController.dispose();
+    practicingCoatController.dispose();
+    addressController.dispose();
+    cityController.dispose();
+    nidController.dispose();
+    whatsAppController.dispose();
+    super.dispose();
+  }
 
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Location permission denied")),
-          );
-        }
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+  }
+
+  void _showSuccess(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.green.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
+  // Safer location start with timeout so it won't hang forever
+  Future<void> _startLocationUpdates() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showError("Please enable location service");
         return;
       }
-    }
 
-    if (permission == LocationPermission.deniedForever) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Location permission denied forever")),
-        );
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          _showError("Location permission denied");
+          return;
+        }
       }
-      return;
+
+      if (permission == LocationPermission.deniedForever) {
+        _showError("Location permission denied forever. Enable from settings.");
+        return;
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 50,
+          timeLimit: Duration(seconds: 20),
+        ),
+      ).timeout(
+        const Duration(seconds: 25),
+        onTimeout: () => throw TimeoutException(
+            'Location request timed out. Using fallback position.'),
+      );
+      _updateDevicePosition(position);
+    } catch (e) {
+      debugPrint('Location error: $e');
+      // Fallback to Dhaka center
+      if (mounted && _devicePosition == null) {
+        setState(() {
+          _devicePosition = lat_lng.LatLng(23.8103, 90.4125);
+          if (_selectedPosition == null) {
+            _selectedPosition = _devicePosition;
+            lattitude = 23.8103;
+            longititude = 90.4125;
+            locationTextController.text = 'Dhaka, Bangladesh';
+          }
+          _updateMarkers();
+        });
+      }
     }
 
-    Position position = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 50,
-      ),
-    );
-    _updateDevicePosition(position);
-
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 5,
-      ),
-    );
-
-    _positionStream!.listen((Position position) {
-      _updateDevicePosition(position);
-    });
+    try {
+      _positionStream = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 5,
+        ),
+      );
+      _positionStream!.listen(
+        (Position position) => _updateDevicePosition(position),
+        onError: (e) => debugPrint('Position stream error: $e'),
+      );
+    } catch (e) {
+      debugPrint('Stream error: $e');
+    }
   }
 
   Future<void> _updateDevicePosition(Position position) async {
-    lat_lng.LatLng newPos = lat_lng.LatLng(
-      position.latitude,
-      position.longitude,
-    );
-    String placeName = await getAddressFromLatLng(
-      position.latitude,
-      position.longitude,
-    );
+    try {
+      lat_lng.LatLng newPos =
+          lat_lng.LatLng(position.latitude, position.longitude);
+      String placeName = await getAddressFromLatLng(
+        position.latitude,
+        position.longitude,
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => 'Lat: ${position.latitude}, Lng: ${position.longitude}',
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      _devicePosition = newPos;
-      if (_selectedPosition == null) {
-        _selectedPosition = newPos;
-        _selectedPlaceName = placeName;
-        lattitude = position.latitude;
-        longititude = position.longitude;
-        locationTextController.text = placeName;
+      setState(() {
+        _devicePosition = newPos;
+        if (_selectedPosition == null) {
+          _selectedPosition = newPos;
+          _selectedPlaceName = placeName;
+          lattitude = position.latitude;
+          longititude = position.longitude;
+          locationTextController.text = placeName;
+        }
+        _updateMarkers();
+      });
+
+      if (_selectedPosition == newPos) {
+        try {
+          mapController.move(newPos, 15.0);
+        } catch (_) {}
       }
-      _updateMarkers();
-    });
-
-    if (_selectedPosition == newPos) {
-      mapController.move(newPos, 15.0);
+    } catch (e) {
+      debugPrint('updateDevicePosition error: $e');
     }
   }
 
@@ -249,8 +335,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
     if (query.isEmpty) return;
 
     lat_lng.LatLng? pos;
-    String locationText = query;
-
     try {
       final uri = Uri.parse(
         'https://nominatim.openstreetmap.org/search?q=$query&format=json&limit=1',
@@ -276,7 +360,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
               locationTextController.text = _selectedPlaceName!;
               _updateMarkers();
             });
-            mapController.move(pos, 15.0);
+            try {
+              mapController.move(pos, 15.0);
+            } catch (_) {}
           }
         }
       }
@@ -284,23 +370,24 @@ class _RegistrationPageState extends State<RegistrationPage> {
       if (kDebugMode) print('Search error: $e');
     }
 
-    if (pos == null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No results found")),
-      );
+    if (pos == null) {
+      _showError("No results found");
     }
   }
 
   Future<void> pickImage() async {
-    XFile? file = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (file != null) {
-      if (kIsWeb) {
-        webImageBytes = await file.readAsBytes();
-        pickedImage = File(file.path);
-      } else {
-        pickedImage = File(file.path);
+    try {
+      XFile? file = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (file != null) {
+        if (kIsWeb) {
+          webImageBytes = await file.readAsBytes();
+        } else {
+          pickedImage = File(file.path);
+        }
+        if (mounted) setState(() {});
       }
-      setState(() {});
+    } catch (e) {
+      _showError('Image pick failed: $e');
     }
   }
 
@@ -361,23 +448,26 @@ class _RegistrationPageState extends State<RegistrationPage> {
   }
 
   Future<void> pickCv() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-    );
-    if (result != null && result.files.isNotEmpty) {
-      if (kIsWeb) {
-        webCvBytes = result.files.first.bytes;
-        cvFileName = result.files.first.name;
-      } else {
-        cvFile = File(result.files.first.path!);
-        cvFileName = result.files.first.name;
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+      if (result != null && result.files.isNotEmpty) {
+        if (kIsWeb) {
+          webCvBytes = result.files.first.bytes;
+          cvFileName = result.files.first.name;
+        } else {
+          cvFile = File(result.files.first.path!);
+          cvFileName = result.files.first.name;
+        }
+        setState(() {});
       }
-      setState(() {});
+    } catch (e) {
+      _showError('CV pick failed: $e');
     }
   }
 
-  // ✅ Updated addDegree logic
   void addDegree() {
     final degreeName = degreeNameController.text.trim();
     final institution = institutionController.text.trim();
@@ -388,19 +478,16 @@ class _RegistrationPageState extends State<RegistrationPage> {
       if (year.isNotEmpty) {
         formattedDegree += " in $year";
       }
-      
+
       degrees.add(formattedDegree);
-      
-      // Clear the fields for the next entry
+
       degreeNameController.clear();
       institutionController.clear();
       degreeYearController.clear();
-      
+
       setState(() {});
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter both Degree and Institution")),
-      );
+      _showError("Please enter both Degree and Institution");
     }
   }
 
@@ -422,72 +509,47 @@ class _RegistrationPageState extends State<RegistrationPage> {
     setState(() {});
   }
 
-  Future<bool> _saveUserGender({
-    required String userId,
-    required Gender gender,
-    required String token,
-  }) async {
-    try {
-      final service = UserGenderService();
-      final created = await service.createUserGender(
-        userId: userId,
-        gender: gender,
-      );
-
-      if (kDebugMode) {
-        print('✅ UserGender created: ${created.toString()}');
-      }
-      return true;
-    } catch (e) {
-      if (kDebugMode) {
-        print('⚠️ UserGenderService failed, trying raw http: $e');
-      }
-
-      try {
-        final uri = Uri.parse(
-          "${baseURL.Urls().baseURL}user-gender/create?userId=$userId",
-        );
-        final res = await http.post(
-          uri,
-          headers: {
-            "Authorization": "Bearer $token",
-            "Content-Type": "application/json",
-          },
-          body: jsonEncode({
-            "userId": userId,
-            "gender": gender.name, 
-          }),
-        );
-
-        if (kDebugMode) {
-          print('📡 Raw gender create status: ${res.statusCode}');
-          print('📡 Raw gender create body: ${res.body}');
-        }
-
-        return res.statusCode == 200 || res.statusCode == 201;
-      } catch (e2) {
-        if (kDebugMode) print('❌ Gender save failed completely: $e2');
-        return false;
-      }
+  // Validates and returns the first missing field description, or null if OK
+  String? _validateRequiredFields() {
+    if (fullNameController.text.trim().isEmpty) return "Full Name is required";
+    if (userNameController.text.trim().isEmpty) return "Username is required";
+    if (emailController.text.trim().isEmpty) return "Email is required";
+    if (phoneController.text.trim().isEmpty) return "Phone Number is required";
+    if (passwordController.text.trim().isEmpty) return "Password is required";
+    if (passwordController.text.trim().length < 6) {
+      return "Password must be at least 6 characters";
     }
+    if (_selectedGender == null) return "Please select your Gender";
+    if (locationTextController.text.trim().isEmpty) {
+      return "Please pick a location from the map";
+    }
+    if (_selectedDistrict == null) return "Please select your District";
+    if (experienceController.text.trim().isEmpty) {
+      return "Experience is required";
+    }
+    if (licenseKeyController.text.trim().isEmpty) {
+      return "License Key is required";
+    }
+    if (selectedSpecialities.isEmpty) {
+      return "Please select at least one Speciality";
+    }
+    return null;
   }
 
   Future<void> _submitForm() async {
-    try {
-      final uri = Uri.parse("${baseURL.Urls().baseURL}auth/register");
+    final validationError = _validateRequiredFields();
+    if (validationError != null) {
+      _showError(validationError);
+      return;
+    }
 
-      if (userNameController.text.isEmpty ||
-          passwordController.text.isEmpty ||
-          emailController.text.isEmpty ||
-          phoneController.text.isEmpty ||
-          locationTextController.text.isEmpty ||
-          _selectedDistrict == null ||
-          _selectedGender == null ||
-          selectedSpecialities.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Please fill all required fields.")));
-        return;
-      }
+    // Guard against double submission
+    if (_isSubmitting) return;
+    _isSubmitting = true;
+
+    try {
+      // ---------- 1. REGISTER USER ----------
+      final uri = Uri.parse("${baseURL.Urls().baseURL}auth/register");
 
       var request = http.MultipartRequest("POST", uri);
       request.fields["name"] = userNameController.text.trim();
@@ -504,82 +566,105 @@ class _RegistrationPageState extends State<RegistrationPage> {
             await http.MultipartFile.fromPath("file", pickedImage!.path));
       }
 
-      final response = await request.send();
+      final response = await request.send().timeout(
+        const Duration(seconds: 60),
+        onTimeout: () => throw TimeoutException('Registration request timed out'),
+      );
       final responseBody = await response.stream.bytesToString();
 
+      debugPrint("REGISTER STATUS: ${response.statusCode}");
+      debugPrint("REGISTER BODY: $responseBody");
+
       if (response.statusCode != 200 && response.statusCode != 201) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Registration failed: $responseBody")));
-        }
-        return;
+        throw Exception(
+            "Registration failed (${response.statusCode}): $responseBody");
       }
 
       final decoded = jsonDecode(responseBody);
       final String? token = decoded['token'];
-      final String? userId = decoded['id'] ?? decoded['userId'];
+      final String? userId = decoded['id']?.toString() ??
+          decoded['userId']?.toString();
 
-      if (token == null || userId == null) return;
+      if (token == null || userId == null || token.isEmpty || userId.isEmpty) {
+        throw Exception(
+            "Registration response missing token or userId. Body: $responseBody");
+      }
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString("jwt_token", token);
       await prefs.setString("userId", userId);
 
-      if (_selectedGender != null) {
-        final genderUri = Uri.parse(
-            "${baseURL.Urls().baseURL}user-gender/create?userId=$userId");
-        await http.post(genderUri,
-            headers: {
-              "Authorization": "Bearer $token",
-              "Content-Type": "application/json"
-            },
-            body: jsonEncode(
-                {"userId": userId, "gender": _selectedGender!.name}));
+      // ---------- 2. SAVE GENDER ----------
+      final genderOk = await _saveUserGender(
+        userId: userId,
+        gender: _selectedGender!,
+        token: token,
+      );
+      if (!genderOk) {
+        debugPrint("⚠️ Gender save failed but continuing...");
       }
 
-      await http.post(
-        Uri.parse(
-            "${baseURL.Urls().baseURL}user/contact-info/add?userId=$userId"),
-        headers: {
-          "Authorization": "Bearer $token",
-          "Content-Type": "application/json"
-        },
-        body: jsonEncode({
-          "userId": userId,
-          "email": emailController.text.trim(),
-          "phone": phoneController.text.trim()
-        }),
-      );
+      // ---------- 3. SAVE CONTACT INFO ----------
+      try {
+        final contactRes = await http
+            .post(
+              Uri.parse(
+                  "${baseURL.Urls().baseURL}user/contact-info/add?userId=$userId"),
+              headers: {
+                "Authorization": "Bearer $token",
+                "Content-Type": "application/json"
+              },
+              body: jsonEncode({
+                "userId": userId,
+                "email": emailController.text.trim(),
+                "phone": phoneController.text.trim()
+              }),
+            )
+            .timeout(const Duration(seconds: 30));
+        debugPrint("CONTACT STATUS: ${contactRes.statusCode}");
+        debugPrint("CONTACT BODY: ${contactRes.body}");
+      } catch (e) {
+        debugPrint("Contact info error: $e");
+      }
 
-      await http.post(
-        Uri.parse("${baseURL.Urls().baseURL}userLocation/add"),
-        headers: {
-          "Authorization": "Bearer $token",
-          "Content-Type": "application/json"
-        },
-        body: jsonEncode({
-          "userId": userId,
-          "locationName": locationTextController.text.trim(),
-          "lattitude": lattitude,
-          "longitude": longititude
-        }),
-      );
+      // ---------- 4. SAVE LOCATION ----------
+      try {
+        final locRes = await http
+            .post(
+              Uri.parse("${baseURL.Urls().baseURL}userLocation/add"),
+              headers: {
+                "Authorization": "Bearer $token",
+                "Content-Type": "application/json"
+              },
+              body: jsonEncode({
+                "userId": userId,
+                "locationName": locationTextController.text.trim(),
+                "lattitude": lattitude,
+                "longitude": longititude
+              }),
+            )
+            .timeout(const Duration(seconds: 30));
+        debugPrint("LOCATION STATUS: ${locRes.statusCode}");
+        debugPrint("LOCATION BODY: ${locRes.body}");
+      } catch (e) {
+        debugPrint("Location error: $e");
+      }
 
-      final joinUri =
-          Uri.parse("${baseURL.Urls().baseURL}advocateJoinRequest");
+      // ---------- 5. CREATE JOIN REQUEST ----------
+      final joinUri = Uri.parse("${baseURL.Urls().baseURL}advocateJoinRequest");
       var joinRequest = http.MultipartRequest("POST", joinUri);
       joinRequest.headers["Authorization"] = "Bearer $token";
       joinRequest.fields["userId"] = userId;
-      joinRequest.fields["experience"] = experienceController.text.trim().isEmpty
-          ? "0"
-          : experienceController.text.trim();
+      joinRequest.fields["experience"] =
+          experienceController.text.trim().isEmpty
+              ? "0"
+              : experienceController.text.trim();
       joinRequest.fields["licenseKey"] = licenseKeyController.text.trim();
       joinRequest.fields["district"] = _selectedDistrict ?? "Dhaka";
       joinRequest.fields["advocateSpeciality"] =
           jsonEncode(selectedSpecialities.map((e) => e.name).toList());
       joinRequest.fields["degrees"] = jsonEncode(degrees);
-      joinRequest.fields["workingExperiences"] =
-          jsonEncode(workingExperiences);
+      joinRequest.fields["workingExperiences"] = jsonEncode(workingExperiences);
 
       if (kIsWeb && webCvBytes != null) {
         joinRequest.files.add(http.MultipartFile.fromBytes(
@@ -591,67 +676,96 @@ class _RegistrationPageState extends State<RegistrationPage> {
             .add(await http.MultipartFile.fromPath("file", cvFile!.path));
       }
 
-      final joinResponse = await joinRequest.send();
+      final joinResponse = await joinRequest.send().timeout(
+        const Duration(seconds: 60),
+        onTimeout: () => throw TimeoutException('Join request timed out'),
+      );
       final joinResBody = await joinResponse.stream.bytesToString();
 
-      if (joinResponse.statusCode == 200 || joinResponse.statusCode == 201) {
-        final joinData = jsonDecode(joinResBody);
-        final String joinRequestId = joinData['id'];
+      debugPrint("JOIN STATUS: ${joinResponse.statusCode}");
+      debugPrint("JOIN BODY: $joinResBody");
 
-        if (barAssociationController.text.isNotEmpty ||
-            chamberController.text.isNotEmpty) {
+      if (joinResponse.statusCode != 200 && joinResponse.statusCode != 201) {
+        throw Exception(
+            "Join request failed (${joinResponse.statusCode}): $joinResBody");
+      }
+
+      final joinData = jsonDecode(joinResBody);
+      final String? joinRequestId =
+          joinData['id']?.toString() ?? joinData['advocateId']?.toString();
+
+      if (joinRequestId == null || joinRequestId.isEmpty) {
+        throw Exception("Join request response missing id. Body: $joinResBody");
+      }
+
+      // ---------- 6. SAVE WORKING EXPERIENCE DETAILS ----------
+      if (barAssociationController.text.isNotEmpty ||
+          chamberController.text.isNotEmpty) {
+        try {
           final weUri = Uri.parse(
               "${baseURL.Urls().baseURL}advocate-working-experience-in-join-request/add/$userId");
-          final weRes = await http.post(
-            weUri,
-            headers: {
-              "Authorization": "Bearer $token",
-              "Content-Type": "application/json"
-            },
-            body: jsonEncode({
-              "advocateId": joinRequestId,
-              "barAssociation": barAssociationController.text.trim(),
-              "barControllEnrolment": barEnrolmentController.text.trim(),
-              "enrollmentDate": _enrollmentDate?.toUtc().toIso8601String(),
-              "practicingCoat": practicingCoatController.text.trim(),
-              "primaryPractice": primaryPracticeController.text.trim(),
-              "yearOfLegalPractice":
-                  int.tryParse(practiceYearsController.text.trim()) ?? 0,
-              "currentChemberName": chamberController.text.trim(),
-              "professionalExperience":
-                  int.tryParse(profExpController.text.trim()) ?? 0,
-            }),
-          );
-          if (weRes.statusCode != 200 && weRes.statusCode != 201) {
-            debugPrint("WE Error: ${weRes.body}");
-          }
+          final weRes = await http
+              .post(
+                weUri,
+                headers: {
+                  "Authorization": "Bearer $token",
+                  "Content-Type": "application/json"
+                },
+                body: jsonEncode({
+                  "advocateId": joinRequestId,
+                  "barAssociation": barAssociationController.text.trim(),
+                  "barControllEnrolment": barEnrolmentController.text.trim(),
+                  "enrollmentDate":
+                      _enrollmentDate?.toUtc().toIso8601String(),
+                  "practicingCoat": practicingCoatController.text.trim(),
+                  "primaryPractice": primaryPracticeController.text.trim(),
+                  "yearOfLegalPractice":
+                      int.tryParse(practiceYearsController.text.trim()) ?? 0,
+                  "currentChemberName": chamberController.text.trim(),
+                  "professionalExperience":
+                      int.tryParse(profExpController.text.trim()) ?? 0,
+                }),
+              )
+              .timeout(const Duration(seconds: 30));
+          debugPrint("WE STATUS: ${weRes.statusCode}");
+          debugPrint("WE BODY: ${weRes.body}");
+        } catch (e) {
+          debugPrint("WE error: $e");
         }
+      }
 
-        if (nidController.text.isNotEmpty ||
-            addressController.text.isNotEmpty) {
+      // ---------- 7. SAVE ADDITIONAL INFO ----------
+      if (nidController.text.isNotEmpty || addressController.text.isNotEmpty) {
+        try {
           final aiUri = Uri.parse(
               "${baseURL.Urls().baseURL}advocate-additional-info-in-join-request/add/$userId");
-          final aiRes = await http.post(
-            aiUri,
-            headers: {
-              "Authorization": "Bearer $token",
-              "Content-Type": "application/json"
-            },
-            body: jsonEncode({
-              "advocateId": joinRequestId,
-              "parmanentAdress": addressController.text.trim(),
-              "cityOfUpozila": cityController.text.trim(),
-              "nidNumber": nidController.text.trim(),
-              "dateOfBirth": _dateOfBirth?.toUtc().toIso8601String(),
-              "whatsAppNumber": whatsAppController.text.trim(),
-            }),
-          );
-          if (aiRes.statusCode != 200 && aiRes.statusCode != 201) {
-            debugPrint("AI Error: ${aiRes.body}");
-          }
+          final aiRes = await http
+              .post(
+                aiUri,
+                headers: {
+                  "Authorization": "Bearer $token",
+                  "Content-Type": "application/json"
+                },
+                body: jsonEncode({
+                  "advocateId": joinRequestId,
+                  "parmanentAdress": addressController.text.trim(),
+                  "cityOfUpozila": cityController.text.trim(),
+                  "nidNumber": nidController.text.trim(),
+                  "dateOfBirth": _dateOfBirth?.toUtc().toIso8601String(),
+                  "whatsAppNumber": whatsAppController.text.trim(),
+                }),
+              )
+              .timeout(const Duration(seconds: 30));
+          debugPrint("AI STATUS: ${aiRes.statusCode}");
+          debugPrint("AI BODY: ${aiRes.body}");
+        } catch (e) {
+          debugPrint("AI error: $e");
         }
+      }
 
-        if (_documentFiles.isNotEmpty) {
+      // ---------- 8. UPLOAD DOCUMENTS ----------
+      if (_documentFiles.isNotEmpty) {
+        try {
           final docUri = Uri.parse(
               "${baseURL.Urls().baseURL}advocate-documents-in-join-request/add/$joinRequestId");
           var docRequest = http.MultipartRequest('POST', docUri);
@@ -668,49 +782,116 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   filename: file.name));
             }
           }
-          final docRes = await docRequest.send();
-          if (docRes.statusCode != 200 && docRes.statusCode != 201) {
-            debugPrint("Doc Error: ${await docRes.stream.bytesToString()}");
-          }
+          final docRes = await docRequest.send().timeout(
+            const Duration(seconds: 60),
+            onTimeout: () => throw TimeoutException('Document upload timed out'),
+          );
+          final docBody = await docRes.stream.bytesToString();
+          debugPrint("DOC STATUS: ${docRes.statusCode}");
+          debugPrint("DOC BODY: $docBody");
+        } catch (e) {
+          debugPrint("Doc error: $e");
         }
+      }
 
-        final fetchUri = Uri.parse(
-            "${baseURL.Urls().baseURL}advocateJoinRequest/user/$userId");
-        final fetchRes = await http.get(fetchUri,
-            headers: {"Authorization": "Bearer $token"});
+      // ---------- 9. FETCH FINAL DETAILS ----------
+      final fetchUri = Uri.parse(
+          "${baseURL.Urls().baseURL}advocateJoinRequest/user/$userId");
+      final fetchRes = await http
+          .get(fetchUri, headers: {"Authorization": "Bearer $token"})
+          .timeout(const Duration(seconds: 30));
 
-        if (fetchRes.statusCode == 200) {
-          final dto =
-              AdvocateJoinRequestDTO.fromJson(jsonDecode(fetchRes.body));
+      debugPrint("FETCH STATUS: ${fetchRes.statusCode}");
+      debugPrint("FETCH BODY: ${fetchRes.body}");
 
-          await prefs.remove("jwt_token");
-          await prefs.remove("userId");
+      if (fetchRes.statusCode != 200) {
+        throw Exception(
+            "Failed to load final details (${fetchRes.statusCode}): ${fetchRes.body}");
+      }
 
-          if (mounted) {
-            Navigator.of(context, rootNavigator: true).pop();
+      final dto = AdvocateJoinRequestDTO.fromJson(jsonDecode(fetchRes.body));
 
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                  builder: (context) =>
-                      AdvocateJoinRequestDetailsPage(request: dto)),
-            );
-          }
-        } else {
-          throw Exception("Failed to load final details.");
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text("Join Request Failed: $joinResBody")));
-        }
+      await prefs.remove("jwt_token");
+      await prefs.remove("userId");
+
+      _dismissLoadingDialog();
+
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+              builder: (context) =>
+                  AdvocateJoinRequestDetailsPage(request: dto)),
+        );
       }
     } catch (e) {
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      debugPrint("SUBMIT ERROR: $e");
+      _dismissLoadingDialog();
+      _showError('Registration failed: ${e.toString()}');
+    } finally {
+      _isSubmitting = false;
+    }
+  }
+
+  /// Safely dismiss the loading dialog if it is showing
+  void _dismissLoadingDialog() {
+    if (!mounted) return;
+    final navigator = Navigator.of(context, rootNavigator: true);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+  }
+
+  Future<bool> _saveUserGender({
+    required String userId,
+    required Gender gender,
+    required String token,
+  }) async {
+    // Try service first
+    try {
+      final service = UserGenderService();
+      final created = await service.createUserGender(
+        userId: userId,
+        gender: gender,
+      );
+      if (kDebugMode) {
+        print('✅ UserGender created: ${created.toString()}');
       }
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ UserGenderService failed, trying raw http: $e');
+      }
+    }
+
+    // Raw HTTP fallback
+    try {
+      final uri = Uri.parse(
+        "${baseURL.Urls().baseURL}user-gender/create?userId=$userId",
+      );
+      final res = await http
+          .post(
+            uri,
+            headers: {
+              "Authorization": "Bearer $token",
+              "Content-Type": "application/json",
+            },
+            body: jsonEncode({
+              "userId": userId,
+              "gender": gender.name,
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      if (kDebugMode) {
+        print('📡 Raw gender create status: ${res.statusCode}');
+        print('📡 Raw gender create body: ${res.body}');
+      }
+
+      return res.statusCode == 200 || res.statusCode == 201;
+    } catch (e2) {
+      if (kDebugMode) print('❌ Gender save failed completely: $e2');
+      return false;
     }
   }
 
@@ -784,7 +965,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
           ),
           child: Column(
             children: [
-              // Header
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: const BoxDecoration(
@@ -834,8 +1014,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   ],
                 ),
               ),
-
-              // Form Body
               Expanded(
                 child: SingleChildScrollView(
                   controller: scrollController,
@@ -855,7 +1033,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
                         hint: "Enter your full name",
                       ),
                       const SizedBox(height: 16),
-
                       _buildFormField(
                         controller: userNameController,
                         label: "Username",
@@ -863,7 +1040,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
                         hint: "Choose a unique username",
                       ),
                       const SizedBox(height: 16),
-
                       _buildFormField(
                         controller: emailController,
                         label: "Email",
@@ -872,7 +1048,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
                         keyboardType: TextInputType.emailAddress,
                       ),
                       const SizedBox(height: 16),
-
                       _buildFormField(
                         controller: phoneController,
                         label: "Phone Number",
@@ -881,13 +1056,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
                         keyboardType: TextInputType.phone,
                       ),
                       const SizedBox(height: 16),
-
                       _buildPasswordField(),
                       const SizedBox(height: 16),
-
                       _buildGenderDropdown(),
                       const SizedBox(height: 16),
-
                       _buildFormField(
                         controller: locationTextController,
                         label: "Location",
@@ -896,10 +1068,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
                         readOnly: true,
                       ),
                       const SizedBox(height: 16),
-
                       _buildDistrictDropdown(),
                       const SizedBox(height: 16),
-
                       _buildFormField(
                         controller: experienceController,
                         label: "Experience (Years)",
@@ -908,7 +1078,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
                         keyboardType: TextInputType.number,
                       ),
                       const SizedBox(height: 16),
-
                       _buildFormField(
                         controller: licenseKeyController,
                         label: "License Key",
@@ -916,31 +1085,22 @@ class _RegistrationPageState extends State<RegistrationPage> {
                         hint: "Enter your license key",
                       ),
                       const SizedBox(height: 20),
-
                       _buildDegreeSection(),
                       const SizedBox(height: 20),
-
                       _buildWorkingExperienceSection(),
                       const SizedBox(height: 20),
-
                       _buildSpecialistSection(),
                       const SizedBox(height: 20),
-
                       _buildWorkingExperienceDetailsSection(),
                       const SizedBox(height: 20),
-
                       _buildAdditionalInfoSection(),
                       const SizedBox(height: 20),
-
                       _buildDocumentsSection(),
                       const SizedBox(height: 20),
-
                       _buildCvPicker(),
                       const SizedBox(height: 20),
-
                       _buildImagePicker(),
                       const SizedBox(height: 30),
-
                       _buildSubmitButton(),
                       const SizedBox(height: 20),
                     ],
@@ -954,8 +1114,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
     );
   }
 
-  // ─── NEW UI WIDGETS ───
-
   Widget _buildWorkingExperienceDetailsSection() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -967,11 +1125,19 @@ class _RegistrationPageState extends State<RegistrationPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Working Experience Details", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+          const Text("Working Experience Details",
+              style: TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.blue)),
           const SizedBox(height: 12),
-          _buildFormField(controller: barAssociationController, label: "Bar Association", icon: Icons.account_balance),
+          _buildFormField(
+              controller: barAssociationController,
+              label: "Bar Association",
+              icon: Icons.account_balance),
           const SizedBox(height: 12),
-          _buildFormField(controller: barEnrolmentController, label: "Bar Council Enrolment", icon: Icons.badge),
+          _buildFormField(
+              controller: barEnrolmentController,
+              label: "Bar Council Enrolment",
+              icon: Icons.badge),
           const SizedBox(height: 12),
           _buildDatePickerField(
             label: "Enrolment Date",
@@ -979,17 +1145,36 @@ class _RegistrationPageState extends State<RegistrationPage> {
             onPick: (d) => setState(() => _enrollmentDate = d),
           ),
           const SizedBox(height: 12),
-          _buildFormField(controller: primaryPracticeController, label: "Primary Practice", icon: Icons.gavel),
+          _buildFormField(
+              controller: primaryPracticeController,
+              label: "Primary Practice",
+              icon: Icons.gavel),
           const SizedBox(height: 12),
-          _buildFormField(controller: practicingCoatController, label: "Practicing Court", icon: Icons.account_balance_rounded),
+          _buildFormField(
+              controller: practicingCoatController,
+              label: "Practicing Court",
+              icon: Icons.account_balance_rounded),
           const SizedBox(height: 12),
-          _buildFormField(controller: chamberController, label: "Current Chamber", icon: Icons.business),
+          _buildFormField(
+              controller: chamberController,
+              label: "Current Chamber",
+              icon: Icons.business),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _buildFormField(controller: practiceYearsController, label: "Legal Practice Years", icon: Icons.timeline, keyboardType: TextInputType.number)),
+              Expanded(
+                  child: _buildFormField(
+                      controller: practiceYearsController,
+                      label: "Legal Practice Years",
+                      icon: Icons.timeline,
+                      keyboardType: TextInputType.number)),
               const SizedBox(width: 12),
-              Expanded(child: _buildFormField(controller: profExpController, label: "Professional Experience", icon: Icons.timeline, keyboardType: TextInputType.number)),
+              Expanded(
+                  child: _buildFormField(
+                      controller: profExpController,
+                      label: "Professional Experience",
+                      icon: Icons.timeline,
+                      keyboardType: TextInputType.number)),
             ],
           ),
         ],
@@ -1008,13 +1193,25 @@ class _RegistrationPageState extends State<RegistrationPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Additional Information", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+          const Text("Additional Information",
+              style: TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.blue)),
           const SizedBox(height: 12),
-          _buildFormField(controller: addressController, label: "Permanent Address", icon: Icons.home),
+          _buildFormField(
+              controller: addressController,
+              label: "Permanent Address",
+              icon: Icons.home),
           const SizedBox(height: 12),
-          _buildFormField(controller: cityController, label: "City / Upazila", icon: Icons.location_city),
+          _buildFormField(
+              controller: cityController,
+              label: "City / Upazila",
+              icon: Icons.location_city),
           const SizedBox(height: 12),
-          _buildFormField(controller: nidController, label: "NID Number", icon: Icons.credit_card, keyboardType: TextInputType.number),
+          _buildFormField(
+              controller: nidController,
+              label: "NID Number",
+              icon: Icons.credit_card,
+              keyboardType: TextInputType.number),
           const SizedBox(height: 12),
           _buildDatePickerField(
             label: "Date of Birth",
@@ -1022,7 +1219,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
             onPick: (d) => setState(() => _dateOfBirth = d),
           ),
           const SizedBox(height: 12),
-          _buildFormField(controller: whatsAppController, label: "WhatsApp Number", icon: Icons.chat, keyboardType: TextInputType.phone),
+          _buildFormField(
+              controller: whatsAppController,
+              label: "WhatsApp Number",
+              icon: Icons.chat,
+              keyboardType: TextInputType.phone),
         ],
       ),
     );
@@ -1032,7 +1233,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("Other Documents", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.blue)),
+        const Text("Other Documents",
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.blue)),
         const SizedBox(height: 8),
         if (_documentFiles.isNotEmpty) ...[
           ..._documentFiles.asMap().entries.map((entry) {
@@ -1096,7 +1301,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     ? label
                     : "${selectedDate.day}/${selectedDate.month}/${selectedDate.year}",
                 style: TextStyle(
-                  color: selectedDate == null ? Colors.grey[600] : Colors.black87,
+                  color:
+                      selectedDate == null ? Colors.grey[600] : Colors.black87,
                   fontSize: 16,
                 ),
               ),
@@ -1117,12 +1323,14 @@ class _RegistrationPageState extends State<RegistrationPage> {
       if (result != null && result.files.isNotEmpty) {
         setState(() {
           _documentFiles.addAll(
-            result.files.where((f) => kIsWeb ? f.bytes != null : f.path != null),
+            result.files
+                .where((f) => kIsWeb ? f.bytes != null : f.path != null),
           );
         });
       }
     } catch (e) {
       debugPrint('Pick docs error: $e');
+      _showError('Failed to pick documents: $e');
     }
   }
 
@@ -1312,7 +1520,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
     );
   }
 
-  // ✅ Updated Degree Section
   Widget _buildDegreeSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1326,8 +1533,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
           ),
         ),
         const SizedBox(height: 8),
-        
-        // First row: Degree Name + Institution
         Row(
           children: [
             Expanded(
@@ -1347,10 +1552,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
             ),
           ],
         ),
-        
         const SizedBox(height: 8),
-        
-        // Second row: Year + Add Button
         Row(
           children: [
             Expanded(
@@ -1384,10 +1586,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
             ),
           ],
         ),
-        
         const SizedBox(height: 12),
-        
-        // List of added degrees
         if (degrees.isNotEmpty)
           Wrap(
             spacing: 8,
@@ -1677,44 +1876,55 @@ class _RegistrationPageState extends State<RegistrationPage> {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
-        onPressed: () async {
-          FocusScope.of(context).unfocus();
-          
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                content: const Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                    ),
-                    SizedBox(height: 16),
-                    Text(
-                      "Registering...",
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.blue,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      "Please wait",
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
+        onPressed: _isSubmitting
+            ? null
+            : () async {
+                FocusScope.of(context).unfocus();
 
-          await _submitForm();
-        },
+                // Validate FIRST before showing loading
+                final validationError = _validateRequiredFields();
+                if (validationError != null) {
+                  _showError(validationError);
+                  return;
+                }
+
+                // Show non-dismissible loading
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (BuildContext context) {
+                    return const AlertDialog(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(20)),
+                      ),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.blue),
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            "Registering...",
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.blue,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            "Please wait",
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+
+                await _submitForm();
+              },
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
@@ -1723,14 +1933,24 @@ class _RegistrationPageState extends State<RegistrationPage> {
             borderRadius: BorderRadius.circular(16),
           ),
           elevation: 5,
+          disabledBackgroundColor: Colors.blue.withOpacity(0.5),
         ),
-        child: const Text(
-          "Complete Registration",
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        child: _isSubmitting
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Text(
+                "Complete Registration",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
       ),
     );
   }
@@ -1753,12 +1973,12 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 height: constraints.maxHeight,
                 child: FlutterMap(
                   mapController: mapController,
-                  options: MapOptions(
+                  options: const MapOptions(
                     initialCenter: lat_lng.LatLng(23.8103, 90.4125),
                     initialZoom: 13.0,
                     minZoom: 3.0,
                     maxZoom: 18.0,
-                    interactionOptions: const InteractionOptions(
+                    interactionOptions: InteractionOptions(
                       flags: InteractiveFlag.all,
                     ),
                   ),
@@ -1775,7 +1995,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
               );
             },
           ),
-
           IgnorePointer(
             child: Container(
               decoration: BoxDecoration(
@@ -1791,7 +2010,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
               ),
             ),
           ),
-
           Positioned(
             top: MediaQuery.of(context).padding.top + 10,
             left: 16,
@@ -1835,7 +2053,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
               ),
             ),
           ),
-
           Positioned(
             bottom: 20,
             right: 16,
@@ -1849,13 +2066,16 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     locationTextController.text = _selectedPlaceName ?? '';
                     _updateMarkers();
                   });
-                  mapController.move(_devicePosition!, 15.0);
+                  try {
+                    mapController.move(_devicePosition!, 15.0);
+                  } catch (_) {}
+                } else {
+                  _showError("Device location not available yet");
                 }
               },
               child: const Icon(Icons.my_location, color: Colors.blue),
             ),
           ),
-
           if (!showForm)
             Positioned(
               bottom: 20,
@@ -1865,7 +2085,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 child: _buildOpenFormButton(),
               ),
             ),
-
           if (showForm) _buildAnimatedForm(),
         ],
       ),
