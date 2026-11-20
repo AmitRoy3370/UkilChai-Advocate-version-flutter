@@ -6,6 +6,7 @@ import 'rjsc_registration_screen.dart';
 import 'my_rjsc_page.dart';    // ✅ নতুন
 import 'all_rjsc_page.dart';   // ✅ নতুন
 import 'my_rjsc_process_control_screen.dart'; // ✅ NEW
+import 'advocate_rjsc_processes_page.dart';
 
 class RjscServices extends StatelessWidget {
   const RjscServices({super.key});
@@ -40,6 +41,13 @@ class RjscServices extends StatelessWidget {
       "icon": Icons.admin_panel_settings,
       "color": Color(0xFFE65100),
       "action": "my_rjsc_processes",
+    },
+    {
+      "title": "My Assigned RJSC Processes",
+      "subtitle": "Manage RJSC filings you control as advocate",
+      "icon": Icons.admin_panel_settings,
+      "color": Color(0xFFE65100),
+      "action": "my_assigned_rjsc_processes",
     },
   ];
 
@@ -84,6 +92,14 @@ class RjscServices extends StatelessWidget {
           ),
         );
         break;
+       case 'my_assigned_rjsc_processes':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const AdvocateRjscProcessesPage(),
+          ),
+        );
+       break;
     }
   }
 

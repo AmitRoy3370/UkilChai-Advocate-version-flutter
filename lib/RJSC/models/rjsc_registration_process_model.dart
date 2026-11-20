@@ -48,6 +48,7 @@ class RjscRegistrationProcessResponseDTO {
   String advocateId;
   String advocateName;
   bool status;
+  String rjscId;
   List<String> steps;
   RjscModel? rjsc;
 
@@ -58,12 +59,22 @@ class RjscRegistrationProcessResponseDTO {
     this.advocateId = '',
     this.advocateName = '',
     this.status = false,
+    this.rjscId = '',
     List<String>? steps,
     this.rjsc,
   }) : steps = steps ?? [];
 
   factory RjscRegistrationProcessResponseDTO.fromJson(
       Map<String, dynamic> json) {
+    final parsedRjsc = json['rjsc'] != null
+        ? RjscModel.fromJson(Map<String, dynamic>.from(json['rjsc']))
+        : null;
+
+    final resolvedRjscId =
+        (json['rjscId']?.toString().trim().isNotEmpty == true)
+            ? json['rjscId'].toString().trim()
+            : (parsedRjsc?.id?.trim() ?? '');
+
     return RjscRegistrationProcessResponseDTO(
       id: json['id'],
       userId: json['userId'] ?? '',
@@ -71,10 +82,9 @@ class RjscRegistrationProcessResponseDTO {
       advocateId: json['advocateId'] ?? '',
       advocateName: json['advocateName'] ?? '',
       status: json['status'] ?? false,
+      rjscId: resolvedRjscId,
       steps: json['steps'] != null ? List<String>.from(json['steps']) : [],
-      rjsc: json['rjsc'] != null
-          ? RjscModel.fromJson(Map<String, dynamic>.from(json['rjsc']))
-          : null,
+      rjsc: parsedRjsc,
     );
   }
 }

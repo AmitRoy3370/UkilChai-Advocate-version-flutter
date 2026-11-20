@@ -1,6 +1,7 @@
 // lib/Copyright/screens/copyright_details_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../Auth/AuthService.dart';
 import '../../RJSC/screens/rjsc_attachment_viewer.dart';
 import '../models/copyright_response_dto.dart';
@@ -33,7 +34,10 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
   bool _isBusy = false;
 
   String _myUserId = '';
+  String _myAdvocateId = '';
+
   bool _isCenterAdminOfThis = false;
+  bool _isAdvocateOfThis = false;
 
   @override
   void initState() {
@@ -44,14 +48,38 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
 
   Future<void> _resolveUser() async {
     final id = await AuthService.getUserId() ?? '';
+    final prefs = await SharedPreferences.getInstance();
+    final advocateId = prefs.getString('advocateId') ?? '';
+
     if (!mounted) return;
     setState(() {
       _myUserId = id;
-      _isCenterAdminOfThis = _c.registrationProcess != null &&
-          _c.registrationProcess!.userId == id &&
-          id.isNotEmpty;
+      _myAdvocateId = advocateId;
+      _recomputeRoles();
     });
   }
+
+  void _recomputeRoles() {
+    final rp = _c.registrationProcess;
+
+    _isCenterAdminOfThis = rp != null &&
+        _myUserId.isNotEmpty &&
+        rp.userId == _myUserId;
+
+    _isAdvocateOfThis = rp != null &&
+        _myAdvocateId.isNotEmpty &&
+        rp.advocateId == _myAdvocateId;
+  }
+
+  bool get _hasProcess => _c.registrationProcess != null;
+
+  bool get _canEditStatusAndStepsOnly =>
+      _isAdvocateOfThis && !_isCenterAdminOfThis;
+
+  bool get _canEditFullProcess => _isCenterAdminOfThis;
+
+  bool get _showCenterControls =>
+      _isCenterAdminOfThis || _isAdvocateOfThis || !_hasProcess;
 
   Future<void> _reload() async {
     if (_c.id == null) return;
@@ -60,9 +88,7 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
     if (fresh != null && mounted) {
       setState(() {
         _c = fresh;
-        _isCenterAdminOfThis = _c.registrationProcess != null &&
-            _c.registrationProcess!.userId == _myUserId &&
-            _myUserId.isNotEmpty;
+        _recomputeRoles();
       });
     }
   }
@@ -294,6 +320,250 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
   }
 
   // =========================================================================
+  // ADVOCATE-ONLY: UPDATE STATUS + STEPS
+  // =========================================================================
+  Future<void> _openAdvocateStatusStepsEdit() async {
+    final process = _c.registrationProcess;
+    if (process == null) return;
+
+    if (process.id == null || process.id!.isEmpty) {
+      _snack('Missing process ID — cannot update.', error: true);
+      return;
+    }
+
+    final stepControllers = process.stpes
+        .map((s) => TextEditingController(text: s))
+        .toList();
+    if (stepControllers.isEmpty) stepControllers.add(TextEditingController());
+
+    bool status = process.status;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            void addStep() => setLocal(
+                () => stepControllers.add(TextEditingController()));
+
+            void removeStep(int i) {
+              if (stepControllers.length <= 1) return;
+              setLocal(() {
+                stepControllers[i].dispose();
+                stepControllers.removeAt(i);
+              });
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: const Text('Update Copyright Progress'),
+              content: ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(ctx).size.height * 0.75),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Read-only advocate
+                      const Text('Assigned Advocate',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F7FA),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.gavel,
+                                size: 16, color: Color(0xFF1A3FBF)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                process.advocateName.isNotEmpty
+                                    ? process.advocateName
+                                    : process.advocateId,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            const Icon(Icons.lock,
+                                size: 14, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Steps header
+                      Row(
+                        children: [
+                          const Text('Steps',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: addStep,
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Add Step',
+                                style: TextStyle(fontSize: 12)),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 0),
+                              minimumSize: const Size(0, 32),
+                              foregroundColor: const Color(0xFF1A3FBF),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Steps list
+                      ...List.generate(stepControllers.length, (i) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1A3FBF)
+                                      .withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Step ${i + 1}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF1A3FBF),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: stepControllers[i],
+                                  textInputAction:
+                                      TextInputAction.next,
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    hintText:
+                                        'Describe step ${i + 1}...',
+                                    contentPadding:
+                                        const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 12),
+                                    border: OutlineInputBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                tooltip: 'Remove step',
+                                icon: Icon(
+                                  Icons.close,
+                                  size: 18,
+                                  color: stepControllers.length <= 1
+                                      ? Colors.grey.shade300
+                                      : Colors.red,
+                                ),
+                                onPressed: stepControllers.length <= 1
+                                    ? null
+                                    : () => removeStep(i),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+
+                      const SizedBox(height: 12),
+
+                      // Status toggle
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                            'Mark as completed (status = true)'),
+                        value: status,
+                        onChanged: (v) => setLocal(() => status = v),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1A3FBF)),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved != true) {
+      for (final c in stepControllers) c.dispose();
+      return;
+    }
+
+    final steps = <String>[];
+    for (final c in stepControllers) {
+      final v = c.text.trim();
+      if (v.isNotEmpty) steps.add(v);
+    }
+    for (final c in stepControllers) c.dispose();
+
+    // Preserve user / advocate / copyrightId; only status + stpes change.
+    final updated = CopyrightRegistrationProcessModel(
+      id: process.id,
+      copyrightId: process.copyrightId,
+      userId: process.userId,
+      advocateId: process.advocateId,
+      stpes: steps,
+      status: status,
+    );
+
+    setState(() => _isBusy = true);
+
+    final res = await CopyrightRegistrationProcessService.updateProcess(
+      id: process.id!,
+      userId: _myUserId,
+      process: updated,
+    );
+
+    if (!mounted) return;
+    setState(() => _isBusy = false);
+
+    if (res['status'] == 'success') {
+      _snack('Copyright progress updated');
+      await _reload();
+    } else {
+      _snack(res['message'] ?? 'Failed to update', error: true);
+    }
+  }
+
+  // =========================================================================
   // CENTER ADMIN ACTIONS
   // =========================================================================
 
@@ -375,20 +645,10 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
     setState(() => _isBusy = false);
 
     if (res['status'] == 'success') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Registration process accepted successfully'),
-          backgroundColor: Color(0xFF2E7D32),
-        ),
-      );
+      _snack('Registration process accepted');
       await _reload();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res['message'] ?? 'Failed to accept'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _snack(res['message'] ?? 'Failed to accept', error: true);
     }
   }
 
@@ -398,13 +658,12 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
   }
 
   // =========================================================================
-  // Edit registration process — with a proper step builder
+  // FULL EDIT (center admin / process owner)
   // =========================================================================
   Future<void> _openEditRegistrationProcess() async {
     final process = _c.registrationProcess;
     if (process == null) return;
 
-    // Working copies for the dialog
     final List<TextEditingController> stepControllers = process.stpes
         .map((s) => TextEditingController(text: s))
         .toList();
@@ -617,20 +876,17 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
       },
     );
 
-    // ---------- Persist if saved ----------
     if (saved != true) {
-      for (final c in stepControllers) {
-        c.dispose();
-      }
+      for (final c in stepControllers) c.dispose();
       return;
     }
 
-    // Build the ordered list of non-empty steps
     final steps = <String>[];
     for (final c in stepControllers) {
       final v = c.text.trim();
       if (v.isNotEmpty) steps.add(v);
     }
+    for (final c in stepControllers) c.dispose();
 
     final updated = CopyrightRegistrationProcessModel(
       id: process.id,
@@ -653,24 +909,14 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
     setState(() => _isBusy = false);
 
     if (res['status'] == 'success') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Registration process updated'),
-          backgroundColor: Color(0xFF2E7D32),
-        ),
-      );
+      _snack('Registration process updated');
       await _reload();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res['message'] ?? 'Failed to update'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _snack(res['message'] ?? 'Failed to update', error: true);
     }
   }
 
-  // ---------- Delete registration process ----------
+  // ---------- Delete registration process (owner only) ----------
   Future<void> _confirmDeleteRegistrationProcess() async {
     final process = _c.registrationProcess;
     if (process == null) return;
@@ -712,20 +958,10 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
     setState(() => _isBusy = false);
 
     if (res['status'] == 'success') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Registration process deleted'),
-          backgroundColor: Color(0xFF2E7D32),
-        ),
-      );
+      _snack('Registration process deleted');
       await _reload();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res['message'] ?? 'Failed to delete'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _snack(res['message'] ?? 'Failed to delete', error: true);
     }
   }
 
@@ -743,7 +979,6 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
   // =========================================================================
   // BUILD
   // =========================================================================
-
   @override
   Widget build(BuildContext context) {
     final process = _c.registrationProcess;
@@ -880,9 +1115,7 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
                     ],
                   ),
 
-                  // =========================================================
-                  // ✅ NEW: Progress Timeline (shows all steps)
-                  // =========================================================
+                  // Progress Timeline
                   if (hasProcess && process.stpes.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     _section(
@@ -903,10 +1136,14 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
                       copyrightId: _c.id!,
                       isOwner: widget.isOwner,
                     ),
+
+                  // Controls card — admin OR advocate OR no process
                   const SizedBox(height: 16),
-                  if (_isCenterAdminOfThis || !hasProcess)
-                    _centerAdminSection(hasProcess),
+                  if (_showCenterControls)
+                    _centerControlsSection(hasProcess),
+
                   const SizedBox(height: 30),
+
                   if (widget.isOwner) ...[
                     OutlinedButton.icon(
                       onPressed: _openEdit,
@@ -938,22 +1175,165 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
   }
 
   // =========================================================================
-  // ✅ NEW: TIMELINE WIDGET
+  // CONTROLS CARD — center admin OR advocate OR no process
   // =========================================================================
-  //
-  // Renders a vertical timeline of steps:
-  //   ●  Step 1: accepted
-  //   │
-  //   ●  Step 2: in-review
-  //   │
-  //   ●  Step 3: submitted
-  //
-  // Color rules:
-  //   - If process.status == true → all nodes green + check icon
-  //   - Otherwise → all nodes blue; last node is the "current" (larger
-  //     ring), rest are "visited" (filled)
-  //   - Any step whose text contains "completed"/"approved"/"done"
-  //     is rendered green regardless of the overall status.
+  Widget _centerControlsSection(bool hasProcess) {
+    final isAdvocateMode = _canEditStatusAndStepsOnly;
+    final isAdminMode = _isCenterAdminOfThis;
+
+    final title =
+        isAdvocateMode ? 'Advocate Controls' : 'Center Admin Controls';
+    final icon =
+        isAdvocateMode ? Icons.gavel : Icons.admin_panel_settings;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF1A3FBF).withOpacity(0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: const Color(0xFF1A3FBF), size: 20),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1A3FBF),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          if (isAdminMode || isAdvocateMode)
+            OutlinedButton.icon(
+              onPressed: _openMyProcessControlScreen,
+              icon: const Icon(Icons.list_alt),
+              label: const Text('My Copyright Processes'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 46),
+                side: const BorderSide(color: Color(0xFF1A3FBF)),
+                foregroundColor: const Color(0xFF1A3FBF),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+
+          if ((isAdminMode || isAdvocateMode) &&
+              (isAdminMode || isAdvocateMode || !hasProcess))
+            const SizedBox(height: 10),
+
+          if (!hasProcess) ...[
+            ElevatedButton.icon(
+              onPressed: _confirmAcceptAsCenterAdmin,
+              icon: const Icon(Icons.check_circle_outline),
+              label: const Text('Accept Registration Process'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1A3FBF),
+                minimumSize: const Size(double.infinity, 46),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _confirmRemoveNoProcess,
+              icon: const Icon(Icons.delete_forever_outlined),
+              label: const Text('Remove Registration'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 46),
+                side: const BorderSide(color: Colors.red),
+                foregroundColor: Colors.red,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ] else if (isAdminMode) ...[
+            ElevatedButton.icon(
+              onPressed: _openEditRegistrationProcess,
+              icon: const Icon(Icons.edit_note),
+              label: const Text('Update Registration Process'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1A3FBF),
+                minimumSize: const Size(double.infinity, 46),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _confirmDeleteRegistrationProcess,
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Delete Registration Process'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 46),
+                side: const BorderSide(color: Colors.red),
+                foregroundColor: Colors.red,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ] else if (isAdvocateMode) ...[
+            ElevatedButton.icon(
+              onPressed: _openAdvocateStatusStepsEdit,
+              icon: const Icon(Icons.playlist_add_check),
+              label: const Text('Update Status & Steps'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1A3FBF),
+                minimumSize: const Size(double.infinity, 46),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.info_outline,
+                    size: 14, color: Colors.grey.shade600),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'As the assigned advocate you can update the process '
+                    'status and steps only.',
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _snack(String msg, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: error ? Colors.red : const Color(0xFF2E7D32),
+      ),
+    );
+  }
+
+  // =========================================================================
+  // TIMELINE WIDGET
+  // =========================================================================
   Widget _timeline({
     required List<String> steps,
     required bool isApproved,
@@ -983,12 +1363,10 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // -------- Node column (dot + connector) --------
               SizedBox(
                 width: 32,
                 child: Column(
                   children: [
-                    // Node
                     Container(
                       width: current ? 26 : 22,
                       height: current ? 26 : 22,
@@ -1035,21 +1413,20 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
                                   ),
                                 )),
                     ),
-                    // Connector
                     if (!isLast)
                       Expanded(
                         child: Container(
                           width: 2,
                           margin: const EdgeInsets.symmetric(vertical: 4),
-                          color: done ? green.withOpacity(0.5) : greyLine,
+                          color: done
+                              ? green.withOpacity(0.5)
+                              : greyLine,
                         ),
                       ),
                   ],
                 ),
               ),
               const SizedBox(width: 12),
-
-              // -------- Text column --------
               Expanded(
                 child: Padding(
                   padding: EdgeInsets.only(
@@ -1120,7 +1497,7 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
                           height: 1.35,
                           fontWeight:
                               current ? FontWeight.w600 : FontWeight.w500,
-                          color: done ? Colors.black87 : Colors.black87,
+                          color: Colors.black87,
                         ),
                       ),
                     ],
@@ -1135,114 +1512,8 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
   }
 
   // =========================================================================
-  // CENTER ADMIN SECTION
-  // =========================================================================
-  Widget _centerAdminSection(bool hasProcess) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF1A3FBF).withOpacity(0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.admin_panel_settings,
-                  color: Color(0xFF1A3FBF), size: 20),
-              const SizedBox(width: 8),
-              const Text(
-                'Center Admin Controls',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1A3FBF),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _openMyProcessControlScreen,
-            icon: const Icon(Icons.list_alt),
-            label: const Text('My Copyright Processes'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 46),
-              side: const BorderSide(color: Color(0xFF1A3FBF)),
-              foregroundColor: const Color(0xFF1A3FBF),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          if (!hasProcess) ...[
-            ElevatedButton.icon(
-              onPressed: _confirmAcceptAsCenterAdmin,
-              icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Accept Registration Process'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1A3FBF),
-                minimumSize: const Size(double.infinity, 46),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: _confirmRemoveNoProcess,
-              icon: const Icon(Icons.delete_forever_outlined),
-              label: const Text('Remove Registration'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 46),
-                side: const BorderSide(color: Colors.red),
-                foregroundColor: Colors.red,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ] else if (_isCenterAdminOfThis) ...[
-            ElevatedButton.icon(
-              onPressed: _openEditRegistrationProcess,
-              icon: const Icon(Icons.edit_note),
-              label: const Text('Update Registration Process'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1A3FBF),
-                minimumSize: const Size(double.infinity, 46),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: _confirmDeleteRegistrationProcess,
-              icon: const Icon(Icons.delete_outline),
-              label: const Text('Delete Registration Process'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 46),
-                side: const BorderSide(color: Colors.red),
-                foregroundColor: Colors.red,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  // =========================================================================
   // WIDGETS
   // =========================================================================
-
   Widget _headerCard(bool isApproved, bool isPending) {
     return Container(
       width: double.infinity,
@@ -1278,6 +1549,32 @@ class _CopyrightDetailsScreenState extends State<CopyrightDetailsScreen> {
           ),
           const SizedBox(height: 12),
           _statusChip(isApproved, isPending),
+          if (_isAdvocateOfThis && !_isCenterAdminOfThis) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A3FBF).withOpacity(0.10),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.gavel, size: 12, color: Color(0xFF1A3FBF)),
+                  SizedBox(width: 4),
+                  Text(
+                    'You are the assigned advocate',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1A3FBF),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

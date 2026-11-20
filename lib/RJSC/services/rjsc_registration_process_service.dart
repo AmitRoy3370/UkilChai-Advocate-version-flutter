@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import '../../Auth/AuthService.dart';
 import '../models/rjsc_registration_process_model.dart';
 import '../../Utils/BaseURL.dart' as BASE_URL;
+//import '../models/rjsc_registration_process_response_dto.dart'; // 👈 ensure this import exists
 
 class RjscRegistrationProcessService {
   static String _baseUrl =
@@ -17,6 +18,18 @@ class RjscRegistrationProcessService {
       'Accept': 'application/json',
     };
   }
+
+// inside the class:
+/*static List<RjscRegistrationProcessResponseDTO> parseList(
+    Map<String, dynamic> json) {
+  if (json['status'] == 'success' && json['data'] != null) {
+    return (json['data'] as List)
+        .map((e) => RjscRegistrationProcessResponseDTO.fromJson(
+            Map<String, dynamic>.from(e)))
+        .toList();
+  }
+  return [];
+}*/
 
   // ==================== CREATE ====================
   static Future<Map<String, dynamic>> addProcess({

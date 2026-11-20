@@ -24,9 +24,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 class CompanyDetailsPage extends StatefulWidget {
   final String companyId;
 
+  /// Optional pre-loaded company (used by the advocate list page).
+  /// If supplied, the page renders immediately and refreshes silently.
+  final CompanyResponse? company;
+
   const CompanyDetailsPage({
     Key? key,
     required this.companyId,
+    this.company,
   }) : super(key: key);
 
   @override
@@ -45,6 +50,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
   String? _error;
   String? _jwtToken;
   String? _userId;
+  String? advocateId;
 
   // Contact data
   List<CompanyContact> _contacts = [];
@@ -79,14 +85,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
 
   // ============================================================
   // Single source of truth for the "current" registration process
-  //
-  // Priority:
-  //   1. _processes[0] — the freshest data (from getProcessesByCompanyId)
-  //   2. _company?.registrationProcess — fallback if the list hasn't loaded
   // ============================================================
-
-  /// Convert the writable model into the response model so both branches
-  /// of `_currentProcess` return the same type.
   RegistrationProcessResponse _responseFromModel(
     RegistrationProcess p, {
     String companyName = '',
@@ -121,22 +120,82 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
 
   bool get _hasProcess => _currentProcess != null;
 
+  /// True when the current user owns (created/accepted) this process.
   bool get _isMineProcess {
     final p = _currentProcess;
     if (p == null) return false;
     return p.userId == _userId;
   }
 
+  /// True when the current user is the **advocate** assigned to the process.
+  bool get _isAdvocateOfThis {
+    final p = _currentProcess;
+    if (p == null) return false;
+    if (advocateId == null || advocateId!.isEmpty) return false;
+    return p.advocateId == advocateId;
+  }
+
+  /// Advocate-only edit: status + steps (not owner).
+  bool get _canEditStatusAndStepsOnly =>
+      _isAdvocateOfThis && !_isMineProcess;
+
+  /// Full edit (owner of the process, or creator acting through center admin).
+  bool get _canEditFullProcess => _isMineProcess;
+
   @override
   void initState() {
     super.initState();
-    _loadTokenAndDetails();
+
+    if (widget.company != null) {
+      // Pre-loaded — render immediately, then refresh in background.
+      _company = widget.company;
+      _isLoading = false;
+      _loadTokenAndDetails(skipInitialFetch: true);
+    } else {
+      _loadTokenAndDetails();
+    }
   }
 
-  Future<void> _loadTokenAndDetails() async {
+  Future<void> _loadTokenAndDetails({bool skipInitialFetch = false}) async {
     _jwtToken = await AuthService.getToken();
     _userId = await AuthService.getUserId();
+
+    final prefs = await SharedPreferences.getInstance();
+    advocateId = prefs.getString('advocateId');
+    final currentUserId = prefs.getString('userId');
+
+    if (!mounted) return;
+
+    if (skipInitialFetch && _company != null) {
+      setState(() {
+        _isCreator = currentUserId != null &&
+            currentUserId.isNotEmpty &&
+            _company!.creatorId == currentUserId;
+
+        _isCenterAdminOfThis = _company!.registrationProcess != null &&
+            currentUserId != null &&
+            currentUserId.isNotEmpty &&
+            _company!.registrationProcess!.userId == currentUserId;
+      });
+
+      _loadContacts();
+      await _loadProcesses();
+      if (_isCreator || _isCenterAdminOfThis || _isMineProcess) {
+        _loadPayments();
+      }
+      _refreshCompanySilently();
+      return;
+    }
+
     await _loadCompanyDetails();
+  }
+
+  Future<void> _refreshCompanySilently() async {
+    try {
+      final fresh = await _companyService.getCompanyById(widget.companyId);
+      if (!mounted) return;
+      setState(() => _company = fresh);
+    } catch (_) {}
   }
 
   Future<void> _loadCompanyDetails() async {
@@ -156,9 +215,12 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
       final prefs = await SharedPreferences.getInstance();
       final currentUserId = prefs.getString('userId');
 
+      if (!mounted) return;
       setState(() {
+        advocateId = prefs.getString('advocateId');
         _company = company;
         _isLoading = false;
+
         _isCreator = currentUserId != null &&
             currentUserId.isNotEmpty &&
             company.creatorId == currentUserId;
@@ -172,13 +234,13 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
         print('✅ Is Center Admin (nested): $_isCenterAdminOfThis');
         print('✅ CreatorId: ${company.creatorId}');
         print('✅ CurrentUserId: $currentUserId');
+        print('✅ AdvocateId (prefs): $advocateId');
+        print('✅ Process advocateId: ${company.registrationProcess?.advocateId}');
       });
 
-      // Load supporting data
       _loadContacts();
       await _loadProcesses();
 
-      // Payments: creator OR center admin of this (either source)
       if (_isCreator || _isCenterAdminOfThis || _isMineProcess) {
         _loadPayments();
       } else {
@@ -280,7 +342,6 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
     );
   }
 
-  // ✅ Copy to clipboard
   void _copyToClipboard(String text) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
@@ -291,7 +352,6 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
     );
   }
 
-  // ✅ Navigate to Edit Company Screen
   void _navigateToEditCompany() {
     if (_company != null) {
       Navigator.push(
@@ -366,10 +426,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                   Expanded(
                     child: Text(
                       'This action cannot be undone. All company data including directors, shareholders, documents, and payments will be permanently deleted.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.red,
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.red),
                     ),
                   ),
                 ],
@@ -396,9 +453,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
 
     if (confirm != true) return;
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       final success = await _companyService.deleteCompany(
@@ -418,9 +473,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
         throw Exception('Failed to delete company');
       }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('❌ Error: ${e.toString()}'),
@@ -455,8 +508,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
     if (advocates.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content:
-              Text('You have no advocates connected. Please add one first.'),
+          content: Text('You have no advocates connected. Please add one first.'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -491,10 +543,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
               const SizedBox(height: 12),
               const Text(
                 'Select an Advocate',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               Text(
@@ -529,8 +578,8 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                         style: TextStyle(
                             fontSize: 11, color: Colors.grey.shade600),
                       ),
-                      trailing: const Icon(Icons.chevron_right,
-                          color: Colors.grey),
+                      trailing:
+                          const Icon(Icons.chevron_right, color: Colors.grey),
                       onTap: () => Navigator.pop(context, a),
                     );
                   },
@@ -547,18 +596,15 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
   // ACCEPT (as center admin) — pick advocate + share value
   // ============================================================
   Future<void> _confirmAcceptAsCenterAdmin() async {
-    // Step 1: Pick advocate
     final advocate = await _pickAdvocate();
     if (advocate == null) return;
 
-    // Step 2: Ask for share value per share (required by backend, must be > 0)
     final shareValueController = TextEditingController(text: '100');
 
     final shareValue = await showDialog<double>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Set Share Value'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -614,12 +660,10 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
     shareValueController.dispose();
     if (shareValue == null) return;
 
-    // Step 3: Confirm
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Accept as Center Admin?'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -713,7 +757,6 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
         ),
       );
 
-      // ✅ Refresh both the company AND the process list so the buttons flip
       await _loadCompanyDetails();
       if (mounted) await _loadProcesses();
     } catch (e) {
@@ -730,45 +773,21 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
     }
   }
 
-  // ============================================================
-  // REMOVE (delete the company entirely, when no process exists)
-  // ============================================================
   Future<void> _confirmRemoveNoProcess() async {
     await _deleteCompany();
   }
 
   // ============================================================
-  // UPDATE REGISTRATION PROCESS — step builder + local validation
+  // ADVOCATE-ONLY EDIT (status + steps)
   // ============================================================
-  Future<void> _openEditRegistrationProcess() async {
-    // Use the same source-of-truth getter as the UI
-    final RegistrationProcessResponse? fresh = _currentProcess;
-
+  Future<void> _openAdvocateStatusStepsEdit() async {
+    final fresh = _currentProcess;
     if (fresh == null) return;
-
-    // Convert to the writable model
-    final process = RegistrationProcess(
-      id: fresh.id,
-      companyId: fresh.companyId,
-      advocateId: fresh.advocateId,
-      userId: fresh.userId,
-      status: fresh.status,
-      shareValuePerShare: fresh.shareValuePerShare,
-      steps: fresh.steps,
-    );
-
-    // Guard: process.id MUST NOT be null/empty for update to work
-    print('🟪 [update] process.id = ${process.id}');
-    print('🟪 [update] process.companyId = ${process.companyId}');
-
-    if (process.id == null || process.id!.isEmpty) {
+    if (fresh.id == null || fresh.id!.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Missing registration process ID — cannot update. '
-            'Please refresh and try again.',
-          ),
+          content: Text('Missing registration process ID — cannot update.'),
           backgroundColor: Colors.red,
           duration: Duration(seconds: 6),
         ),
@@ -776,33 +795,14 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
       return;
     }
 
-    // Step controllers
+    // Prepare editable step controllers
     final List<TextEditingController> stepControllers =
-        process.steps.map((s) => TextEditingController(text: s)).toList();
+        fresh.steps.map((s) => TextEditingController(text: s)).toList();
     if (stepControllers.isEmpty) {
       stepControllers.add(TextEditingController());
     }
 
-    bool status = process.status;
-    final shareValueController = TextEditingController(
-      text: process.shareValuePerShare.toString(),
-    );
-
-    AdvocateBrief? selectedAdvocate = AdvocateBrief(
-      id: process.advocateId,
-      name: process.advocateId,
-    );
-
-    // Try to resolve advocate name
-    try {
-      final list = await CenterAdminBridge.myAdvocates(_userId ?? '');
-      for (final a in list) {
-        if (a.id == process.advocateId) {
-          selectedAdvocate = a;
-          break;
-        }
-      }
-    } catch (_) {}
+    bool status = fresh.status;
 
     final saved = await showDialog<bool>(
       context: context,
@@ -810,9 +810,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
         return StatefulBuilder(
           builder: (ctx, setLocal) {
             void addStep() {
-              setLocal(() {
-                stepControllers.add(TextEditingController());
-              });
+              setLocal(() => stepControllers.add(TextEditingController()));
             }
 
             void removeStep(int index) {
@@ -826,7 +824,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
             return AlertDialog(
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16)),
-              title: const Text('Update Registration Process'),
+              title: const Text('Update Progress'),
               content: ConstrainedBox(
                 constraints: BoxConstraints(
                   maxHeight: MediaQuery.of(ctx).size.height * 0.75,
@@ -836,72 +834,76 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Advocate
+                      // Read-only advocate
                       const Text('Assigned Advocate',
                           style: TextStyle(
                               fontSize: 12, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
-                      InkWell(
-                        onTap: () async {
-                          final picked = await _pickAdvocate();
-                          if (picked != null) {
-                            setLocal(() => selectedAdvocate = picked);
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 14),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF5F7FA),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.gavel,
-                                  size: 16, color: Colors.blue),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  selectedAdvocate?.name ?? 'Select advocate',
-                                  style: const TextStyle(fontSize: 13),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F7FA),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.gavel,
+                                size: 16, color: Colors.blue),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                fresh.advocateName.isNotEmpty
+                                    ? fresh.advocateName
+                                    : fresh.advocateId,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13),
                               ),
-                              const Icon(Icons.arrow_drop_down),
-                            ],
-                          ),
+                            ),
+                            const Icon(Icons.lock, size: 14,
+                                color: Colors.grey),
+                          ],
                         ),
                       ),
 
                       const SizedBox(height: 14),
 
-                      // Share value
+                      // Read-only share value
                       const Text('Share Value Per Share',
                           style: TextStyle(
                               fontSize: 12, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
-                      TextField(
-                        controller: shareValueController,
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          hintText: 'e.g. 100',
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 12),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F7FA),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.attach_money,
+                                size: 16, color: Colors.blue),
+                            const SizedBox(width: 8),
+                            Text(
+                              '৳${fresh.shareValuePerShare.toStringAsFixed(2)}',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            const Spacer(),
+                            const Icon(Icons.lock, size: 14,
+                                color: Colors.grey),
+                          ],
                         ),
                       ),
 
                       const SizedBox(height: 14),
 
-                      // Steps header
+                      // Steps — editable
                       Row(
                         children: [
                           const Text('Steps',
@@ -925,7 +927,6 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                       ),
                       const SizedBox(height: 6),
 
-                      // Steps
                       ...List.generate(stepControllers.length, (i) {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 10),
@@ -985,7 +986,329 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
 
                       const SizedBox(height: 12),
 
-                      // Status
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title:
+                            const Text('Mark as completed (status = true)'),
+                        value: status,
+                        onChanged: (v) => setLocal(() => status = v),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved != true) {
+      for (final c in stepControllers) {
+        c.dispose();
+      }
+      return;
+    }
+
+    final steps = <String>[];
+    for (final c in stepControllers) {
+      final v = c.text.trim();
+      if (v.isNotEmpty) steps.add(v);
+    }
+    for (final c in stepControllers) {
+      c.dispose();
+    }
+
+    // Preserve advocate / user / share value exactly as they were.
+    final updated = RegistrationProcess(
+      id: fresh.id,
+      companyId: fresh.companyId,
+      advocateId: fresh.advocateId,
+      userId: fresh.userId,
+      status: status,
+      shareValuePerShare: fresh.shareValuePerShare,
+      steps: steps,
+    );
+
+    setState(() => _isBusy = true);
+
+    try {
+      await _processService.updateRegistrationProcess(
+        id: fresh.id!,
+        process: updated,
+        userId: _userId!,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Registration progress updated'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await _loadCompanyDetails();
+      if (mounted) await _loadProcesses();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  // ============================================================
+  // FULL EDIT (process owner)
+  // ============================================================
+  Future<void> _openEditRegistrationProcess() async {
+    final fresh = _currentProcess;
+    if (fresh == null) return;
+
+    final process = RegistrationProcess(
+      id: fresh.id,
+      companyId: fresh.companyId,
+      advocateId: fresh.advocateId,
+      userId: fresh.userId,
+      status: fresh.status,
+      shareValuePerShare: fresh.shareValuePerShare,
+      steps: fresh.steps,
+    );
+
+    print('🟪 [update] process.id = ${process.id}');
+    print('🟪 [update] process.companyId = ${process.companyId}');
+
+    if (process.id == null || process.id!.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Missing registration process ID — cannot update. '
+            'Please refresh and try again.',
+          ),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 6),
+        ),
+      );
+      return;
+    }
+
+    final List<TextEditingController> stepControllers =
+        process.steps.map((s) => TextEditingController(text: s)).toList();
+    if (stepControllers.isEmpty) {
+      stepControllers.add(TextEditingController());
+    }
+
+    bool status = process.status;
+    final shareValueController = TextEditingController(
+      text: process.shareValuePerShare.toString(),
+    );
+
+    AdvocateBrief? selectedAdvocate = AdvocateBrief(
+      id: process.advocateId,
+      name: process.advocateId,
+    );
+
+    try {
+      final list = await CenterAdminBridge.myAdvocates(_userId ?? '');
+      for (final a in list) {
+        if (a.id == process.advocateId) {
+          selectedAdvocate = a;
+          break;
+        }
+      }
+    } catch (_) {}
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            void addStep() {
+              setLocal(() => stepControllers.add(TextEditingController()));
+            }
+
+            void removeStep(int index) {
+              if (stepControllers.length <= 1) return;
+              setLocal(() {
+                stepControllers[index].dispose();
+                stepControllers.removeAt(index);
+              });
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: const Text('Update Registration Process'),
+              content: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.75,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Assigned Advocate',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await _pickAdvocate();
+                          if (picked != null) {
+                            setLocal(() => selectedAdvocate = picked);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF5F7FA),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.gavel,
+                                  size: 16, color: Colors.blue),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  selectedAdvocate?.name ?? 'Select advocate',
+                                  style: const TextStyle(fontSize: 13),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const Icon(Icons.arrow_drop_down),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      const Text('Share Value Per Share',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: shareValueController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          hintText: 'e.g. 100',
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      Row(
+                        children: [
+                          const Text('Steps',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: addStep,
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Add Step',
+                                style: TextStyle(fontSize: 12)),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 0),
+                              minimumSize: const Size(0, 32),
+                              foregroundColor: Colors.blue,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+
+                      ...List.generate(stepControllers.length, (i) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Step ${i + 1}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: stepControllers[i],
+                                  textInputAction: TextInputAction.next,
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    hintText: 'Describe step ${i + 1}...',
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 12),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                tooltip: 'Remove step',
+                                icon: Icon(
+                                  Icons.close,
+                                  size: 18,
+                                  color: stepControllers.length <= 1
+                                      ? Colors.grey.shade300
+                                      : Colors.red,
+                                ),
+                                onPressed: stepControllers.length <= 1
+                                    ? null
+                                    : () => removeStep(i),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+
+                      const SizedBox(height: 12),
+
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text(
@@ -1004,7 +1327,8 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                 ),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(ctx, true),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue),
                   child: const Text('Save'),
                 ),
               ],
@@ -1022,19 +1346,16 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
       return;
     }
 
-    // Build final step list
     final steps = <String>[];
     for (final c in stepControllers) {
       final v = c.text.trim();
       if (v.isNotEmpty) steps.add(v);
     }
 
-    // Parse share value with fallback
     final shareValue =
         double.tryParse(shareValueController.text.trim()) ??
             process.shareValuePerShare;
 
-    // ✅ Local validation — avoids HTTP 400 from backend
     if (shareValue <= 0) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1115,7 +1436,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
   }
 
   // ============================================================
-  // DELETE REGISTRATION PROCESS
+  // DELETE REGISTRATION PROCESS (owner only)
   // ============================================================
   Future<void> _confirmDeleteRegistrationProcess() async {
     final process = _currentProcess;
@@ -1135,8 +1456,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Delete Registration Process?'),
         content: const Text(
           'This will remove your registration process for this company. '
@@ -1184,9 +1504,6 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
     }
   }
 
-  // ============================================================
-  // OPEN "MY COMPANY PROCESSES"
-  // ============================================================
   Future<void> _openMyCompanyProcessControlScreen() async {
     await Navigator.push(
       context,
@@ -1198,18 +1515,22 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
   }
 
   // ============================================================
-  // CENTER ADMIN SECTION (rendered on Company Details)
+  // CENTER ADMIN / ADVOCATE CONTROLS
   // ============================================================
   Widget _buildCenterAdminControls() {
     if (_company == null) return const SizedBox.shrink();
 
     final hasProcess = _hasProcess;
 
+    // Which controls can be shown:
+    final showAccept = !hasProcess;
+    final showFullOwnerControls = _canEditFullProcess;
+    final showAdvocateStatusSteps = _canEditStatusAndStepsOnly;
+    final showProcessControlEntry = _isMineProcess || _isAdvocateOfThis;
+
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -1221,12 +1542,19 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
           children: [
             Row(
               children: [
-                const Icon(Icons.admin_panel_settings,
-                    color: Colors.blue, size: 20),
+                Icon(
+                  showAdvocateStatusSteps && !showFullOwnerControls
+                      ? Icons.gavel
+                      : Icons.admin_panel_settings,
+                  color: Colors.blue,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
-                const Text(
-                  'Center Admin Controls',
-                  style: TextStyle(
+                Text(
+                  showAdvocateStatusSteps && !showFullOwnerControls
+                      ? 'Advocate Controls'
+                      : 'Center Admin Controls',
+                  style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: Colors.blue,
@@ -1236,22 +1564,25 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
             ),
             const SizedBox(height: 12),
 
-            OutlinedButton.icon(
-              onPressed: _openMyCompanyProcessControlScreen,
-              icon: const Icon(Icons.list_alt),
-              label: const Text('My Company Processes'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 46),
-                side: const BorderSide(color: Colors.blue),
-                foregroundColor: Colors.blue,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+            if (showProcessControlEntry)
+              OutlinedButton.icon(
+                onPressed: _openMyCompanyProcessControlScreen,
+                icon: const Icon(Icons.list_alt),
+                label: const Text('My Company Processes'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 46),
+                  side: const BorderSide(color: Colors.blue),
+                  foregroundColor: Colors.blue,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
 
-            if (!hasProcess) ...[
+            if (showProcessControlEntry && (showAccept || showAdvocateStatusSteps || showFullOwnerControls))
+              const SizedBox(height: 10),
+
+            if (showAccept) ...[
               ElevatedButton.icon(
                 onPressed: _confirmAcceptAsCenterAdmin,
                 icon: const Icon(Icons.check_circle_outline),
@@ -1279,7 +1610,8 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                   ),
                 ),
               ),
-            ] else if (_isMineProcess) ...[
+            ] else if (showFullOwnerControls) ...[
+              // Owner: full edit + delete
               ElevatedButton.icon(
                 onPressed: _openEditRegistrationProcess,
                 icon: const Icon(Icons.edit_note),
@@ -1306,6 +1638,39 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
+              ),
+            ] else if (showAdvocateStatusSteps) ...[
+              // Advocate (not owner): only status + steps
+              ElevatedButton.icon(
+                onPressed: _openAdvocateStatusStepsEdit,
+                icon: const Icon(Icons.playlist_add_check),
+                label: const Text('Update Status & Steps'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 46),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      size: 14, color: Colors.grey.shade600),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'As the assigned advocate you can update the process '
+                      'status and steps only.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ],
@@ -1433,10 +1798,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                     const Expanded(
                       child: Text(
                         'Please ensure you have sent the payment to the receiver number above before submitting.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue,
-                        ),
+                        style: TextStyle(fontSize: 12, color: Colors.blue),
                       ),
                     ),
                   ],
@@ -1463,7 +1825,6 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
     );
   }
 
-  // ✅ Submit Payment
   Future<void> _submitPayment() async {
     final senderPhone = _senderPhoneController.text.trim();
     final transactionId = _transactionIdController.text.trim();
@@ -1521,9 +1882,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
 
     Navigator.pop(context);
 
-    setState(() {
-      _isLoadingPayments = true;
-    });
+    setState(() => _isLoadingPayments = true);
 
     try {
       final payment = CompanyRequestPayment(
@@ -1552,9 +1911,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
         ),
       );
     } finally {
-      setState(() {
-        _isLoadingPayments = false;
-      });
+      setState(() => _isLoadingPayments = false);
     }
   }
 
@@ -1651,10 +2008,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
           const SizedBox(height: 8),
           Text(
             'The requested company does not exist.',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade500,
-            ),
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
           ),
         ],
       ),
@@ -1694,8 +2048,9 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
           _buildRegistrationProcessSection(),
           const SizedBox(height: 16),
 
-          // ✅ Center Admin Controls — uses _processes as source of truth
-          if (_isMineProcess || !_hasProcess) _buildCenterAdminControls(),
+          // ✅ Center Admin / Advocate controls
+          if (_isMineProcess || _isAdvocateOfThis || !_hasProcess)
+            _buildCenterAdminControls(),
 
           const SizedBox(height: 16),
 
@@ -1729,11 +2084,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
-                  Icons.business,
-                  color: Colors.white,
-                  size: 32,
-                ),
+                child: const Icon(Icons.business, color: Colors.white, size: 32),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -1783,6 +2134,30 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                     ],
                   ),
                 ),
+              if (!_isCreator && _isAdvocateOfThis)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.85),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.gavel, color: Colors.white, size: 14),
+                      SizedBox(width: 4),
+                      Text(
+                        'Advocate',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -1813,10 +2188,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
       ),
       child: Text(
         label,
-        style: const TextStyle(
-          fontSize: 12,
-          color: Colors.white,
-        ),
+        style: const TextStyle(fontSize: 12, color: Colors.white),
       ),
     );
   }
@@ -1825,9 +2197,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
   Widget _buildInfoCard(CompanyResponse company) {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -1835,10 +2205,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
           children: [
             const Text(
               'Company Information',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             _buildInfoRow('ID', company.id ?? 'N/A'),
@@ -1868,10 +2235,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
             width: 120,
             child: Text(
               label,
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
             ),
           ),
           Expanded(
@@ -1892,9 +2256,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
   Widget _buildDirectorsSection(CompanyResponse company) {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -1907,9 +2269,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                 Text(
                   'Directors (${company.directorsName!.length})',
                   style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                      fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -1925,9 +2285,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
   Widget _buildShareholdersSection(CompanyResponse company) {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -1940,9 +2298,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                 Text(
                   'Shareholders (${company.shareHoldersName!.length})',
                   style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                      fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -1997,9 +2353,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
   Widget _buildCapitalSection(CompanyResponse company) {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -2012,9 +2366,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                 const Text(
                   'Capital Details',
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                      fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -2043,10 +2395,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
             children: [
               Text(
                 'Authorized Capital',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
               Text(
                 '৳${capital.authorizedCapital.toStringAsFixed(2)}',
@@ -2064,10 +2413,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
             children: [
               Text(
                 'Share Value',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
               Text(
                 '৳${capital.shareValue.toStringAsFixed(2)}',
@@ -2083,10 +2429,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
             children: [
               Text(
                 'Total Shares',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
               Text(
                 capital.totalShare.toString(),
@@ -2106,9 +2449,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
   Widget _buildSubscriptionsSection(CompanyResponse company) {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -2121,9 +2462,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                 const Text(
                   'Subscriptions',
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                      fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -2161,17 +2500,16 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                 ),
                 Text(
                   'Shares: ${subscription.numberOfShare}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style:
+                      TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
               ],
             ),
           ),
           if (subscription.signatureId != null)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.purple.shade100,
                 borderRadius: BorderRadius.circular(12),
@@ -2198,9 +2536,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
 
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -2213,9 +2549,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                 const Text(
                   'Documents',
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                      fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
                 Container(
@@ -2269,18 +2603,13 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                 ),
                 const Text(
                   'Tap View to open document',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey,
-                  ),
+                  style: TextStyle(fontSize: 10, color: Colors.grey),
                 ),
               ],
             ),
           ),
           ElevatedButton.icon(
-            onPressed: () {
-              _viewAttachment(docId);
-            },
+            onPressed: () => _viewAttachment(docId),
             icon: const Icon(Icons.visibility, size: 16),
             label: const Text('View'),
             style: ElevatedButton.styleFrom(
@@ -2303,9 +2632,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
   Widget _buildCompanyContactSection() {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -2318,9 +2645,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                 const Text(
                   'Company Contacts',
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                      fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
                 Container(
@@ -2348,9 +2673,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                       child: SizedBox(
                         height: 20,
                         width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     ),
                   )
@@ -2371,9 +2694,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                             child: Text(
                               'No contacts found',
                               style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 13,
-                              ),
+                                  color: Colors.grey, fontSize: 13),
                             ),
                           )
                         : Column(
@@ -2421,10 +2742,8 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
               const SizedBox(width: 8),
               Text(
                 contact.contactPersonMobile,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade700,
-                ),
+                style:
+                    TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
             ],
           ),
@@ -2434,10 +2753,8 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
               const SizedBox(width: 8),
               Text(
                 contact.contactPersonEmail,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade700,
-                ),
+                style:
+                    TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
             ],
           ),
@@ -2447,10 +2764,8 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
               const SizedBox(width: 8),
               Text(
                 'How: ${contact.howDidHear}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade700,
-                ),
+                style:
+                    TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
             ],
           ),
@@ -2464,9 +2779,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                   child: Text(
                     contact.anyOtherMessage!,
                     style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade700,
-                    ),
+                        fontSize: 12, color: Colors.grey.shade700),
                   ),
                 ),
               ],
@@ -2480,9 +2793,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
   Widget _buildRegistrationProcessSection() {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -2495,9 +2806,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                 const Text(
                   'Registration Process',
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                      fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
                 Container(
@@ -2525,9 +2834,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                       child: SizedBox(
                         height: 20,
                         width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     ),
                   )
@@ -2548,9 +2855,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                             child: Text(
                               'No registration process found',
                               style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 13,
-                              ),
+                                  color: Colors.grey, fontSize: 13),
                             ),
                           )
                         : Column(
@@ -2565,6 +2870,11 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
   }
 
   Widget _buildProcessTile(RegistrationProcessResponse process) {
+    final isMine = process.userId == _userId;
+    final isAdvocate =
+        advocateId != null && advocateId!.isNotEmpty &&
+            process.advocateId == advocateId;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.all(10),
@@ -2588,9 +2898,45 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                   ),
                 ),
               ),
+              if (isMine)
+                Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade100,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    'You (owner)',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.blue.shade700,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                )
+              else if (isAdvocate)
+                Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade100,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    'You (advocate)',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.orange.shade700,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: process.status
                       ? Colors.green.shade100
@@ -2613,19 +2959,13 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
           const SizedBox(height: 4),
           Text(
             'Share Value: ৳${process.shareValuePerShare.toStringAsFixed(2)}',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade700,
-            ),
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
           ),
           if (process.steps.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
               'Steps: ${process.steps.length}',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
             Wrap(
               spacing: 4,
@@ -2648,10 +2988,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
       ),
       child: Text(
         step,
-        style: TextStyle(
-          fontSize: 10,
-          color: Colors.blue.shade700,
-        ),
+        style: TextStyle(fontSize: 10, color: Colors.blue.shade700),
       ),
     );
   }
@@ -2660,9 +2997,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
   Widget _buildPaymentSection() {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -2675,9 +3010,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                 const Text(
                   'Payment Information',
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                      fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
                 Container(
@@ -2767,9 +3100,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                             const Text(
                               'Receiver Number',
                               style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey,
-                              ),
+                                  fontSize: 11, color: Colors.grey),
                             ),
                             const SizedBox(height: 2),
                             Text(
@@ -2813,9 +3144,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                             const Text(
                               'Payment Amount',
                               style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey,
-                              ),
+                                  fontSize: 11, color: Colors.grey),
                             ),
                             const SizedBox(height: 2),
                             Text(
@@ -2844,9 +3173,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                         child: Text(
                           'Please send the payment to the above number and share the transaction ID with the company.',
                           style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
+                              fontSize: 12, color: Colors.grey.shade600),
                         ),
                       ),
                     ],
@@ -2864,9 +3191,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                       child: SizedBox(
                         height: 20,
                         width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     ),
                   )
@@ -2893,9 +3218,7 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
                               child: Text(
                                 'No payment history found',
                                 style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 14,
-                                ),
+                                    color: Colors.grey, fontSize: 14),
                               ),
                             ),
                           )
@@ -2962,10 +3285,8 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
               const SizedBox(width: 8),
               Text(
                 payment.senderPhoneNumber,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade700,
-                ),
+                style:
+                    TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
             ],
           ),
@@ -2976,10 +3297,8 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
               Expanded(
                 child: Text(
                   payment.transactionId,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade700,
-                  ),
+                  style:
+                      TextStyle(fontSize: 12, color: Colors.grey.shade700),
                 ),
               ),
             ],
@@ -2990,10 +3309,8 @@ class _CompanyDetailsPageState extends State<CompanyDetailsPage> {
               const SizedBox(width: 8),
               Text(
                 payment.formattedDate,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade700,
-                ),
+                style:
+                    TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
             ],
           ),

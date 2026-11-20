@@ -1,6 +1,7 @@
 // lib/TradeLicense/screens/trade_license_details_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../Auth/AuthService.dart';
 import '../../ChatRelatedPages/FreeConsultantPage.dart';
 import '../../RJSC/screens/rjsc_attachment_viewer.dart';
@@ -37,9 +38,10 @@ class _TradeLicenseDetailsScreenState extends State<TradeLicenseDetailsScreen> {
   bool _isBusy = false;
   String? _currentUserId;
   String? _currentUserName;
+  String? _myAdvocateId;
 
-  /// ✅ True when current user is the Center Admin of THIS TL's process
-  ///    (i.e. registrationProcess.userId == currentUserId)
+  /// True when current user is the Center Admin of THIS TL's process
+  /// (i.e. registrationProcess.userId == currentUserId).
   bool get _isCenterAdminOfThis {
     final rp = _l.tradeLicenseRegistrationProcess;
     return rp != null &&
@@ -48,7 +50,24 @@ class _TradeLicenseDetailsScreenState extends State<TradeLicenseDetailsScreen> {
         rp.userId == _currentUserId;
   }
 
+  /// True when current user is the assigned advocate on THIS TL's process
+  /// (i.e. registrationProcess.advocateId == myAdvocateId from SharedPreferences).
+  bool get _isAdvocateOfThis {
+    final rp = _l.tradeLicenseRegistrationProcess;
+    return rp != null &&
+        _myAdvocateId != null &&
+        _myAdvocateId!.isNotEmpty &&
+        rp.advocateId == _myAdvocateId;
+  }
+
+  /// Advocate-only edit: status + steps only (advocate is not the process owner).
+  bool get _canEditStatusAndStepsOnly =>
+      _isAdvocateOfThis && !_isCenterAdminOfThis;
+
   bool get _hasProcess => _l.tradeLicenseRegistrationProcess != null;
+
+  bool get _showControlsCard =>
+      _isCenterAdminOfThis || _isAdvocateOfThis || !_hasProcess;
 
   @override
   void initState() {
@@ -59,10 +78,19 @@ class _TradeLicenseDetailsScreenState extends State<TradeLicenseDetailsScreen> {
 
   Future<void> _loadUser() async {
     final userId = await AuthService.getUserId();
+    final prefs = await SharedPreferences.getInstance();
+    final advocateId = prefs.getString('advocateId') ?? '';
+    final advocateName = (prefs.getString('advocateName') ??
+            prefs.getString('userName') ??
+            prefs.getString('name') ??
+            '')
+        .trim();
+
     if (!mounted) return;
     setState(() {
       _currentUserId = userId;
-      _currentUserName = '';
+      _currentUserName = advocateName;
+      _myAdvocateId = advocateId;
     });
   }
 
@@ -242,7 +270,257 @@ class _TradeLicenseDetailsScreenState extends State<TradeLicenseDetailsScreen> {
     }
   }
 
-  // ============ UPDATE PROCESS ============
+  // ============ ADVOCATE-ONLY EDIT (status + steps only) ============
+  Future<void> _openAdvocateStatusStepsEdit() async {
+    final process = _l.tradeLicenseRegistrationProcess;
+    if (process == null) return;
+    if (process.id == null || process.id!.isEmpty) {
+      _snack('Missing Trade License process ID — cannot update.',
+          isError: true);
+      return;
+    }
+
+    final stepControllers = process.steps
+        .map((s) => TextEditingController(text: s))
+        .toList();
+    if (stepControllers.isEmpty) stepControllers.add(TextEditingController());
+
+    bool status = process.status;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            void addStep() => setLocal(
+                () => stepControllers.add(TextEditingController()));
+
+            void removeStep(int i) {
+              if (stepControllers.length <= 1) return;
+              setLocal(() {
+                stepControllers[i].dispose();
+                stepControllers.removeAt(i);
+              });
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: const Text('Update Trade License Progress'),
+              content: ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(ctx).size.height * 0.75),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Read-only advocate
+                      const Text('Assigned Advocate',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F7FA),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.gavel,
+                                size: 16, color: _primaryGreen),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                process.advocateName.isNotEmpty
+                                    ? process.advocateName
+                                    : (_currentUserName?.isNotEmpty == true
+                                        ? _currentUserName!
+                                        : 'Assigned Advocate'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            const Icon(Icons.lock,
+                                size: 14, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Steps — editable
+                      Row(
+                        children: [
+                          const Text('Steps',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: addStep,
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Add Step',
+                                style: TextStyle(fontSize: 12)),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 0),
+                              minimumSize: const Size(0, 32),
+                              foregroundColor: _primaryGreen,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ...List.generate(stepControllers.length, (i) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: _primaryGreen.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Step ${i + 1}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: _primaryGreen,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: stepControllers[i],
+                                  textInputAction: TextInputAction.next,
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    hintText: 'Describe step ${i + 1}...',
+                                    contentPadding:
+                                        const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 12),
+                                    border: OutlineInputBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                tooltip: 'Remove step',
+                                icon: Icon(
+                                  Icons.close,
+                                  size: 18,
+                                  color: stepControllers.length <= 1
+                                      ? Colors.grey.shade300
+                                      : Colors.red,
+                                ),
+                                onPressed: stepControllers.length <= 1
+                                    ? null
+                                    : () => removeStep(i),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      const SizedBox(height: 12),
+
+                      // Status toggle
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                            'Mark as completed (status = true)'),
+                        value: status,
+                        onChanged: (v) => setLocal(() => status = v),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: _primaryGreen),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved != true) {
+      for (final c in stepControllers) {
+        c.dispose();
+      }
+      return;
+    }
+
+    final steps = <String>[];
+    for (final c in stepControllers) {
+      final v = c.text.trim();
+      if (v.isNotEmpty) steps.add(v);
+    }
+    for (final c in stepControllers) {
+      c.dispose();
+    }
+
+    // Preserve userId / advocateId / tradeLicenseId — only status + steps change.
+    final updated = TradeLicenseRegistrationProcessModel(
+      id: process.id,
+      userId: process.userId,
+      advocateId: process.advocateId,
+      status: status,
+      tradeLicenseId: _l.id ?? '',
+      steps: steps,
+    );
+
+    setState(() => _isBusy = true);
+    try {
+      final actorUserId =
+          (_currentUserId != null && _currentUserId!.isNotEmpty)
+              ? _currentUserId!
+              : process.userId;
+
+      await TradeLicenseRegistrationProcessService.updateProcess(
+        id: process.id!,
+        userId: actorUserId,
+        process: updated,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Trade License progress updated'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await _reload();
+    } catch (e) {
+      if (!mounted) return;
+      _snack('Failed: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  // ============ UPDATE PROCESS (Center Admin) ============
   Future<void> _openEditProcess() async {
     final process = _l.tradeLicenseRegistrationProcess;
     if (process == null) return;
@@ -464,6 +742,9 @@ class _TradeLicenseDetailsScreenState extends State<TradeLicenseDetailsScreen> {
     for (final c in stepControllers) {
       final v = c.text.trim();
       if (v.isNotEmpty) steps.add(v);
+    }
+    for (final c in stepControllers) {
+      c.dispose();
     }
 
     final updated = TradeLicenseRegistrationProcessModel(
@@ -830,8 +1111,8 @@ class _TradeLicenseDetailsScreenState extends State<TradeLicenseDetailsScreen> {
                     if (_l.id != null) _row('Application ID', _l.id!),
                   ]),
 
-                  // ---------- CENTER ADMIN CONTROLS ----------
-                  if (_isCenterAdminOfThis || !_hasProcess) ...[
+                  // ---------- CENTER ADMIN / ADVOCATE CONTROLS ----------
+                  if (_showControlsCard) ...[
                     const SizedBox(height: 16),
                     _centerAdminControls(),
                   ],
@@ -892,8 +1173,16 @@ class _TradeLicenseDetailsScreenState extends State<TradeLicenseDetailsScreen> {
     );
   }
 
-  // ============ Center Admin Controls ============
+  // ============ Center Admin / Advocate Controls ============
   Widget _centerAdminControls() {
+    final isAdvocateMode = _canEditStatusAndStepsOnly;
+    final isAdminMode = _isCenterAdminOfThis;
+
+    final title =
+        isAdvocateMode ? 'Advocate Controls' : 'Center Admin Controls';
+    final icon =
+        isAdvocateMode ? Icons.gavel : Icons.admin_panel_settings;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -907,12 +1196,11 @@ class _TradeLicenseDetailsScreenState extends State<TradeLicenseDetailsScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.admin_panel_settings,
-                  color: _primaryGreen, size: 20),
+              Icon(icon, color: _primaryGreen, size: 20),
               const SizedBox(width: 8),
               Text(
-                'Center Admin Controls',
-                style: TextStyle(
+                title,
+                style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: _primaryGreen,
@@ -923,20 +1211,22 @@ class _TradeLicenseDetailsScreenState extends State<TradeLicenseDetailsScreen> {
           const SizedBox(height: 12),
 
           // Shortcut to My TL Processes
-          OutlinedButton.icon(
-            onPressed: _openMyTlProcessControl,
-            icon: const Icon(Icons.list_alt),
-            label: const Text('My Trade License Processes'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 46),
-              side: const BorderSide(color: _primaryGreen),
-              foregroundColor: _primaryGreen,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+          if (isAdminMode || isAdvocateMode) ...[
+            OutlinedButton.icon(
+              onPressed: _openMyTlProcessControl,
+              icon: const Icon(Icons.list_alt),
+              label: const Text('My Trade License Processes'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 46),
+                side: const BorderSide(color: _primaryGreen),
+                foregroundColor: _primaryGreen,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
+            const SizedBox(height: 10),
+          ],
 
           if (!_hasProcess) ...[
             ElevatedButton.icon(
@@ -952,7 +1242,7 @@ class _TradeLicenseDetailsScreenState extends State<TradeLicenseDetailsScreen> {
                 ),
               ),
             ),
-          ] else if (_isCenterAdminOfThis) ...[
+          ] else if (isAdminMode) ...[
             ElevatedButton.icon(
               onPressed: _openEditProcess,
               icon: const Icon(Icons.edit_note),
@@ -979,6 +1269,36 @@ class _TradeLicenseDetailsScreenState extends State<TradeLicenseDetailsScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
+            ),
+          ] else if (isAdvocateMode) ...[
+            ElevatedButton.icon(
+              onPressed: _openAdvocateStatusStepsEdit,
+              icon: const Icon(Icons.playlist_add_check),
+              label: const Text('Update Status & Steps'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryGreen,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 46),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.info_outline,
+                    size: 14, color: Colors.grey.shade600),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'As the assigned advocate you can update the process '
+                    'status and steps only.',
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ),
+              ],
             ),
           ],
         ],

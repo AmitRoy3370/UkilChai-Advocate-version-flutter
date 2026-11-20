@@ -36,10 +36,14 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
   bool _isBusy = false;
   String? _currentUserId;
   String? _currentUserPhone;
+  String? _advocateId; // ✅ read from SharedPreferences('advocateId')
 
-  // ✅ True when current user is the Center Admin of THIS RJSC's process
-  //    (i.e. registrationProcess.userId == currentUserId)
+  /// True when current user is the Center Admin of THIS RJSC's process
+  /// (i.e. registrationProcess.userId == currentUserId)
   bool _isCenterAdminOfThis = false;
+
+  /// ✅ True when current user is the **assigned advocate** on this process.
+  bool _isAdvocateOfThis = false;
 
   @override
   void initState() {
@@ -50,6 +54,7 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
   Future<void> _checkOwnership() async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getString('userId') ?? '';
+    final advocateId = prefs.getString('advocateId') ?? '';
     final phone = prefs.getString('phoneNumber') ??
         prefs.getString('phone') ??
         prefs.getString('userPhone') ??
@@ -59,12 +64,23 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
     setState(() {
       _currentUserId = userId;
       _currentUserPhone = phone;
-      _isOwner = userId.isNotEmpty && userId == widget.rjsc.userId;
-
-      final rp = widget.rjsc.registrationProcess;
-      _isCenterAdminOfThis =
-          rp != null && userId.isNotEmpty && rp.userId == userId;
+      _advocateId = advocateId;
+      _recomputeRoles();
     });
+  }
+
+  /// Recompute all role flags from the current state (userId, advocateId,
+  /// and the current rjsc.registrationProcess).
+  void _recomputeRoles() {
+    final userId = _currentUserId ?? '';
+    final advId = _advocateId ?? '';
+    final rp = widget.rjsc.registrationProcess;
+
+    _isOwner = userId.isNotEmpty && userId == widget.rjsc.userId;
+    _isCenterAdminOfThis =
+        rp != null && userId.isNotEmpty && rp.userId == userId;
+    _isAdvocateOfThis =
+        rp != null && advId.isNotEmpty && rp.advocateId == advId;
   }
 
   Future<void> _reloadRjsc() async {
@@ -83,16 +99,25 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
         widget.rjsc.year = fresh.year;
         widget.rjsc.documents = fresh.documents;
         widget.rjsc.registrationProcess = fresh.registrationProcess;
-
-        final rp = fresh.registrationProcess;
-        _isCenterAdminOfThis = rp != null &&
-            (_currentUserId ?? '').isNotEmpty &&
-            rp.userId == _currentUserId;
+        _recomputeRoles();
       });
     }
   }
 
   RjscResponseDTO get rjsc => widget.rjsc;
+
+  bool get _hasProcess => rjsc.registrationProcess != null;
+
+  /// Advocate-only edit: status + steps (advocate is NOT the process owner).
+  bool get _canEditStatusAndStepsOnly =>
+      _isAdvocateOfThis && !_isCenterAdminOfThis;
+
+  /// Full edit (owner of the process).
+  bool get _canEditFullProcess => _isCenterAdminOfThis;
+
+  /// Show any center-admin/advocate controls card at all?
+  bool get _showControlsCard =>
+      _isCenterAdminOfThis || _isAdvocateOfThis || !_hasProcess;
 
   // ============================================================
   // ADVOCATE PICKER
@@ -205,7 +230,7 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
   }
 
   // ============================================================
-  // ACCEPT
+  // ACCEPT (center admin only)
   // ============================================================
   Future<void> _confirmAccept() async {
     final advocate = await _pickAdvocate();
@@ -302,7 +327,256 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
   }
 
   // ============================================================
-  // UPDATE PROCESS
+  // ADVOCATE-ONLY EDIT (status + steps only)
+  // ============================================================
+  Future<void> _openAdvocateStatusStepsEdit() async {
+    final process = widget.rjsc.registrationProcess;
+    if (process == null) return;
+    if (process.id == null || process.id!.isEmpty) {
+      _showSnack('Missing RJSC process ID — cannot update.',
+          isError: true);
+      return;
+    }
+
+    // Step controllers from existing steps
+    final stepControllers = process.steps
+        .map((s) => TextEditingController(text: s))
+        .toList();
+    if (stepControllers.isEmpty) stepControllers.add(TextEditingController());
+
+    bool status = process.status;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            void addStep() => setLocal(
+                () => stepControllers.add(TextEditingController()));
+
+            void removeStep(int i) {
+              if (stepControllers.length <= 1) return;
+              setLocal(() {
+                stepControllers[i].dispose();
+                stepControllers.removeAt(i);
+              });
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: const Text('Update RJSC Progress'),
+              content: ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(ctx).size.height * 0.75),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Read-only advocate
+                      const Text('Assigned Advocate',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F7FA),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.gavel,
+                                size: 16, color: _primaryGreen),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                process.advocateName.isNotEmpty
+                                    ? process.advocateName
+                                    : process.advocateId,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            const Icon(Icons.lock,
+                                size: 14, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Steps — editable
+                      Row(
+                        children: [
+                          const Text('Steps',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: addStep,
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Add Step',
+                                style: TextStyle(fontSize: 12)),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 0),
+                              minimumSize: const Size(0, 32),
+                              foregroundColor: _primaryGreen,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ...List.generate(stepControllers.length, (i) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: _primaryGreen.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Step ${i + 1}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: _primaryGreen,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: stepControllers[i],
+                                  textInputAction: TextInputAction.next,
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    hintText: 'Describe step ${i + 1}...',
+                                    contentPadding:
+                                        const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 12),
+                                    border: OutlineInputBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                tooltip: 'Remove step',
+                                icon: Icon(
+                                  Icons.close,
+                                  size: 18,
+                                  color: stepControllers.length <= 1
+                                      ? Colors.grey.shade300
+                                      : Colors.red,
+                                ),
+                                onPressed: stepControllers.length <= 1
+                                    ? null
+                                    : () => removeStep(i),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      const SizedBox(height: 12),
+
+                      // Status toggle
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                            'Mark as completed (status = true)'),
+                        value: status,
+                        onChanged: (v) => setLocal(() => status = v),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: _primaryGreen),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved != true) {
+      for (final c in stepControllers) c.dispose();
+      return;
+    }
+
+    final steps = <String>[];
+    for (final c in stepControllers) {
+      final v = c.text.trim();
+      if (v.isNotEmpty) steps.add(v);
+    }
+    for (final c in stepControllers) c.dispose();
+
+    // Preserve user / advocate / rjscId exactly — only status + steps change.
+    final updated = RjscRegistrationProcessModel(
+      id: process.id,
+      userId: process.userId,
+      advocateId: process.advocateId,
+      status: status,
+      rjscId: widget.rjsc.id ?? '',
+      steps: steps,
+    );
+
+    setState(() => _isBusy = true);
+
+    try {
+      await RjscRegistrationProcessService.updateProcess(
+        id: process.id!,
+        userId: _currentUserId!,
+        process: updated,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('RJSC progress updated'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await _reloadRjsc();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  // ============================================================
+  // FULL EDIT (center admin / process owner)
   // ============================================================
   Future<void> _openEditProcess() async {
     final process = widget.rjsc.registrationProcess;
@@ -513,9 +787,7 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
     );
 
     if (saved != true) {
-      for (final c in stepControllers) {
-        c.dispose();
-      }
+      for (final c in stepControllers) c.dispose();
       return;
     }
 
@@ -524,6 +796,7 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
       final v = c.text.trim();
       if (v.isNotEmpty) steps.add(v);
     }
+    for (final c in stepControllers) c.dispose();
 
     final updated = RjscRegistrationProcessModel(
       id: process.id,
@@ -565,7 +838,7 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
   }
 
   // ============================================================
-  // DELETE PROCESS
+  // DELETE PROCESS (owner only)
   // ============================================================
   Future<void> _confirmDeleteProcess() async {
     final process = widget.rjsc.registrationProcess;
@@ -626,7 +899,7 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
   }
 
   // ============================================================
-  // REMOVE RJSC (whole record)
+  // REMOVE RJSC (whole record, owner-only)
   // ============================================================
   Future<void> _confirmRemoveRjsc() async {
     await _confirmDelete();
@@ -650,9 +923,6 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
     final process = rjsc.registrationProcess;
     final hasProcess = process != null;
 
-    // ✅ Payment summary visible to owner AND center-admin of this filing.
-    //    The "Pay Remaining" button inside RjscPaymentSection is controlled
-    //    by the `canPay` flag (owner-only).
     final showPayment = _isOwner || _isCenterAdminOfThis;
 
     return Scaffold(
@@ -686,7 +956,6 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
                 }
               },
             ),
-
           if (_isOwner)
             IconButton(
               icon: _isDeleting
@@ -744,20 +1013,18 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
                   ),
                   const SizedBox(height: 16),
 
-                  if (hasProcess) _processCard(process),
+                  if (hasProcess) _processCard(process!),
                   if (hasProcess) const SizedBox(height: 16),
 
                   _documentsSection(context),
 
-                  // ── CENTER ADMIN CONTROLS ──
-                  if (_isCenterAdminOfThis || !hasProcess) ...[
+                  // ── CENTER ADMIN / ADVOCATE CONTROLS ──
+                  if (_showControlsCard) ...[
                     const SizedBox(height: 16),
                     _centerAdminControls(hasProcess),
                   ],
 
                   // ── PAYMENT SUMMARY (owner + center admin) ──
-                  // `canPay: _isOwner` → only the RJSC owner sees the
-                  // "Pay Remaining" button inside.
                   if (showPayment) ...[
                     const SizedBox(height: 16),
                     RjscPaymentSection(
@@ -769,7 +1036,7 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
                     ),
                   ],
 
-                  // ── OWNER ACTIONS (chat, delete) ──
+                  // ── OWNER ACTIONS ──
                   if (_isOwner) ...[
                     const SizedBox(height: 24),
                     _ownerActionsSection(),
@@ -782,8 +1049,18 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
     );
   }
 
-  // ── Center Admin section ─────────────────────────────────────
+  // ── Controls card (center admin OR advocate OR no process yet) ───
   Widget _centerAdminControls(bool hasProcess) {
+    final isAdvocateMode = _canEditStatusAndStepsOnly;
+    final isAdminMode = _isCenterAdminOfThis;
+
+    final title = isAdvocateMode
+        ? 'Advocate Controls'
+        : 'Center Admin Controls';
+    final icon = isAdvocateMode
+        ? Icons.gavel
+        : Icons.admin_panel_settings;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -797,11 +1074,10 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.admin_panel_settings,
-                  color: _primaryGreen, size: 20),
+              Icon(icon, color: _primaryGreen, size: 20),
               const SizedBox(width: 8),
               Text(
-                'Center Admin Controls',
+                title,
                 style: GoogleFonts.inter(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
@@ -812,22 +1088,27 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
           ),
           const SizedBox(height: 12),
 
-          // Shortcut
-          OutlinedButton.icon(
-            onPressed: _openMyRjscProcessControl,
-            icon: const Icon(Icons.list_alt),
-            label: const Text('My RJSC Processes'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 46),
-              side: const BorderSide(color: _primaryGreen),
-              foregroundColor: _primaryGreen,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+          // Shortcut to "My RJSC Processes"
+          if (isAdminMode || isAdvocateMode)
+            OutlinedButton.icon(
+              onPressed: _openMyRjscProcessControl,
+              icon: const Icon(Icons.list_alt),
+              label: const Text('My RJSC Processes'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 46),
+                side: const BorderSide(color: _primaryGreen),
+                foregroundColor: _primaryGreen,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
 
+          if ((isAdminMode || isAdvocateMode) &&
+              (isAdminMode || isAdvocateMode || !hasProcess))
+            const SizedBox(height: 10),
+
+          // No process yet → center admin can accept
           if (!hasProcess) ...[
             ElevatedButton.icon(
               onPressed: _confirmAccept,
@@ -856,7 +1137,10 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
                 ),
               ),
             ),
-          ] else if (_isCenterAdminOfThis) ...[
+          ]
+
+          // Process exists + center admin → full edit / delete
+          else if (isAdminMode) ...[
             ElevatedButton.icon(
               onPressed: _openEditProcess,
               icon: const Icon(Icons.edit_note),
@@ -883,6 +1167,39 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
+            ),
+          ]
+
+          // Process exists + advocate (not admin) → status & steps only
+          else if (isAdvocateMode) ...[
+            ElevatedButton.icon(
+              onPressed: _openAdvocateStatusStepsEdit,
+              icon: const Icon(Icons.playlist_add_check),
+              label: const Text('Update Status & Steps'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryGreen,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 46),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.info_outline,
+                    size: 14, color: _textGrey),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'As the assigned advocate you can update the process '
+                    'status and steps only.',
+                    style: GoogleFonts.inter(
+                        fontSize: 11, color: _textGrey),
+                  ),
+                ),
+              ],
             ),
           ],
         ],
@@ -1223,55 +1540,11 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
                 ),
               ),
               if (_isOwner)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.person,
-                          color: Colors.white, size: 12),
-                      const SizedBox(width: 3),
-                      Text(
-                        'Yours',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
+                _roleBadge(Icons.person, 'Yours')
               else if (_isCenterAdminOfThis)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.admin_panel_settings,
-                          color: Colors.white, size: 12),
-                      const SizedBox(width: 3),
-                      Text(
-                        'Admin',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                _roleBadge(Icons.admin_panel_settings, 'Admin')
+              else if (_isAdvocateOfThis)
+                _roleBadge(Icons.gavel, 'Advocate'),
             ],
           ),
           const SizedBox(height: 14),
@@ -1294,6 +1567,32 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
                     : const Color(0xFFFFCC80),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _roleBadge(IconData icon, String label) {
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 12),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
         ],
       ),
@@ -1388,6 +1687,9 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
     final steps = process.steps as List<String>;
     final isCompleted = process.status as bool;
     final advocateName = process.advocateName as String? ?? '';
+    final isMine =
+        _isCenterAdminOfThis && (process.userId == _currentUserId);
+    final isMeAdvocate = _isAdvocateOfThis;
 
     return Container(
       width: double.infinity,
@@ -1414,6 +1716,11 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
                 ),
               ),
               const Spacer(),
+              if (isMine)
+                _miniRoleChip('You (owner)', Colors.blue),
+              if (isMeAdvocate && !isMine)
+                _miniRoleChip('You (advocate)', Colors.orange),
+              const SizedBox(width: 6),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1519,6 +1826,25 @@ class _RjscDetailsPageState extends State<RjscDetailsPage> {
                 style:
                     GoogleFonts.inter(fontSize: 12, color: _textGrey)),
         ],
+      ),
+    );
+  }
+
+  Widget _miniRoleChip(String text, Color color) {
+    return Container(
+      margin: const EdgeInsets.only(right: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        text,
+        style: GoogleFonts.inter(
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
       ),
     );
   }

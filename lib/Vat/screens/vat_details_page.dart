@@ -30,36 +30,87 @@ class VatDetailsPage extends StatefulWidget {
 
 class _VatDetailsPageState extends State<VatDetailsPage> {
   static const Color _primaryBlue = Color(0xFF1565C0);
-  static const Color _borderColor = Color(0xFFE2E8F0);
-  static const Color _textDark = Color(0xFF0F172A);
-  static const Color _textGrey = Color(0xFF64748B);
 
   late VatResponseModel _vat;
   bool _busy = false;
+  String? _effectiveUserId;
+  String? _myAdvocateId;
+  String? _myAdvocateName;
+
+  String? get _activeUserId {
+    final wId = widget.currentUserId?.trim();
+    if (wId != null && wId.isNotEmpty) return wId;
+    final pId = _effectiveUserId?.trim();
+    if (pId != null && pId.isNotEmpty) return pId;
+    return null;
+  }
 
   // ✅ Ownership flags
   bool get _isMine =>
-      widget.currentUserId != null &&
-      widget.currentUserId!.isNotEmpty &&
-      widget.currentUserId == _vat.userId;
+      _activeUserId != null &&
+      _activeUserId!.isNotEmpty &&
+      _activeUserId == _vat.userId;
 
   /// ✅ True when current user is the Center Admin of THIS VAT's process
-  ///    (i.e. registrationProcess.userId == currentUserId)
+  ///    (i.e. registrationProcess.userId == activeUserId)
   bool get _isCenterAdminOfThis {
     final rp = _vat.vatRegistrationProcessResponseDTO;
     return rp != null &&
-        widget.currentUserId != null &&
-        widget.currentUserId!.isNotEmpty &&
-        rp.userId == widget.currentUserId;
+        _activeUserId != null &&
+        _activeUserId!.isNotEmpty &&
+        rp.userId == _activeUserId;
   }
+
+  /// True when current user is the assigned advocate on THIS VAT's process
+  /// (i.e. registrationProcess.advocateId == advocateId from SharedPreferences).
+  bool get _isAdvocateOfThis {
+    final rp = _vat.vatRegistrationProcessResponseDTO;
+    return rp != null &&
+        _myAdvocateId != null &&
+        _myAdvocateId!.isNotEmpty &&
+        rp.advocateId.trim() == _myAdvocateId;
+  }
+
+  /// Advocate-only edit: steps + status only (when advocate is not the center admin).
+  bool get _canEditStatusAndStepsOnly =>
+      _isAdvocateOfThis && !_isCenterAdminOfThis;
 
   bool get _hasProcess =>
       _vat.vatRegistrationProcessResponseDTO != null;
+
+  bool get _showControlsCard =>
+      _isCenterAdminOfThis || _isAdvocateOfThis || !_hasProcess;
 
   @override
   void initState() {
     super.initState();
     _vat = widget.vat;
+    _effectiveUserId = widget.currentUserId;
+    _loadUserAndAdvocatePrefs();
+  }
+
+  Future<void> _loadUserAndAdvocatePrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final prefUserId = (prefs.getString('user_id') ??
+            prefs.getString('userId') ??
+            prefs.getString('_id') ??
+            '')
+        .trim();
+    final advocateId = (prefs.getString('advocateId') ?? '').trim();
+    final advocateName = (prefs.getString('advocateName') ??
+            prefs.getString('userName') ??
+            prefs.getString('name') ??
+            '')
+        .trim();
+
+    if (!mounted) return;
+    setState(() {
+      if (prefUserId.isNotEmpty) {
+        _effectiveUserId = prefUserId;
+      }
+      _myAdvocateId = advocateId;
+      _myAdvocateName = advocateName;
+    });
   }
 
   // ============ RELOAD ============
@@ -104,7 +155,7 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
     try {
       await VatService.deleteVat(
         id: _vat.id!,
-        userId: widget.currentUserId!,
+        userId: _activeUserId!,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -139,7 +190,7 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
       MaterialPageRoute(
         builder: (_) => VatPaymentPage(
           vat: _vat,
-          currentUserId: widget.currentUserId,
+          currentUserId: _activeUserId,
           canPay: _isMine, // ✅ pay button only for the VAT owner
         ),
       ),
@@ -210,14 +261,14 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
     try {
       final process = VatRegistrationProcessModel(
         vatId: _vat.id ?? '',
-        userId: widget.currentUserId!,
+        userId: _activeUserId!,
         advocateId: advocate.id,
         status: false,
         steps: const ['accepted'],
       );
 
       await VatRegistrationProcessService.addProcess(
-        userId: widget.currentUserId!,
+        userId: _activeUserId!,
         process: process,
       );
 
@@ -236,7 +287,259 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
     }
   }
 
-  // ============ UPDATE PROCESS ============
+  // ============ ADVOCATE-ONLY EDIT (steps + status only) ============
+  Future<void> _openAdvocateStatusStepsEdit() async {
+    final process = _vat.vatRegistrationProcessResponseDTO;
+    if (process == null) return;
+    if (process.id == null || process.id!.isEmpty) {
+      _snack('Missing VAT process ID — cannot update.', true);
+      return;
+    }
+
+    final stepControllers = process.steps
+        .map((s) => TextEditingController(text: s))
+        .toList();
+    if (stepControllers.isEmpty) stepControllers.add(TextEditingController());
+
+    bool status = process.status;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            void addStep() => setLocal(
+                () => stepControllers.add(TextEditingController()));
+
+            void removeStep(int i) {
+              if (stepControllers.length <= 1) return;
+              setLocal(() {
+                stepControllers[i].dispose();
+                stepControllers.removeAt(i);
+              });
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: const Text('Update VAT Progress'),
+              content: ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(ctx).size.height * 0.75),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Read-only advocate
+                      const Text('Assigned Advocate',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F7FA),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.gavel,
+                                size: 16, color: _primaryBlue),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                process.advocateName.isNotEmpty
+                                    ? process.advocateName
+                                    : (_myAdvocateName?.isNotEmpty == true
+                                        ? _myAdvocateName!
+                                        : 'Assigned Advocate'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            const Icon(Icons.lock,
+                                size: 14, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Steps — editable
+                      Row(
+                        children: [
+                          const Text('Steps',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: addStep,
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Add Step',
+                                style: TextStyle(fontSize: 12)),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 0),
+                              minimumSize: const Size(0, 32),
+                              foregroundColor: _primaryBlue,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ...List.generate(stepControllers.length, (i) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: _primaryBlue.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Step ${i + 1}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: _primaryBlue,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: stepControllers[i],
+                                  textInputAction: TextInputAction.next,
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    hintText: 'Describe step ${i + 1}...',
+                                    contentPadding:
+                                        const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 12),
+                                    border: OutlineInputBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                tooltip: 'Remove step',
+                                icon: Icon(
+                                  Icons.close,
+                                  size: 18,
+                                  color: stepControllers.length <= 1
+                                      ? Colors.grey.shade300
+                                      : Colors.red,
+                                ),
+                                onPressed: stepControllers.length <= 1
+                                    ? null
+                                    : () => removeStep(i),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      const SizedBox(height: 12),
+
+                      // Status toggle
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                            'Mark as completed (status = true)'),
+                        value: status,
+                        onChanged: (v) => setLocal(() => status = v),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: _primaryBlue),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved != true) {
+      for (final c in stepControllers) {
+        c.dispose();
+      }
+      return;
+    }
+
+    final steps = <String>[];
+    for (final c in stepControllers) {
+      final v = c.text.trim();
+      if (v.isNotEmpty) steps.add(v);
+    }
+    for (final c in stepControllers) {
+      c.dispose();
+    }
+
+    final targetVatId = (_vat.id != null && _vat.id!.isNotEmpty)
+        ? _vat.id!
+        : (process.vat?.id ?? process.vatId);
+
+    // Preserve userId / advocateId / vatId — only status + steps change.
+    final updated = VatRegistrationProcessModel(
+      id: process.id,
+      vatId: targetVatId,
+      userId: process.userId,
+      advocateId: process.advocateId,
+      status: status,
+      steps: steps,
+    );
+
+    setState(() => _busy = true);
+    try {
+      final actorUserId =
+          (_activeUserId != null && _activeUserId!.isNotEmpty)
+              ? _activeUserId!
+              : process.userId;
+
+      await VatRegistrationProcessService.updateProcess(
+        id: process.id!,
+        userId: actorUserId,
+        process: updated,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('VAT progress updated'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await _reload();
+    } catch (e) {
+      _snack('Failed: $e', true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  // ============ UPDATE PROCESS (Center Admin) ============
   Future<void> _openEditProcess() async {
     final process = _vat.vatRegistrationProcessResponseDTO;
     if (process == null) return;
@@ -255,10 +558,9 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
           : process.advocateId,
     );
 
-    // Refresh advocate list and try to find matching entry
     try {
       final list =
-          await CenterAdminBridge.myAdvocates(widget.currentUserId ?? '');
+          await CenterAdminBridge.myAdvocates(_activeUserId ?? '');
       for (final a in list) {
         if (a.id == process.advocateId) {
           selectedAdvocate = a;
@@ -461,6 +763,9 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
       final v = c.text.trim();
       if (v.isNotEmpty) steps.add(v);
     }
+    for (final c in stepControllers) {
+      c.dispose();
+    }
 
     final updated = VatRegistrationProcessModel(
       id: process.id,
@@ -475,7 +780,7 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
     try {
       await VatRegistrationProcessService.updateProcess(
         id: process.id ?? '',
-        userId: widget.currentUserId!,
+        userId: _activeUserId!,
         process: updated,
       );
       if (!mounted) return;
@@ -528,7 +833,7 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
     try {
       await VatRegistrationProcessService.deleteProcess(
         id: process.id ?? '',
-        userId: widget.currentUserId!,
+        userId: _activeUserId!,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -558,15 +863,13 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
 
   // ============ ADVOCATE PICKER ============
   Future<AdvocateBrief?> _pickAdvocate() async {
-    if (widget.currentUserId == null ||
-        widget.currentUserId!.isEmpty) {
+    if (_activeUserId == null || _activeUserId!.isEmpty) {
       return null;
     }
 
     List<AdvocateBrief> advocates;
     try {
-      advocates =
-          await CenterAdminBridge.myAdvocates(widget.currentUserId!);
+      advocates = await CenterAdminBridge.myAdvocates(_activeUserId!);
     } catch (e) {
       _snack('Failed to load advocates: $e', true);
       return null;
@@ -823,16 +1126,13 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
 
                   const SizedBox(height: 14),
 
-                  // ── CENTER ADMIN CONTROLS ──
-                  if (_isCenterAdminOfThis || !_hasProcess) ...[
+                  // ── CENTER ADMIN / ADVOCATE CONTROLS ──
+                  if (_showControlsCard) ...[
                     _centerAdminControls(),
                     const SizedBox(height: 14),
                   ],
 
                   // ── PAYMENT CTA ──
-                  // Visible to owner AND center admin.
-                  // The `canPay` flag inside VatPaymentPage controls the
-                  // "Pay" button (owner-only).
                   if (_isMine || _isCenterAdminOfThis) ...[
                     _paymentCta(),
                   ],
@@ -844,8 +1144,16 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
     );
   }
 
-  // ============ Center Admin Controls ============
+  // ============ Center Admin / Advocate Controls ============
   Widget _centerAdminControls() {
+    final isAdvocateMode = _canEditStatusAndStepsOnly;
+    final isAdminMode = _isCenterAdminOfThis;
+
+    final title =
+        isAdvocateMode ? 'Advocate Controls' : 'Center Admin Controls';
+    final icon =
+        isAdvocateMode ? Icons.gavel : Icons.admin_panel_settings;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -858,11 +1166,10 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.admin_panel_settings,
-                  color: _primaryBlue, size: 20),
+              Icon(icon, color: _primaryBlue, size: 20),
               const SizedBox(width: 8),
               Text(
-                'Center Admin Controls',
+                title,
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
@@ -873,21 +1180,22 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
           ),
           const SizedBox(height: 12),
 
-          // Shortcut to My VAT Processes
-          OutlinedButton.icon(
-            onPressed: _openMyVatProcessControl,
-            icon: const Icon(Icons.list_alt),
-            label: const Text('My VAT Processes'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 46),
-              side: const BorderSide(color: _primaryBlue),
-              foregroundColor: _primaryBlue,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+          if (isAdminMode) ...[
+            OutlinedButton.icon(
+              onPressed: _openMyVatProcessControl,
+              icon: const Icon(Icons.list_alt),
+              label: const Text('My VAT Processes'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 46),
+                side: const BorderSide(color: _primaryBlue),
+                foregroundColor: _primaryBlue,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
+            const SizedBox(height: 10),
+          ],
 
           if (!_hasProcess) ...[
             ElevatedButton.icon(
@@ -903,7 +1211,7 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
                 ),
               ),
             ),
-          ] else if (_isCenterAdminOfThis) ...[
+          ] else if (isAdminMode) ...[
             ElevatedButton.icon(
               onPressed: _openEditProcess,
               icon: const Icon(Icons.edit_note),
@@ -930,6 +1238,36 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
+            ),
+          ] else if (isAdvocateMode) ...[
+            ElevatedButton.icon(
+              onPressed: _openAdvocateStatusStepsEdit,
+              icon: const Icon(Icons.playlist_add_check),
+              label: const Text('Update Status & Steps'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryBlue,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 46),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.info_outline,
+                    size: 14, color: Colors.grey.shade600),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'As the assigned advocate you can edit the process '
+                    'steps and status only.',
+                    style: GoogleFonts.inter(
+                        fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ),
+              ],
             ),
           ],
         ],
@@ -1007,12 +1345,13 @@ class _VatDetailsPageState extends State<VatDetailsPage> {
                 ),
               ),
 
-              // Badge: yours / admin
               if (_isMine)
                 _headerBadge(icon: Icons.person, label: 'Yours')
               else if (_isCenterAdminOfThis)
                 _headerBadge(
-                    icon: Icons.admin_panel_settings, label: 'Admin'),
+                    icon: Icons.admin_panel_settings, label: 'Admin')
+              else if (_isAdvocateOfThis)
+                _headerBadge(icon: Icons.gavel, label: 'Advocate'),
             ],
           ),
           const SizedBox(height: 14),

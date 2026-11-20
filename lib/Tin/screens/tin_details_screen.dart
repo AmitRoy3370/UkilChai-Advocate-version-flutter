@@ -1,6 +1,7 @@
 // lib/Tin/screens/tin_details_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../Auth/AuthService.dart';
 import '../../ChatRelatedPages/FreeConsultantPage.dart';
 import '../../RJSC/screens/rjsc_attachment_viewer.dart';
@@ -35,12 +36,14 @@ class _TinDetailsScreenState extends State<TinDetailsScreen> {
   bool _isBusy = false;
   String? _currentUserId;
   String? _currentUserName;
+  String? _myAdvocateId;
+  String? _myAdvocateName;
 
   /// Cached CenterAdmin._id for this user (the id the backend expects
   /// as `centerAdminId` in `TinRegistrationProcess`).
   String? _currentCenterAdminId;
 
-  /// ✅ True when current user is the Center Admin of THIS TIN's process
+  /// True when current user is the Center Admin of THIS TIN's process
   bool get _isCenterAdminOfThis {
     final rp = _t.registrationProcess;
     return rp != null &&
@@ -49,7 +52,24 @@ class _TinDetailsScreenState extends State<TinDetailsScreen> {
         rp.centerAdminId == _currentCenterAdminId;
   }
 
+  /// True when current user is the assigned advocate on THIS TIN's process
+  /// (i.e. registrationProcess.advocateId == advocateId from SharedPreferences).
+  bool get _isAdvocateOfThis {
+    final rp = _t.registrationProcess;
+    return rp != null &&
+        _myAdvocateId != null &&
+        _myAdvocateId!.isNotEmpty &&
+        rp.advocateId.trim() == _myAdvocateId;
+  }
+
+  /// Advocate-only edit: process steps + status only (when advocate is not the center admin).
+  bool get _canEditProcessAndStatusOnly =>
+      _isAdvocateOfThis && !_isCenterAdminOfThis;
+
   bool get _hasProcess => _t.registrationProcess != null;
+
+  bool get _showControlsCard =>
+      _isCenterAdminOfThis || _isAdvocateOfThis || !_hasProcess;
 
   @override
   void initState() {
@@ -60,14 +80,24 @@ class _TinDetailsScreenState extends State<TinDetailsScreen> {
 
   Future<void> _loadUser() async {
     final userId = await AuthService.getUserId();
+    final prefs = await SharedPreferences.getInstance();
+    final advocateId = (prefs.getString('advocateId') ?? '').trim();
+    final advocateName = (prefs.getString('advocateName') ??
+            prefs.getString('userName') ??
+            prefs.getString('name') ??
+            '')
+        .trim();
+
     if (!mounted) return;
 
     setState(() {
       _currentUserId = userId;
-      _currentUserName = '';
+      _currentUserName = advocateName;
+      _myAdvocateId = advocateId;
+      _myAdvocateName = advocateName;
     });
 
-    // ✅ Prefetch the CenterAdmin document id for this user.
+    // Prefetch the CenterAdmin document id for this user.
     if (userId != null && userId.isNotEmpty) {
       try {
         final adminId = await CenterAdminBridge.myCenterAdminId(userId);
@@ -209,7 +239,6 @@ class _TinDetailsScreenState extends State<TinDetailsScreen> {
 
     setState(() => _isBusy = true);
     try {
-      // ✅ Resolve the CenterAdmin._id (the backend expects this, not userId)
       String centerAdminId = _currentCenterAdminId ?? '';
       if (centerAdminId.isEmpty) {
         centerAdminId =
@@ -222,7 +251,7 @@ class _TinDetailsScreenState extends State<TinDetailsScreen> {
           'tinId=${_t.id}');
 
       final process = TinRegistrationProcessModel(
-        centerAdminId: centerAdminId, // ✅ CenterAdmin._id
+        centerAdminId: centerAdminId,
         advocateId: advocate.id,
         tinId: _t.id ?? '',
         steps: const ['accepted'],
@@ -249,7 +278,6 @@ class _TinDetailsScreenState extends State<TinDetailsScreen> {
         ),
       );
 
-      // Small delay to let the backend cache/Mongo settle
       await Future.delayed(const Duration(milliseconds: 300));
       await _reload();
     } catch (e) {
@@ -260,7 +288,284 @@ class _TinDetailsScreenState extends State<TinDetailsScreen> {
     }
   }
 
-  // ============ UPDATE PROCESS ============
+  // ============ ADVOCATE-ONLY EDIT (process steps + status only) ============
+  Future<void> _openAdvocateProcessAndStatusEdit() async {
+    final process = _t.registrationProcess;
+    if (process == null) return;
+    if (process.id == null || process.id!.isEmpty) {
+      _snack('Missing TIN process ID — cannot update.', isError: true);
+      return;
+    }
+
+    final initialApproved = process.steps.isNotEmpty &&
+        process.steps.last.toLowerCase().contains('approved');
+
+    // Keep non-approved steps in editable controllers so status toggle can
+    // cleanly manage 'approved' without duplicating it.
+    final editableSteps = initialApproved
+        ? process.steps.sublist(0, process.steps.length - 1)
+        : List<String>.from(process.steps);
+
+    final stepControllers = editableSteps
+        .map((s) => TextEditingController(text: s))
+        .toList();
+    if (stepControllers.isEmpty) stepControllers.add(TextEditingController());
+
+    bool isApprovedStatus = initialApproved;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            void addStep() => setLocal(
+                () => stepControllers.add(TextEditingController()));
+
+            void removeStep(int i) {
+              if (stepControllers.length <= 1) return;
+              setLocal(() {
+                stepControllers[i].dispose();
+                stepControllers.removeAt(i);
+              });
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: const Text('Update TIN Process & Status'),
+              content: ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(ctx).size.height * 0.75),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Read-only advocate
+                      const Text('Assigned Advocate',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F7FA),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.gavel,
+                                size: 16, color: _primaryGreen),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                process.advocateName.isNotEmpty
+                                    ? process.advocateName
+                                    : (_myAdvocateName?.isNotEmpty == true
+                                        ? _myAdvocateName!
+                                        : 'Assigned Advocate'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            const Icon(Icons.lock,
+                                size: 14, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Process steps — editable
+                      Row(
+                        children: [
+                          const Text('Process Steps',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: addStep,
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Add Step',
+                                style: TextStyle(fontSize: 12)),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 0),
+                              minimumSize: const Size(0, 32),
+                              foregroundColor: _primaryGreen,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ...List.generate(stepControllers.length, (i) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: _primaryGreen.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Step ${i + 1}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: _primaryGreen,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: stepControllers[i],
+                                  textInputAction: TextInputAction.next,
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    hintText: 'Describe step ${i + 1}...',
+                                    contentPadding:
+                                        const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 12),
+                                    border: OutlineInputBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                tooltip: 'Remove step',
+                                icon: Icon(
+                                  Icons.close,
+                                  size: 18,
+                                  color: stepControllers.length <= 1
+                                      ? Colors.grey.shade300
+                                      : Colors.red,
+                                ),
+                                onPressed: stepControllers.length <= 1
+                                    ? null
+                                    : () => removeStep(i),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      const SizedBox(height: 12),
+
+                      // Status toggle
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Mark status as Approved'),
+                        subtitle: Text(
+                          isApprovedStatus
+                              ? 'Status: Approved'
+                              : 'Status: Processing',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        value: isApprovedStatus,
+                        onChanged: (v) =>
+                            setLocal(() => isApprovedStatus = v),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: _primaryGreen),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved != true) {
+      for (final c in stepControllers) {
+        c.dispose();
+      }
+      return;
+    }
+
+    final steps = <String>[];
+    for (final c in stepControllers) {
+      final v = c.text.trim();
+      if (v.isNotEmpty) steps.add(v);
+    }
+    for (final c in stepControllers) {
+      c.dispose();
+    }
+
+    if (isApprovedStatus) {
+      steps.add('approved');
+    }
+
+    final targetTinId = (_t.id != null && _t.id!.isNotEmpty)
+        ? _t.id!
+        : (process.tin?.id ?? process.tinId);
+
+    // Preserve centerAdminId / advocateId / tinId — only process steps & status change.
+    final updated = TinRegistrationProcessModel(
+      id: process.id,
+      centerAdminId: process.centerAdminId,
+      advocateId: process.advocateId,
+      tinId: targetTinId,
+      steps: steps,
+    );
+
+    setState(() => _isBusy = true);
+    try {
+      final actorUserId =
+          (_currentUserId != null && _currentUserId!.isNotEmpty)
+              ? _currentUserId!
+              : process.centerAdminId;
+
+      final res = await TinRegistrationProcessService.updateProcess(
+        id: process.id!,
+        userId: actorUserId,
+        process: updated,
+      );
+
+      if (!mounted) return;
+      if (res['status'] == 'success') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('TIN process & status updated'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        await _reload();
+      } else {
+        _snack(res['message']?.toString() ?? 'Failed to update process',
+            isError: true);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _snack('Failed: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  // ============ UPDATE PROCESS (Center Admin) ============
   Future<void> _openEditProcess() async {
     final process = _t.registrationProcess;
     if (process == null) return;
@@ -473,8 +778,10 @@ class _TinDetailsScreenState extends State<TinDetailsScreen> {
       final v = c.text.trim();
       if (v.isNotEmpty) steps.add(v);
     }
+    for (final c in stepControllers) {
+      c.dispose();
+    }
 
-    // ✅ Keep the existing centerAdminId (already the CenterAdmin._id)
     final updated = TinRegistrationProcessModel(
       id: process.id,
       centerAdminId: process.centerAdminId,
@@ -850,8 +1157,8 @@ class _TinDetailsScreenState extends State<TinDetailsScreen> {
                     if (_t.id != null) _row('Application ID', _t.id!),
                   ]),
 
-                  // ---------- CENTER ADMIN CONTROLS ----------
-                  if (_isCenterAdminOfThis || !_hasProcess) ...[
+                  // ---------- CENTER ADMIN / ADVOCATE CONTROLS ----------
+                  if (_showControlsCard) ...[
                     const SizedBox(height: 16),
                     _centerAdminControls(),
                   ],
@@ -898,8 +1205,16 @@ class _TinDetailsScreenState extends State<TinDetailsScreen> {
     );
   }
 
-  // ============ Center Admin Controls ============
+  // ============ Center Admin / Advocate Controls ============
   Widget _centerAdminControls() {
+    final isAdvocateMode = _canEditProcessAndStatusOnly;
+    final isAdminMode = _isCenterAdminOfThis;
+
+    final title =
+        isAdvocateMode ? 'Advocate Controls' : 'Center Admin Controls';
+    final icon =
+        isAdvocateMode ? Icons.gavel : Icons.admin_panel_settings;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -913,12 +1228,11 @@ class _TinDetailsScreenState extends State<TinDetailsScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.admin_panel_settings,
-                  color: _primaryGreen, size: 20),
+              Icon(icon, color: _primaryGreen, size: 20),
               const SizedBox(width: 8),
-              const Text(
-                'Center Admin Controls',
-                style: TextStyle(
+              Text(
+                title,
+                style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: _primaryGreen,
@@ -928,20 +1242,22 @@ class _TinDetailsScreenState extends State<TinDetailsScreen> {
           ),
           const SizedBox(height: 12),
 
-          OutlinedButton.icon(
-            onPressed: _openMyTinProcessControl,
-            icon: const Icon(Icons.list_alt),
-            label: const Text('My TIN Processes'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 46),
-              side: const BorderSide(color: _primaryGreen),
-              foregroundColor: _primaryGreen,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+          if (isAdminMode) ...[
+            OutlinedButton.icon(
+              onPressed: _openMyTinProcessControl,
+              icon: const Icon(Icons.list_alt),
+              label: const Text('My TIN Processes'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 46),
+                side: const BorderSide(color: _primaryGreen),
+                foregroundColor: _primaryGreen,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
+            const SizedBox(height: 10),
+          ],
 
           if (!_hasProcess) ...[
             ElevatedButton.icon(
@@ -957,7 +1273,7 @@ class _TinDetailsScreenState extends State<TinDetailsScreen> {
                 ),
               ),
             ),
-          ] else if (_isCenterAdminOfThis) ...[
+          ] else if (isAdminMode) ...[
             ElevatedButton.icon(
               onPressed: _openEditProcess,
               icon: const Icon(Icons.edit_note),
@@ -984,6 +1300,36 @@ class _TinDetailsScreenState extends State<TinDetailsScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
+            ),
+          ] else if (isAdvocateMode) ...[
+            ElevatedButton.icon(
+              onPressed: _openAdvocateProcessAndStatusEdit,
+              icon: const Icon(Icons.playlist_add_check),
+              label: const Text('Update Process & Status'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryGreen,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 46),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.info_outline,
+                    size: 14, color: Colors.grey.shade600),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'As the assigned advocate you can edit the process '
+                    'steps and status only.',
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ),
+              ],
             ),
           ],
         ],

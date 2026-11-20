@@ -5,6 +5,7 @@ import 'copyright_registration_screen.dart';
 import 'my_copyright_screen.dart';
 import 'all_copyright_screen.dart';
 import 'copyright_process_control_screen.dart'; // ✅ NEW
+import 'advocate_copyrights_screen.dart';
 
 class CopyrightServiceSelectionScreen extends StatelessWidget {
   const CopyrightServiceSelectionScreen({super.key});
@@ -85,6 +86,23 @@ class CopyrightServiceSelectionScreen extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (_) => const CopyrightProcessControlScreen(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // ✅ NEW: My Copyright Processes (Center Admin)
+              _serviceCard(
+                context,
+                icon: Icons.admin_panel_settings,
+                iconColor: const Color(0xFFE65100),
+                title: 'My Assigned Copyright Processes',
+                subtitle:
+                    'Manage copyright registrations you are handling as a center admin',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AdvocateCopyrightsScreen(),
                   ),
                 ),
               ),

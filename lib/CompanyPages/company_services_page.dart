@@ -12,6 +12,7 @@ import 'company_process_control_screen.dart';  // ✅ NEW — My Company Process
 import '../DirectorsPages/director_list_page.dart';
 import '../ShareholderPages/shareholder_list_page.dart';
 import '../LogInPage/LogIn.dart';
+import 'advocate_companies_page.dart';
 
 class CompanyServicesPage extends StatelessWidget {
   const CompanyServicesPage({super.key});
@@ -56,10 +57,17 @@ class CompanyServicesPage extends StatelessWidget {
     // ✅ NEW: Center-Admin-only view of companies they control
     {
       "title": "My Company Processes",
-      "subtitle": "Manage company registrations you control as center admin",
+      "subtitle": "See your requested companies",
       "icon": Icons.admin_panel_settings,
       "color": Color(0xFFE65100),
       "action": "my_company_processes",
+    },
+    {
+      "title": "My Assigned Companies",
+      "subtitle": "Manage company registrations you control as advocate",
+      "icon": Icons.admin_panel_settings,
+      "color": Color(0xFFE65100),
+      "action": "my_assigned_company_processes",
     },
   ];
 
@@ -107,6 +115,12 @@ class CompanyServicesPage extends StatelessWidget {
           ),
         );
         break;
+      case 'my_assigned_company_processes':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AdvocateCompaniesPage()),
+        );
+      break;
 
       case 'my_companies':
         Navigator.push(

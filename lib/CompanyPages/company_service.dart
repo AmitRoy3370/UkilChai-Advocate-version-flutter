@@ -1,6 +1,5 @@
 // lib/CompanyPages/company_service.dart
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -19,11 +18,12 @@ class CompanyService {
     _token = token;
   }
 
+  // ================= TOKEN / HEADERS =================
   Future<String?> _getToken() async {
     if (_token != null && _token!.isNotEmpty) {
       return _token;
     }
-    
+
     try {
       final prefs = await SharedPreferences.getInstance();
       _token = prefs.getString('jwt_token');
@@ -70,21 +70,11 @@ class CompanyService {
     required String userId,
     required List<PlatformFile>? files,
   }) async {
-    final token = await _getToken();
-
-    final headers = <String, String>{};
-    if (token != null && token.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $token';
-    }
-
-    print('========== CREATE COMPANY DEBUG ==========');
-    print('User ID: $userId');
-    print('Company Data: ${company.toJson()}');
-    print('Files: ${files?.length ?? 0}');
-    print('===========================================');
+    await _getToken();
 
     final uri = Uri.parse('${baseUrl}company/create?userId=$userId');
-    final request = http.MultipartRequest('POST', uri)..headers.addAll(headers);
+    final request = http.MultipartRequest('POST', uri)
+      ..headers.addAll(_headers);
 
     // ✅ Add company data as JSON string
     final companyJson = jsonEncode(company.toJson());
@@ -127,7 +117,7 @@ class CompanyService {
     print('Response Body: ${responseBody.body}');
 
     if (response.statusCode == 201 || response.statusCode == 200) {
-      final data = jsonDecode(responseBody.body);
+      final data = jsonDecode(utf8.decode(responseBody.bodyBytes));
       if (data != null) {
         return CompanyInformation.fromJson(data);
       } else {
@@ -138,7 +128,8 @@ class CompanyService {
     } else if (response.statusCode == 401) {
       throw Exception('Unauthorized: Please login again');
     } else {
-      throw Exception('Failed to create company: ${response.statusCode} - ${responseBody.body}');
+      throw Exception(
+          'Failed to create company: ${response.statusCode} - ${responseBody.body}');
     }
   }
 
@@ -149,22 +140,11 @@ class CompanyService {
     required String userId,
     required List<PlatformFile>? files,
   }) async {
-    final token = await _getToken();
-
-    final headers = <String, String>{};
-    if (token != null && token.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $token';
-    }
-
-    print('========== UPDATE COMPANY DEBUG ==========');
-    print('ID: $id');
-    print('User ID: $userId');
-    print('Company Data: ${company.toJson()}');
-    print('Files: ${files?.length ?? 0}');
-    print('===========================================');
+    await _getToken();
 
     final uri = Uri.parse('${baseUrl}company/update/$id?userId=$userId');
-    final request = http.MultipartRequest('PUT', uri)..headers.addAll(headers);
+    final request = http.MultipartRequest('PUT', uri)
+      ..headers.addAll(_headers);
 
     // ✅ Add company data as JSON string
     final companyJson = jsonEncode(company.toJson());
@@ -207,7 +187,7 @@ class CompanyService {
     print('Updated Company Response Body: ${responseBody.body}');
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(responseBody.body);
+      final data = jsonDecode(utf8.decode(responseBody.bodyBytes));
       if (data != null) {
         return CompanyInformation.fromJson(data);
       } else {
@@ -218,7 +198,8 @@ class CompanyService {
     } else if (response.statusCode == 401) {
       throw Exception('Unauthorized: Please login again');
     } else {
-      throw Exception('Failed to update company: ${response.statusCode} - ${responseBody.body}');
+      throw Exception(
+          'Failed to update company: ${response.statusCode} - ${responseBody.body}');
     }
   }
 
@@ -231,19 +212,19 @@ class CompanyService {
     await _getToken();
 
     final uri = Uri.parse(
-      '${baseUrl}company/addDirector?id=$companyId&directorId=$directorId&userId=$userId'
-    );
+        '${baseUrl}company/addDirector?id=$companyId&directorId=$directorId&userId=$userId');
     final response = await http.post(uri, headers: _headers);
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
       return CompanyInformation.fromJson(data);
     } else if (response.statusCode == 403) {
       throw Exception('Forbidden: You do not have permission');
     } else if (response.statusCode == 401) {
       throw Exception('Unauthorized: Please login again');
     } else {
-      throw Exception('Failed to add director: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'Failed to add director: ${response.statusCode} - ${response.body}');
     }
   }
 
@@ -256,19 +237,19 @@ class CompanyService {
     await _getToken();
 
     final uri = Uri.parse(
-      '${baseUrl}company/addShareholder?id=$companyId&holderId=$shareholderId&userId=$userId'
-    );
+        '${baseUrl}company/addShareholder?id=$companyId&holderId=$shareholderId&userId=$userId');
     final response = await http.post(uri, headers: _headers);
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
       return CompanyInformation.fromJson(data);
     } else if (response.statusCode == 403) {
       throw Exception('Forbidden: You do not have permission');
     } else if (response.statusCode == 401) {
       throw Exception('Unauthorized: Please login again');
     } else {
-      throw Exception('Failed to add shareholder: ${response.statusCode} - ${response.body}');
+      throw Exception(
+          'Failed to add shareholder: ${response.statusCode} - ${response.body}');
     }
   }
 
@@ -280,8 +261,7 @@ class CompanyService {
     final response = await http.get(uri, headers: _headers);
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      print('all company data :- ${data.map((e) => CompanyResponse.fromJson(e)).toList()}');
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
       if (data is List) {
         return data.map((e) => CompanyResponse.fromJson(e)).toList();
       }
@@ -303,7 +283,7 @@ class CompanyService {
     final response = await http.get(uri, headers: _headers);
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
       return CompanyResponse.fromJson(data);
     } else if (response.statusCode == 404) {
       throw Exception('Company not found');
@@ -334,7 +314,136 @@ class CompanyService {
     }
   }
 
-  // ================= SEARCH COMPANIES =================
+  // ================= GET COMPANIES BY CREATOR ID =================
+  Future<List<CompanyResponse>> getCompaniesByCreatorId(String userId) async {
+    await _getToken();
+
+    final uri = Uri.parse(
+        '${baseUrl}company/search/by-creator-id?creatorId=$userId');
+    final response = await http.get(uri, headers: _headers);
+
+    print('📤 Get Companies by Creator ID: $userId');
+    print('📤 URL: $uri');
+    print('📤 Status: ${response.statusCode}');
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (data is List) {
+        return data.map((e) => CompanyResponse.fromJson(e)).toList();
+      }
+      return [];
+    } else if (response.statusCode == 404) {
+      return [];
+    } else if (response.statusCode == 403) {
+      throw Exception('Forbidden: You do not have permission');
+    } else if (response.statusCode == 401) {
+      throw Exception('Unauthorized: Please login again');
+    } else {
+      throw Exception('Failed to fetch companies: ${response.statusCode}');
+    }
+  }
+
+  // ==========================================
+  // 6. SEPARATE SEARCH APIs (one per field)
+  // ==========================================
+
+  /// Helper to run a search GET request and parse the list.
+  Future<List<CompanyResponse>> _searchBy(
+    String path,
+    Map<String, String> queryParameters,
+  ) async {
+    await _getToken();
+
+    final uri = Uri.parse('${baseUrl}company/search/$path')
+        .replace(queryParameters: queryParameters);
+    final response = await http.get(uri, headers: _headers);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (data is List) {
+        return data.map((e) => CompanyResponse.fromJson(e)).toList();
+      }
+      return [];
+    } else if (response.statusCode == 404) {
+      // Backend returns NOT_FOUND when no results / empty
+      return [];
+    } else if (response.statusCode == 403) {
+      throw Exception('Forbidden: You do not have permission');
+    } else if (response.statusCode == 401) {
+      throw Exception('Unauthorized: Please login again');
+    } else {
+      throw Exception('Failed to search companies: ${response.statusCode}');
+    }
+  }
+
+  // ================= SEARCH BY COMPANY NAME =================
+  Future<List<CompanyResponse>> searchByCompanyName(String companyName) {
+    return _searchBy('by-company-name', {'companyName': companyName});
+  }
+
+  // ================= SEARCH BY TYPE =================
+  Future<List<CompanyResponse>> searchByType(String type) {
+    return _searchBy('by-type', {'type': type});
+  }
+
+  // ================= SEARCH BY NATURE OF BUSINESS =================
+  // NOTE: The backend param is spelled "natureOfBuisness" (sic).
+  Future<List<CompanyResponse>> searchByNatureOfBusiness(
+      String natureOfBusiness) {
+    return _searchBy('by-nature-of-business', {
+      'natureOfBuisness': natureOfBusiness,
+    });
+  }
+
+  // ================= SEARCH BY CATEGORY =================
+  Future<List<CompanyResponse>> searchByCategory(String category) {
+    return _searchBy('by-category', {'category': category});
+  }
+
+  // ================= SEARCH BY OFFICE REGISTRY ID =================
+  Future<List<CompanyResponse>> searchByOfficeRegistryId(
+      String officeRegistryId) {
+    return _searchBy('by-office-registry', {
+      'officeRegistryId': officeRegistryId,
+    });
+  }
+
+  // ================= SEARCH BY SHAREHOLDER ID =================
+  // NOTE: The backend param is spelled "shareHoldersId".
+  Future<List<CompanyResponse>> searchByShareholderId(String shareholderId) {
+    return _searchBy('by-shareholder-id', {
+      'shareHoldersId': shareholderId,
+    });
+  }
+
+  // ================= SEARCH BY DOCUMENT ID =================
+  // NOTE: The backend param is spelled "documentsId".
+  Future<List<CompanyResponse>> searchByDocumentId(String documentId) {
+    return _searchBy('by-document-id', {'documentsId': documentId});
+  }
+
+  // ================= SEARCH BY DIRECTOR ID =================
+  // NOTE: The backend param is spelled "directorsId".
+  Future<List<CompanyResponse>> searchByDirectorId(String directorId) {
+    return _searchBy('by-director-id', {'directorsId': directorId});
+  }
+
+  // ================= SEARCH BY AUTHORIZED =================
+  Future<List<CompanyResponse>> searchByAuthorized(String authorized) {
+    return _searchBy('by-authorized', {'authorized': authorized});
+  }
+
+  // ================= SEARCH BY CAPITAL =================
+  Future<List<CompanyResponse>> searchByCapital(String capital) {
+    return _searchBy('by-capital', {'capital': capital});
+  }
+
+  // ==========================================
+  // UNIFIED SEARCH WRAPPER (OPTIONAL)
+  // ==========================================
+  /// Unified entry point — routes to the correct dedicated endpoint.
+  /// The backend exposes one endpoint per field, so only ONE field
+  /// should be provided per call.
   Future<List<CompanyResponse>> searchCompanies({
     String? companyName,
     String? type,
@@ -346,69 +455,32 @@ class CompanyService {
     String? directorId,
     String? authorized,
     String? capital,
-  }) async {
-    await _getToken();
+  }) {
+    final calls = <String, Future<List<CompanyResponse>>>{
+      if (companyName != null) 'companyName': searchByCompanyName(companyName),
+      if (type != null) 'type': searchByType(type),
+      if (natureOfBusiness != null)
+        'natureOfBusiness': searchByNatureOfBusiness(natureOfBusiness),
+      if (category != null) 'category': searchByCategory(category),
+      if (officeRegistryId != null)
+        'officeRegistryId': searchByOfficeRegistryId(officeRegistryId),
+      if (shareholderId != null)
+        'shareholderId': searchByShareholderId(shareholderId),
+      if (documentId != null) 'documentId': searchByDocumentId(documentId),
+      if (directorId != null) 'directorId': searchByDirectorId(directorId),
+      if (authorized != null) 'authorized': searchByAuthorized(authorized),
+      if (capital != null) 'capital': searchByCapital(capital),
+    };
 
-    final queryParams = <String, String>{};
-    if (companyName != null) queryParams['companyName'] = companyName;
-    if (type != null) queryParams['type'] = type;
-    if (natureOfBusiness != null) queryParams['natureOfBuisness'] = natureOfBusiness;
-    if (category != null) queryParams['category'] = category;
-    if (officeRegistryId != null) queryParams['officeRegistryId'] = officeRegistryId;
-    if (shareholderId != null) queryParams['shareHoldersId'] = shareholderId;
-    if (documentId != null) queryParams['documentsId'] = documentId;
-    if (directorId != null) queryParams['directorsId'] = directorId;
-    if (authorized != null) queryParams['authorized'] = authorized;
-    if (capital != null) queryParams['capital'] = capital;
-
-    final uri = Uri.parse('${baseUrl}company/search/by-company-name')
-        .replace(queryParameters: queryParams);
-    final response = await http.get(uri, headers: _headers);
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      if (data is List) {
-        return data.map((e) => CompanyResponse.fromJson(e)).toList();
-      }
-      return [];
-    } else if (response.statusCode == 403) {
-      throw Exception('Forbidden: You do not have permission');
-    } else if (response.statusCode == 401) {
-      throw Exception('Unauthorized: Please login again');
-    } else {
-      throw Exception('Failed to search companies: ${response.statusCode}');
+    if (calls.isEmpty) {
+      throw ArgumentError('At least one search field must be provided');
     }
-  }
-
-// lib/CompanyPages/company_service.dart
-// Add this method to the CompanyService class
-
-// ================= GET COMPANIES BY CREATOR ID =================
-Future<List<CompanyResponse>> getCompaniesByCreatorId(String userId) async {
-  await _getToken();
-
-  final uri = Uri.parse('${baseUrl}company/search/by-creator-id?creatorId=$userId');
-  final response = await http.get(uri, headers: _headers);
-
-  print('📤 Get Companies by Creator ID: $userId');
-  print('📤 URL: $uri');
-  print('📤 Status: ${response.statusCode}');
-
-  if (response.statusCode == 200) {
-    final data = jsonDecode(response.body);
-    if (data is List) {
-      return data.map((e) => CompanyResponse.fromJson(e)).toList();
+    if (calls.length > 1) {
+      throw ArgumentError(
+        'The backend exposes one endpoint per field; '
+        'provide only one search field per call.',
+      );
     }
-    return [];
-  } else if (response.statusCode == 403) {
-    throw Exception('Forbidden: You do not have permission');
-  } else if (response.statusCode == 401) {
-    throw Exception('Unauthorized: Please login again');
-  } else if (response.statusCode == 404) {
-    return [];
-  } else {
-    throw Exception('Failed to fetch companies: ${response.statusCode}');
+    return calls.values.first;
   }
-}
-
 }

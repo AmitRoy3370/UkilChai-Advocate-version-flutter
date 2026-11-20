@@ -7,6 +7,7 @@ import 'vat_registration_page.dart';
 import 'my_vat_page.dart';
 import 'all_vat_page.dart';
 import 'my_vat_process_control_page.dart'; // ✅ NEW
+import 'my_assigned_vat_page.dart';
 
 class VatServicesPage extends StatelessWidget {
   const VatServicesPage({super.key});
@@ -40,6 +41,13 @@ class VatServicesPage extends StatelessWidget {
       'icon': Icons.assignment_ind,
       'color': Color(0xFF0B5D36),
       'action': 'my_vat_processes',
+    },
+    {
+      'title': 'My Assigned VAT Processes',
+      'subtitle': 'Manage VAT filings assigned to you',
+      'icon': Icons.assignment_ind,
+      'color': Color(0xFF0B5D36),
+      'action': 'my_assigned_vat_page',
     },
   ];
 
@@ -80,6 +88,14 @@ class VatServicesPage extends StatelessWidget {
           ),
         );
         break;
+       case 'my_assigned_vat_page':
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const MyAssignedVatPage(),
+          ),
+        );
+       break;
     }
   }
 
